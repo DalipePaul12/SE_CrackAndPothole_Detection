@@ -1,0 +1,36 @@
+# Core Framework
+fastapi
+uvicorn
+
+# Database & ORM
+sqlalchemy
+geoalchemy2
+psycopg2-binary
+alembic
+
+# Environment & Settings
+python-dotenv
+pydantic[email]
+pydantic-settings
+email-validator
+typing-extensions
+python-dateutil
+
+# Authentication & Security
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+slowapi
+
+# AI / Media Processing
+opencv-python
+ffmpeg-python
+
+# Background Jobs & Caching
+redis
+celery
+
+# Logging & Testing
+loguru
+pytest
+httpx

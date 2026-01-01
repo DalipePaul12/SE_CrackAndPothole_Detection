@@ -137,3 +137,16 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# --- Python/Backend Specific ---
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.db
+backend/.env
+
+# --- Frontend/React Specific ---
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.eslintcache
