@@ -1,5 +1,6 @@
 from sqlalchemy import Boolean, Column, Integer, String, Float
 from app.db.base import Base
+from sqlalchemy.sql.sqltypes import DateTime
 
 class CCTV(Base):
     __tablename__ = "cctvs"
