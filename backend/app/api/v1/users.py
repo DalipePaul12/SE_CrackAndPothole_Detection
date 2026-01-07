@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.db.session import get_db
 from app.models.user import User
-from app.api.v1.auth import get_current_user
+from app.api.v1.auth import get_current_user   
 router = APIRouter()
 # --- SCHEMAS (Validation) ---
 class UserUpdate(BaseModel):

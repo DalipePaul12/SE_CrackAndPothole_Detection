@@ -1,11 +1,11 @@
 import os
 from ultralytics import YOLO
-from transformers import pipeline
+# from transformers import pipeline  # <--- I-comment muna para iwas download
 
 # --- 1. LOAD POTHOLE MODEL (YOLO) ---
-# Ito yung ite-train mo later. Sa ngayon, generic muna.
 try:
-    # Pag tapos mo na i-train, palitan mo to ng "best.pt"
+    # Sa ngayon, gagamit muna ng default yolov8n.pt. 
+    # Kapag may best.pt ka na, palitan mo ito.
     damage_model = YOLO("yolov8n.pt") 
     print("✅ YOLO Damage Model Loaded")
 except Exception as e:
@@ -13,23 +13,19 @@ except Exception as e:
     damage_model = None
 
 # --- 2. LOAD FAKE IMAGE DETECTOR (Hugging Face) ---
-# Ito ang "Pre-trained" na open source model. Kusa itong magda-download sa first run.
-# Model source: https://huggingface.co/umm-maybe/AI-image-detector
+# Naka-comment muna para hindi mag-download ang 347MB na file.
+fake_detector = None 
+"""
 try:
-    print("⏳ Loading AI Fake Detector... (First run might take time)")
+    print("⏳ Loading AI Fake Detector...")
     fake_detector = pipeline("image-classification", model="umm-maybe/AI-image-detector")
     print("✅ AI Fake Detector Loaded")
 except Exception as e:
     print(f"❌ Fake Detector Error: {e}")
     fake_detector = None
+"""
 
 def analyze_image(image_path: str):
-    """
-    Runs two analyses:
-    1. Is the image Fake/AI-Generated? (Hugging Face)
-    2. What kind of damage is it? (YOLO)
-    """
-    
     result = {
         "valid": True,
         "is_ai_generated": False,
@@ -40,39 +36,30 @@ def analyze_image(image_path: str):
         "reason": ""
     }
 
-    # --- STEP A: Check if AI Generated ---
+    # --- STEP A: Check if AI Generated (SKIPPED FOR NOW) ---
+    # Naka-skip muna ito dahil naka-comment ang fake_detector sa itaas.
     if fake_detector:
         try:
-            # Ang output nito ay list: [{'label': 'artificial', 'score': 0.99}, {'label': 'real', 'score': 0.01}]
             fake_analysis = fake_detector(image_path)
-            
-            # Hanapin ang score ng 'artificial'
             artificial_score = 0.0
             for item in fake_analysis:
                 if item['label'] == 'artificial':
                     artificial_score = item['score']
                     break
             
-            # LOGIC: Kapag lampas 70% sure na Artificial, i-flag natin
             if artificial_score > 0.70:
                 result["valid"] = False
                 result["is_ai_generated"] = True
                 result["ai_generated_confidence"] = round(artificial_score, 2)
-                result["reason"] = f"Warning: Image appears to be AI-generated ({round(artificial_score*100)}% match)."
-                
-                # Pwede mo i-return agad dito kung gusto mo i-reject agad
-                # return result 
-                
+                result["reason"] = f"Warning: AI-generated image ({round(artificial_score*100)}%)."
         except Exception as e:
             print(f"Fake Detection Failed: {e}")
 
     # --- STEP B: Detect Potholes (YOLO) ---
     if damage_model:
         try:
-            # Run YOLO
             results = damage_model(image_path)
             yolo_result = results[0]
-            
             detected_objects = []
             highest_conf = 0.0
             
@@ -80,28 +67,17 @@ def analyze_image(image_path: str):
                 class_id = int(box.cls[0])
                 conf = float(box.conf[0])
                 class_name = damage_model.names[class_id]
-                
                 detected_objects.append(class_name)
                 if conf > highest_conf:
                     highest_conf = conf
 
-            # Update Result
             if detected_objects:
-                result["damage_type"] = detected_objects[0] # Kunin ang unang nakita
+                result["damage_type"] = detected_objects[0]
                 result["confidence"] = round(highest_conf, 2)
-                
-                # Simple logic for Severity (Pabaguhin mo to pag may custom model ka na)
-                if highest_conf > 0.8:
-                    result["severity"] = "High"
-                else:
-                    result["severity"] = "Moderate"
-                
-                if result["valid"]: # Kung hindi fake, update reason
-                    result["reason"] = f"Detected: {', '.join(detected_objects)}"
+                result["severity"] = "High" if highest_conf > 0.8 else "Moderate"
+                result["reason"] = f"Detected: {', '.join(detected_objects)}"
             else:
-                if result["valid"]:
-                    result["reason"] = "No road damage detected."
-
+                result["reason"] = "No road damage detected."
         except Exception as e:
             print(f"YOLO Analysis Failed: {e}")
 

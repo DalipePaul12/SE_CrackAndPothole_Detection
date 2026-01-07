@@ -4,8 +4,10 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv 
+from fastapi import APIRouter
 
 load_dotenv()
+router = APIRouter()
 
 # 1. DATABASE IMPORTS 
 from app.db.base import Base
@@ -21,7 +23,7 @@ from app.models.otp import OTP
 from app.models.notification import Notification
 
 # 2. API ROUTER IMPORTS (Disabled )
-# from app.api.v1 import auth, users, reports, projects, analytics, notifications 
+from app.api.v1 import auth, users, reports, projects, analytics, notifications 
 
 # 3. CREATE TABLES 
 Base.metadata.create_all(bind=engine)
@@ -61,12 +63,12 @@ app.add_middleware(
 )
 
 # 6. REGISTER ROUTERS (Disabled muna)
-# app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
-# app.include_router(users.router, prefix="/api/v1/users", tags=["Users"]) 
-# app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
-# app.include_router(projects.router, prefix="/api/v1/projects", tags=["Projects"])
-# app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"]) 
-# app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"]) 
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["Users"]) 
+app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+app.include_router(projects.router, prefix="/api/v1/projects", tags=["Projects"])
+app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"]) 
+app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"]) 
 
 @app.get("/")
 def read_root():

@@ -8,6 +8,13 @@ geoalchemy2
 psycopg2-binary
 alembic
 
+# AI / Image Processing (Kailangan para sa image.py at ai.py)
+Pillow
+ultralytics
+
+# Database & Connection
+supabase
+
 # Environment & Settings
 python-dotenv
 pydantic[email]
