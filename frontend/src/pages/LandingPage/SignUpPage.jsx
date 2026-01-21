@@ -3,11 +3,15 @@ import "./SignUpPage.css";
 import OTPboxes from "./OTPboxes.jsx";
 
 function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
-  const [step, setStep] = useState(1); // Step 1 = signup, Step 2 = OTP
+  const [step, setStep] = useState(1); // Step 1 = signup, Step 2 = OTP, Step 3 = password
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
+    confirmPassword: "",
+    city: "",
+    barangay: "",
+    province: "",
     otp: ""
   });
 
@@ -24,22 +28,49 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
   const handleSignUpSubmit = (e) => {
     e.preventDefault();
 
-    if (formData.name && formData.email && formData.password) {
-      console.log("Frontend-only signup success");
+    if (formData.name && formData.email /*&& formData.password*/) {
+      /*console.log("signup success");*/
+      alert(`OTP sent to ${formData.email}`);
       setStep(2); // move to OTP
     } else {
       alert("Please fill all fields");
     }
   };
 
+  const handlePasswordSubmit = (e) => {
+  e.preventDefault();
+
+  if (!formData.password || !formData.confirmPassword) {
+    alert("Please fill all password fields");
+    return;
+  }
+
+  if (formData.password !== formData.confirmPassword) {
+    alert("Passwords do not match");
+    return;
+  }
+
+  alert("signup successful!");
+  onClose();
+  setStep(1);
+  setFormData({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    city: "",
+    barangay: "",
+    province: "",
+    otp: ""
+  });
+};
+
+
   const handleOtpSubmit = (e) => {
     e.preventDefault();
 
-    if (formData.otp.length >= 4) {
-      alert("Frontend-only signup successful!");
-      onClose();
-      setStep(1);
-      setFormData({ name: "", email: "", password: "", otp: "" });
+    if (formData.otp.length === 6) {
+      setStep(3); // move to password panel
     } else {
       alert("Please enter OTP");
     }
@@ -52,7 +83,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
 
   return (
     <div className="sign-up-overlay" onClick={onClose}>
-      <div className="sign-up-content" onClick={(e) => e.stopPropagation()}>
+      <div  className={`sign-up-content ${step > 1 ? "signup-small" : ""}`} onClick={(e) => e.stopPropagation()}>
         {/* LEFT COLUMN */}
         <div className="sign-up-left">
           <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />
@@ -92,16 +123,55 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                   />
                 </div>
 
+                <div className="sign-up-label-form-province-city"> 
                 <div className="sign-up-label-form">
-                  <label>Password</label>
-                  <input
-                    type="password"
-                    name="password"
-                    placeholder="Password"
+                  <label>Province</label>
+                  <select
+                    name="province"
+                    placeholder="Select Province"
                     required
                     onChange={handleChange}
-                  />
+                    value={formData.province}
+                  >
+                    <option value="">Select Province</option>
+                    <option value="Metro Manila">Metro Manila</option>
+                    <option value="Cebu">Cebu</option>
+                    <option value="Davao del Sur">Davao del Sur</option>
+                  </select>
                 </div>
+
+                <div className="sign-up-label-form">
+                  <label>City / Municipality</label>
+                  <select
+                    name="city"
+                    placeholder="Select City"
+                    required
+                    onChange={handleChange}
+                    value={formData.city}
+                  >
+                    <option value="">Select City</option>
+                    <option value="Quezon City">Quezon City</option>
+                    <option value="Makati">Makati</option>
+                    <option value="Cebu City">Cebu City</option>
+                  </select>
+                </div>
+                </div>
+
+                <div className="sign-up-label-form">
+                  <label>Barangay</label>
+                  <select
+                    name="barangay"
+                    required
+                    onChange={handleChange}
+                    value={formData.barangay}
+                  >
+                    <option value="">Select Barangay</option>
+                    <option value="Barangay 1">Barangay 1</option>
+                    <option value="Barangay 2">Barangay 2</option>
+                    <option value="Barangay 3">Barangay 3</option>
+                  </select>
+                </div>
+
 
                 <button type="submit">Create Account</button>
               </form>
@@ -135,8 +205,8 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                   />
                 </div>
 
-                <button className="button-submit-otp" type="submit">
-                  Verify and Create Account
+                <button className="button-submit-otp" type="submit" disabled={formData.otp.length !== 6}>
+                  Verify and Continue
                 </button>
                 <button className="button-back-signup" type="button" onClick={() => setStep(1)}>
                   Back To Sign Up
@@ -151,6 +221,51 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                   </span>
                 </p>
               </div>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <div className="password-title-signup">
+                <h2>Set Your Password</h2>
+                <p className="sign-up-instruction">
+                  Create a secure password for your account.
+                </p>
+              </div>
+
+              <form onSubmit={handlePasswordSubmit}>
+                <div className="sign-up-label-form">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="Enter Password"
+                    required
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="sign-up-label-form">
+                  <label>Confirm Password</label>
+                  <input
+                    type="password"
+                    name="confirmPassword"
+                    placeholder="Confirm Password"
+                    required
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <button className="button-submit-password" type="submit">Finish Sign Up</button>
+
+                <button
+                  type="button"
+                  className="button-back-signup"
+                  onClick={() => setStep(2)}
+                >
+                  Back to OTP
+                </button>
+              </form>
             </>
           )}
         </div>

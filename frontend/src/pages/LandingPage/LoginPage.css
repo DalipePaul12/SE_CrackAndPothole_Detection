@@ -24,7 +24,7 @@
 
 /* LEFT SIDE */
 .login-left {
-  background: linear-gradient(100deg,#568456, #213d21);
+  background: linear-gradient(90deg,#488a48, #0e370e);
   color: white;
   padding: 4.5rem;
   display: flex;
@@ -101,15 +101,16 @@
 
 .label-form label {
   font-size: 1rem;
-  font-weight: 500;
-  color: #3d5e3d;
+  font-weight: bold;
+  color: #213721;
+  opacity: 0.7;
 }
 
 .login-right button {
   margin-top: 0.5rem;
   font-size: 1rem;
   padding: 0.75rem;
-  background-color: #3b5b3b;
+  background: linear-gradient(180deg,#316b34,#1c381e);
   color: white;
   border: none;
   border-radius: 40px;
@@ -117,7 +118,7 @@
 }
 
 .login-right button:hover {
-  background-color: #183018;
+  background: linear-gradient(360deg,#316b34,#1c381e);
 }
 
 .login-footer {
@@ -130,8 +131,8 @@
 }
 
 .signup-link {
-  color: #0d310d;
-  font-weight: 600;
+  color: #092b09;
+  font-weight: 900;
   cursor: pointer;
 }
 
@@ -162,7 +163,7 @@
   margin-top: -10px;
   font-size: 1rem;
   padding: 0.75rem;
-  background-color: #ffffff;
+  background  : #ffffff;
   color: rgb(36, 81, 43);
   border: none;
   border-radius: 40px;
@@ -170,7 +171,7 @@
 }
 
 .login-right .button-back:hover {
-  background-color: #e0e0e0;
+  background: #e0e0e0;
 }
 
 .login-right .button-submit-otp {
