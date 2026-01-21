@@ -1,0 +1,28 @@
+.otp-box-container {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 1.5rem;
+}
+
+.otp-box-container .otp-box {
+  width: 2.8rem;
+  height: 50px;
+  aspect-ratio: 1 / 1;
+  font-size: 20px;
+  text-align: center;
+  border: 2px solid #295638;
+  border-radius: 15px;
+  padding: 8px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.otp-box:focus {
+  border-color: #414e41;
+  box-shadow: 0 0 2px 3px rgba(104, 126, 104, 0.3);
+}

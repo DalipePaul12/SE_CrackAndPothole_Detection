@@ -1,11 +1,45 @@
 import { useState } from "react";
 import "./LoginPage.css";
+import OTPboxes from "./OTPboxes.jsx";
 
 function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
+  const [step, setStep] = useState(1); // Step 1 = login, Step 2 = OTP
   const [formData, setFormData] = useState({
     email: "",
-    password: ""
+    password: "",
+    otp: ""
   });
+
+  const handleResendOtp = () => {
+    // For frontend only
+    alert(`OTP resent to ${formData.email}`);
+    
+    setFormData(prev => ({ ...prev, otp: "" }));
+  };
+
+  /* BackEnd Ready
+  const handleResendOtp = async () => {
+  try {
+    const response = await fetch("http://localhost:5173/resend-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: formData.email })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      alert("OTP resent successfully!");
+      setFormData(prev => ({ ...prev, otp: "" }));
+    } else {
+      alert("Failed to resend OTP. Try again.");
+    }
+  } catch (error) {
+    console.error("Resend OTP error:", error);
+  }
+};
+*/
+
 
   if (!isOpen) return null;
 
@@ -16,26 +50,83 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
     });
   };
 
-  const handleSubmit = async (e) => {
+  // STEP 1: Login Submission
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
 
-    // BACKEND READY
+    /*  BACKEND READY 
     try {
       const response = await fetch("http://localhost:5173/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        })
       });
 
       const data = await response.json();
-      console.log(data);
+      console.log("Login Response:", data);
 
-      // close modal on success
-      onClose();
+      if (data.success && data.otpSent) {
+        setStep(2);
+      } else {
+        alert("Invalid email or password");
+      }
     } catch (error) {
       console.error("Login error:", error);
+    }
+    ================================================= */
+
+    // FRONTEND-ONLY 
+    if (formData.email && formData.password) {
+      console.log("Frontend-only login success");
+      setStep(2); // move to OTP
+    } else {
+      alert("Please enter email and password");
+    }
+  };
+
+  // STEP 2: OTP Verification
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+
+    /*  BACKEND READY 
+    try {
+      const response = await fetch("http://localhost:5173/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          otp: formData.otp
+        })
+      });
+
+      const data = await response.json();
+      console.log("OTP response:", data);
+
+      if (data.success) {
+        alert("Login successful!");
+        onClose();
+        setStep(1);
+      } else {
+        alert("Invalid OTP, try again");
+      }
+    } catch (error) {
+      console.error("OTP error:", error);
+    }
+    ================================================= */
+
+    //FRONTEND-ONLY 
+    if (formData.otp.length >= 4) {
+      alert("Frontend-only login successful!");
+      onClose();
+      setStep(1);
+      setFormData({ email: "", password: "", otp: "" });
+    } else {
+      alert("Please enter OTP");
     }
   };
 
@@ -51,40 +142,90 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
           </p>
         </div>
 
+        {/* RIGHT COLUMN */}
         <div className="login-right">
-            <h2>Welcome Back!</h2>
-            <p className="login-instruction">Log in to continue reporting road damages!</p>
+          {step === 1 && (
+            <>
+              <h2>Welcome Back!</h2>
+              <p className="login-instruction">
+                Log in to continue reporting road damages!
+              </p>
 
-            <form onSubmit={handleSubmit}>
-              <div className="label-form">
-                <label htmlFor="email">Email Address</label>
-              <input
-                type="email"
-                name="email"
-                placeholder="name@gmail.com"
-                required
-                onChange={handleChange}
-              />
+              <form onSubmit={handleLoginSubmit}>
+                <div className="label-form">
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    name="email"
+                    placeholder="name@gmail.com"
+                    required
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="label-form">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="Password"
+                    required
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <button type="submit">Continue</button>
+              </form>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+            <div className="otp-title">
+              <h2>Check Your Email</h2>
+              <p className="login-instruction">
+                We have sent a one-time code to your email.
+              </p>
               </div>
 
-              <div className="label-form">
-                <label htmlFor="password">Password</label>
-              <input
-                type="password"
-                name="password"
-                placeholder="Password"
-                required
-                onChange={handleChange}
+              <form onSubmit={handleOtpSubmit}>
+                <div className="label-form-otp">
+                  <label>One-Time-Password Code</label>
+                  
+              <OTPboxes
+                length={6}
+                onChange={(otp) =>
+                  setFormData((prev) => ({ ...prev, otp }))
+                }
               />
-              </div>
+                </div>
 
-              <button type="submit">Continue</button>
-            </form>
-
-            <div className="login-footer">
-              <p>Don't have an account? <span className="signup-link" onClick={onSwitchToSignUp}>Sign Up</span></p>
+                <button className="button-submit-otp" type="submit">Verify and Access Dashboard</button>
+                <button className="button-back" type="button" onClick={() => setStep(1)}>Back To Login</button>
+              </form>
+                
+                <div className="otp-footer">
+              <p>
+                Didn't receive the code?{" "}
+                <span className="resend-link" onClick={handleResendOtp}>
+                  Resend
+                </span>
+              </p>
             </div>
-          </div>
+            </>
+          )}
+
+          {step === 1 && (
+            <div className="login-footer">
+              <p>
+                Don't have an account?{" "}
+                <span className="signup-link" onClick={onSwitchToSignUp}>
+                  Sign Up
+                </span>
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

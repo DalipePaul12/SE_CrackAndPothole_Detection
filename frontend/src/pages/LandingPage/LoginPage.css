@@ -107,7 +107,7 @@
 
 .login-right button {
   margin-top: 0.5rem;
-  font-size: 1.2rem;
+  font-size: 1rem;
   padding: 0.75rem;
   background-color: #3b5b3b;
   color: white;
@@ -136,6 +136,72 @@
 }
 
 .signup-link:hover {
+  /*text-decoration: wavy underline #205920;*/
+  text-decoration: underline #205920;
+}
+
+.otp-title h2 {
+  font-size: 2.5rem;
+  text-align: center;
+  color: #3b703b;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.label-form-otp label {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #3d5e3d;
+  margin-bottom: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center; 
+}
+
+.login-right .button-back {
+  margin-top: -10px;
+  font-size: 1rem;
+  padding: 0.75rem;
+  background-color: #ffffff;
+  color: rgb(36, 81, 43);
+  border: none;
+  border-radius: 40px;
+  cursor: pointer;
+}
+
+.login-right .button-back:hover {
+  background-color: #e0e0e0;
+}
+
+.login-right .button-submit-otp {
+  margin-top: -5px;
+  font-size: 1rem;
+  padding: 0.75rem;
+  background-color: #3b5b3b;
+  color: white;
+  border: none;
+  border-radius: 40px;
+  cursor: pointer;
+  box-shadow: 2px 3px 4px rgba(0.5, 0.5, 0.5, 0.5);
+  border:1px solid #0000003e;
+}
+
+.otp-footer {
+  border-top: #1832188f 1px solid;
+  padding-top: 1.2rem;
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.95rem;
+  color: #2d552d;
+}
+
+.login-right .resend-link {
+  color: #0d310d;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-right .resend-link:hover {
   /*text-decoration: wavy underline #205920;*/
   text-decoration: underline #205920;
 }

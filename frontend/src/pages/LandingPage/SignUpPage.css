@@ -139,3 +139,63 @@
   /*text-decoration: wavy underline #205920;*/
   text-decoration: underline #205920;
 }
+
+.otp-footer-signup {
+  border-top: #1832188f 1px solid;
+  padding-top: 1.5rem;
+  margin-top: 3rem;
+  text-align: center;
+  font-size: 0.95rem;
+  color: #2d552d;
+}
+
+.sign-up-right .resend-link {
+  color: #0d310d;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sign-up-right .resend-link:hover {
+  /*text-decoration: wavy underline #205920;*/
+  text-decoration: underline #205920;
+}
+
+.sign-up-right .button-back-signup {
+  margin-top: -5px;
+  font-size: 1rem;
+  padding: 0.75rem;
+  background-color: #ffffff;
+  color: rgb(36, 81, 43);
+  border: none;
+  border-radius: 40px;
+  cursor: pointer;
+}
+
+.sign-up-right .button-back-signup:hover {
+  background-color: #e0e0e0;
+}
+
+.sign-up-right .button-submit-otp {
+  font-size: 1rem;
+  padding: 0.75rem;
+  background-color: #3b5b3b;
+  color: white;
+  border: none;
+  border-radius: 40px;
+  cursor: pointer;
+  box-shadow: 2px 3px 4px rgba(0.5, 0.5, 0.5, 0.5);
+  border:1px solid #0000003e;
+  margin-top: 20px;
+}
+
+.sign-up-right .otp-title-signup h2{
+  text-align: center;
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: #295638;
+  margin-bottom: 0.5rem;
+}
+
+.sign-up-right .otp-title-signup p{
+  margin-bottom: 2.5rem;
+}
