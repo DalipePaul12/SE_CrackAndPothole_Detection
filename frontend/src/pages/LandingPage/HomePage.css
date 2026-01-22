@@ -1,0 +1,121 @@
+.home-container {
+  font-family: "Poppins", sans-serif;
+  color: #193919;
+}
+
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+}
+
+/* home */
+.home-section {
+  margin-top: -100px;
+  height: 110vh;
+  border-radius: 20px;
+  /*background: linear-gradient(135deg, #193919, #3d7c3d);*/
+  background: url('/public/lp9.jpg') no-repeat center center/cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: rgb(255, 255, 255);
+}
+
+.home-content h1 {
+  font-size: 8rem;
+  margin-bottom: 1rem;
+   -webkit-text-stroke: 2px #000000; /* thickness + color */
+  color: whitesmoke; 
+}
+
+.home-content p {
+  font-size: 1.4rem;
+  margin-bottom: 7rem;
+    font-weight: bold;
+}
+
+.home-buttons {
+  display: flex;
+  gap: 4rem;
+  justify-content: center;
+  margin-top: 5rem;
+}
+
+/* BUTTONS */
+.primary-btn {
+  padding: 0.75rem 3rem;
+  background: linear-gradient(0deg,#3b823e,#1c3f1e);
+  box-shadow: 0 2px 4px rgba(1, 48, 32, 0.9);
+  color: white;
+  border: 1px solid rgba(2, 57, 17, 0.532);
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.primary-btn:hover {
+  background: linear-gradient(180deg,#3b823e,#1c3f1e);
+  box-shadow: 0 4px 8px rgba(1, 48, 32, 0.9);
+}
+
+.secondary-btn {
+  padding: 0.75rem 2.5rem;
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+    font-weight: bold;
+}
+
+.secondary-btn:hover {
+  background: linear-gradient(180deg,#ffffff,#8abc8c);
+  color: #063d06;
+  box-shadow: 0 4px 8px rgba(1, 48, 32, 0.9);
+}
+
+/* FEATURES */
+.features-section {
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.feature-card {
+  padding: 2rem;
+  border-radius: 16px;
+  background: #f5f7f5;
+}
+
+/* WHY */
+.why-section {
+  padding: 4rem 2rem;
+  background: #e8f2e8;
+  text-align: center;
+}
+
+/* CTA */
+.cta-section {
+  padding: 4rem 2rem;
+  text-align: center;
+  background: #193919;
+  color: white;
+}
+
+/* FOOTER */
+.home-footer {
+  padding: 1rem;
+  text-align: center;
+  background: #102810;
+  color: white;
+  font-size: 0.9rem;
+}

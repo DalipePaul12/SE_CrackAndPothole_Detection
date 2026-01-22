@@ -3,23 +3,26 @@
   justify-content: space-between;
   align-items: center;
   padding: 21px 50px;
-  background-color: whitesmoke;
+  background-color: white;
   box-shadow: 0 2px 4px rgba(1, 48, 32, 0.3);
   border-bottom-left-radius: 50px;
   border-bottom-right-radius: 50px;
   border-bottom: 1px solid #414e417f;
   position: sticky;
-
+  top: 0;
+  z-index: 1000;
+  background-color: rgba(245, 245, 245, 0.736);
+/*
     background: linear-gradient(
     to bottom,
-   /* #687e68 0%,*/
-    #687e68c7 0%,
+   /* #687e68 0%,
+    #687e68a4 0%,
     #ffffff 100%
-  );
+  );*/
 }
 
 .logo {
-  color: #414e41;
+  color: #103410;
   font-size: 36px;
   font-weight: bolder;
 }
@@ -34,7 +37,7 @@
 
 .nav-login {
   padding: 10px 25px;
-  color: #414e41;
+  color: #103410;
   font-size: 19px;
   font-weight: 800;
   border-radius: 23px;
@@ -43,7 +46,7 @@
 }
 
 .nav-login:hover {
-  background: #687E68;
+  background: #315a31;
   box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
   border-radius: 30px;
   color: #ffffff;
@@ -52,7 +55,7 @@
 .nav-signup {
   background-color: transparent;
   font-size: 18px;
-  color: #414e41;
+  color: #103410;
   padding: 10px 25px;
   box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
   border: 1px solid #00000055;
@@ -63,13 +66,13 @@
 }
 
 .nav-signup:hover {
-  background: #687E68;
+  background: #315a31;
   color: #ffffff;
 }
 
 .nav-about {
   padding: 10px 25px;
-  color: #414e41;
+  color: #103410;
   font-size: 19px;
   font-weight: 800;
   border-radius: 23px;
@@ -78,7 +81,7 @@
 }
 
 .nav-about:hover {
-  background: #687E68;
+  background: #315a31;
   box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
   border-radius: 30px;
   color: #ffffff;
@@ -86,7 +89,7 @@
 
 .nav-home {
   padding: 10px 25px;
-  color: #414e41;
+  color: #103410;
   font-size: 19px;
   font-weight: 800;
   border-radius: 23px;
@@ -95,7 +98,7 @@
 }
 
 .nav-home:hover {
-  background: #687E68;
+  background: #315a31;
   box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
   border-radius: 30px;
   color: #ffffff;

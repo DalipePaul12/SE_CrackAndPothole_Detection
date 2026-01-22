@@ -6,9 +6,9 @@ import "./Navbar.css";
 import LoginPage from '../pages/LandingPage/LoginPage.jsx';
 import SignUpPage from '../pages/LandingPage/SignUpPage.jsx';
 
-function Navbar() {
-  const [showLogin, setShowLogin] = useState(false);
-  const [showSignUp, setShowSignUp] = useState(false);
+function Navbar({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
+  /*const [showLogin, setShowLogin] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(false);*/
 
   return (
     <>
