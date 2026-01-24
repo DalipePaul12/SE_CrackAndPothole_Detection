@@ -9,6 +9,23 @@
 }
 
 /* home */
+/*This is the css for the background image loop if needed later
+.home-section {
+  margin-top: -100px;
+  height: 110vh;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  transition: background-image 1s ease-in-out;
+}
+*/
+
 .home-section {
   margin-top: -100px;
   height: 110vh;
@@ -22,10 +39,11 @@
   color: rgb(255, 255, 255);
 }
 
+
 .home-content h1 {
   font-size: 8rem;
   margin-bottom: 1rem;
-   -webkit-text-stroke: 2px #000000; /* thickness + color */
+  -webkit-text-stroke: 2px #000000;
   color: whitesmoke; 
 }
 
@@ -79,36 +97,105 @@
 
 /* FEATURES */
 .features-section {
-  padding: 4rem 2rem;
+  margin-top: 10px;
+  padding: 80px 60px;
   text-align: center;
+  background: linear-gradient(360deg,#d9eddb, #aef0ae);
+  border-radius: 30px;
+}
+
+.features-section h2 {
+  -webkit-text-stroke: 1px #000; 
+  font-size: 2.2rem;
+  margin-bottom: 35px;
+  margin-top: -20px;
+  color: #193919;
+  font-weight: 800;
 }
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 2rem;
-  margin-top: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 30px;
 }
 
 .feature-card {
-  padding: 2rem;
-  border-radius: 16px;
-  background: #f5f7f5;
+  background: white;
+  border-radius: 30px;
+  border: #537e53 2px solid;
+  padding: 25px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.58);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
+.feature-card:hover {
+  transform: translateY(-19px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+}
+
+.feature-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  border: 1px solid #000;
+}
+
+.feature-card h3 {
+  font-size: 1.4rem;
+  margin-bottom: 10px;
+  color: #0b350b;
+  text-align: center;
+}
+
+.feature-card p {
+  font-size: 1rem;
+  color: #383131;
+  line-height: 1.5;
+}
+
+
 /* WHY */
+/*
 .why-section {
   padding: 4rem 2rem;
   background: #e8f2e8;
   text-align: center;
 }
+*/
 
 /* CTA */
 .cta-section {
-  padding: 4rem 2rem;
+  margin-top: 10px;
+  padding: 2rem 2rem;
   text-align: center;
-  background: #193919;
-  color: white;
+  background: linear-gradient(360deg,#d9eddb, #aef0ae);
+  color: black;
+  border-radius: 20px 20px 0 0;;
+}
+
+.cta-section p {
+  font-size: 1rem;
+  margin-top: 0.5rem;
+}
+
+.primary-btn-cta {
+  margin-top: 20px;
+  padding: 0.75rem 3rem;
+  background: linear-gradient(270deg,#ffffff,#73d376);
+  box-shadow: 0 2px 4px rgba(1, 48, 32, 0.9);
+  color: black;
+  border: 1px solid rgba(2, 57, 17, 0.532);
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.primary-btn-cta:hover {
+  background: linear-gradient(90deg,#ffffff,#73d376);
+  box-shadow: 0 4px 8px rgba(1, 48, 32, 0.9);
 }
 
 /* FOOTER */
@@ -118,4 +205,55 @@
   background: #102810;
   color: white;
   font-size: 0.9rem;
+  border-radius: 0 0 20px 20px;
+}
+
+/* CONTACT DEVELOPERS */
+
+.contact-section {
+  border-top: 1px solid green;
+  padding: 20px 20px;
+  background: linear-gradient(180deg,#d9eddb, #aef0ae);
+  text-align: center;
+  border-bottom: 2px solid black;
+}
+
+.contact-section h2 {
+  font-size: 1.6rem;
+  margin-bottom: 1rem;
+  color: black;
+}
+
+.contact-section p {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  margin-top: 1rem;
+  color: black;
+}
+
+.developers-row {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  flex-wrap: wrap; 
+}
+/*
+.developer-card {
+  background-color: white;
+  padding: 20px 30px;
+  border-radius: 15px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  min-width: 200px;
+}
+*/
+.dev-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #193919;
+  margin-bottom: 5px;
+}
+
+.dev-email {
+  font-size: 0.95rem;
+  color: #414e41;
 }
