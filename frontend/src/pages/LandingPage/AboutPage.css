@@ -1,0 +1,142 @@
+.about-container {
+  width: 100%;
+  color: #1f2d1f;
+  margin-top: -90px;
+  font-family: "Poppins", sans-serif;
+}
+
+/* HERO */
+.about-hero {
+  height: 45vh;
+/*
+  background: linear-gradient(
+    to bottom right,
+    #193919,
+    #4f8f4f
+  );
+  */
+  background: url('/public/lp13.jpg') no-repeat center center/cover;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-bottom-left-radius: 40px;
+  border-bottom-right-radius: 40px;
+  padding-top: 80px;
+  border-bottom: #193919 4px solid;
+}
+
+.about-hero h1 {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  -webkit-text-stroke: 1px #000000;
+  font-weight: 1000;
+}
+
+.about-hero p {
+  font-size: 1.2rem;
+  max-width: 800px;;
+  font-weight: bold;
+  -webkit-text-stroke: 1px #000000a3;
+}
+
+/* MEANING SECTION */
+.meaning-section {
+  padding: 2rem;
+  text-align: center;
+  background-color: white;
+  margin-bottom: -60px;
+}
+
+.meaning-section p {
+  max-width: 1200px;
+  margin: auto;
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+
+/* SECTIONS */
+.about-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  padding: 4rem 8%;
+  border-bottom: #074b0796 2px solid;
+  border-bottom-left-radius: 40px;
+  border-bottom-right-radius: 40px;
+  background: linear-gradient(180deg,#ffffff, #aef0ae);
+}
+
+.about-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 20px;
+  border: #193919 2px solid;
+  box-shadow: 0 6px 10px rgb(0, 0, 0);
+}
+
+.about-card h2 {
+  margin-bottom: 1rem;
+  color: #193919;
+}
+
+.about-card p {
+  line-height: 1.6;
+}
+
+/* STORY */
+.about-story {
+  padding: 4rem 10%;
+  text-align: center;
+  background: linear-gradient(180deg,#fff, #aef0ae);
+  border-radius: 40px;
+  border-bottom: #074b0796 2px solid;
+}
+
+.about-story h2 {
+  margin-bottom: 1rem;
+}
+
+.about-story p {
+  max-width: 1300px;
+  margin: auto;
+  line-height: 1.6;
+}
+
+/* VALUES */
+.about-values {
+  padding: 4rem 8%;
+  background: linear-gradient(180deg,#fff, #aef0ae);
+  text-align: center;
+  border-bottom: #074b0796 2px solid;
+  border-bottom-left-radius: 30px;
+  border-bottom-right-radius: 30px;
+}
+
+.values-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 2rem;
+  margin-top: 1.8rem;
+}
+
+.value-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.70);
+  border: #2f5f2f 2px solid;
+}
+
+.about-values h2 {
+  margin-top: -1rem;
+}
+
+.value-card h3 {
+  margin-bottom: 0.5rem;
+  color: #2f5f2f;
+}

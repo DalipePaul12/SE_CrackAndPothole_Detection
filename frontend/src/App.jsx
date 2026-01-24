@@ -2,6 +2,9 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { useState } from "react";
 import './index.css'
 
+//Scroll to Top Import (so that when navigating to a new page, it starts at the top)
+import ScrollToTop from './components/ScrollToTop.jsx';
+
 //Navigation Bar Import
 import Navbar from './components/Navbar.jsx';
 
@@ -16,6 +19,8 @@ function App() {
 
   return (
     <>
+      <ScrollToTop />
+
       <Navbar
         showLogin={showLogin}
         showSignUp={showSignUp}

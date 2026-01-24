@@ -198,18 +198,8 @@
   box-shadow: 0 4px 8px rgba(1, 48, 32, 0.9);
 }
 
-/* FOOTER */
-.home-footer {
-  padding: 1rem;
-  text-align: center;
-  background: #102810;
-  color: white;
-  font-size: 0.9rem;
-  border-radius: 0 0 20px 20px;
-}
 
 /* CONTACT DEVELOPERS */
-
 .contact-section {
   border-top: 1px solid green;
   padding: 20px 20px;

@@ -1,0 +1,9 @@
+/* FOOTER */
+.home-footer {
+  padding: 1rem;
+  text-align: center;
+  background: #102810;
+  color: white;
+  font-size: 0.9rem;
+  border-radius: 0 0 20px 20px;
+}

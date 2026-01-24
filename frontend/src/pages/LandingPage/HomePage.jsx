@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect} from "react";
+import { useNavigate } from "react-router-dom";
 import "./HomePage.css";
+import Footer from "./Footer.jsx";
 
-function HomePage({ onGetStarted }) {
+function HomePage({ onGetStarted, onLearnMore }) {
   //This is for the background image loop if needed later
   /*
   const images = ["/lp9.jpg", "/lp10.jpg", "/lp11.jpg"]; 
@@ -17,12 +19,13 @@ function HomePage({ onGetStarted }) {
   const homeStyle = {
     backgroundImage: `url(${images[current]})`
   };
-*/
+*/  
+  const navigate = useNavigate();
 
   return (
     <>
       <div className="home-container">
-        {/* home SECTION */}
+        {/* HOME SECTION */}
         <section className="home-section" /*style={homeStyle}*/>
           <div className="home-content">
             <h1>Snap2Fix PH</h1>
@@ -30,7 +33,7 @@ function HomePage({ onGetStarted }) {
 
             <div className="home-buttons">
               <button className="primary-btn" onClick={onGetStarted}>Get Started</button>
-              <button className="secondary-btn">Learn More</button>
+              <button className="secondary-btn" onClick={() => navigate("/about")}>Learn More</button>
             </div>
           </div>
         </section>
@@ -81,7 +84,7 @@ function HomePage({ onGetStarted }) {
         <section className="cta-section">
           <h2>Be Part of the Solution</h2>
           <p>Join the community helping build safer roads across the Philippines.</p>
-          <button className="primary-btn-cta">Start Reporting!</button>
+          <button className="primary-btn-cta" onClick={onGetStarted}>Start Reporting!</button>
         </section>
 
 
@@ -118,10 +121,7 @@ function HomePage({ onGetStarted }) {
         </div>
       </section>
 
-        {/* FOOTER */}
-        <footer className="home-footer">
-          <p>© {new Date().getFullYear()} Snap2Fix PH. All rights reserved.</p>
-        </footer>
+      <Footer />
       </div>
     </>
   );

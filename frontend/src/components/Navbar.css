@@ -11,14 +11,14 @@
   position: sticky;
   top: 0;
   z-index: 1000;
-  background-color: rgba(245, 245, 245, 0.736);
-/*
+  /*background-color: rgba(245, 245, 245, 0.736);*/
+
     background: linear-gradient(
     to bottom,
-   /* #687e68 0%,
-    #687e68a4 0%,
+   /* #687e68 0%,*/
+    #687e68cb 0%,
     #ffffff 100%
-  );*/
+  );
 }
 
 .logo {
@@ -58,7 +58,7 @@
   color: #103410;
   padding: 10px 25px;
   box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
-  border: 1px solid #00000055;
+  border: 2px solid #000000d1;
   transition: all 0.3s ease-out;
   border-radius: 23px;
   text-decoration: none;
