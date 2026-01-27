@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
+import { GiCrackedDisc } from "react-icons/gi";
+
 import "./Navbar.css";
 
 // Import Components
@@ -15,7 +17,7 @@ function Navbar({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
     <nav className="navbar">
 
       <div className="navbar-left">
-        <h1 className="logo">Snap2Fix PH</h1>
+        <h1 className="logo">Snap2Fix PH <GiCrackedDisc className="logo-icon" /></h1>
       </div>
 
       <div className="navbar-right">

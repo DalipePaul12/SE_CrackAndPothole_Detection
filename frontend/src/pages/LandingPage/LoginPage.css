@@ -88,6 +88,10 @@
   transition: border-color 0.2s, background-color 0.2s;
 }
 
+.label-form ::placeholder {
+  font-size: 0.85rem;
+}
+
 
 .label-form input:hover {
   border-color: 2px solid #205920; 
@@ -115,11 +119,23 @@
   border: none;
   border-radius: 40px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
 
 .login-right button:hover {
   background: linear-gradient(360deg,#316b34,#1c381e);
 }
+
+
+.next-icon {
+  font-size: 1rem;     /* icon size */
+  transition: transform 0.3s ease;
+  margin-left: 10px;
+}
+
 
 .login-footer {
   border-top: #1832188f 1px solid;
@@ -142,11 +158,19 @@
 }
 
 .otp-title h2 {
-  font-size: 2.5rem;
+  font-size: 2.3rem;
   text-align: center;
   color: #3b703b;
   font-weight: bold;
   margin-bottom: 0.5rem;
+}
+
+.otp-title p {
+  font-size: 0.95rem;
+  opacity: 0.7;
+  text-align: center;
+  color: #183218;
+  margin-bottom: 1rem;
 }
 
 .label-form-otp label {
@@ -168,6 +192,7 @@
   border: none;
   border-radius: 40px;
   cursor: pointer;
+
 }
 
 .login-right .button-back:hover {
@@ -185,12 +210,13 @@
   cursor: pointer;
   box-shadow: 2px 3px 4px rgba(0.5, 0.5, 0.5, 0.5);
   border:1px solid #0000003e;
+  margin-top: -20px;
 }
 
 .otp-footer {
   border-top: #1832188f 1px solid;
-  padding-top: 1.2rem;
-  margin-top: 1rem;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
   text-align: center;
   font-size: 0.95rem;
   color: #2d552d;
@@ -205,4 +231,199 @@
 .login-right .resend-link:hover {
   /*text-decoration: wavy underline #205920;*/
   text-decoration: underline #205920;
+}
+
+/* Icons */
+.email-icon-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.email-icon-wrapper input {
+  width: 100%;
+  padding: 0.75rem 0.75rem 0.75rem 2.75rem; /* space for icon */
+  font-size: 1rem;
+}
+
+.email-icon {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b8f6b;
+  font-size: 1.1rem;
+  pointer-events: none; /* lets you click input */
+}
+
+.password-icon-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.password-icon-wrapper input {
+  width: 100%;
+  padding: 0.75rem 0.75rem 0.75rem 2.75rem; /* space for icon */
+  font-size: 1rem;
+}
+
+.password-icon {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b8f6b;
+  font-size: 1.1rem;
+  pointer-events: none; /* lets you click input */
+}
+
+.otp-icon {
+  font-size: 2.5rem;
+  color: #4a7d4a;
+  display: block;
+  margin: 0 auto 1rem auto;
+}
+
+/*Responsive*/
+/* Tablets / small screens ≤ 768px */
+@media (max-width: 768px) {
+
+  .login-content {
+    display: grid;
+    grid-template-columns: 1fr; /* single column */
+    width: 90%;
+    height: auto;
+    padding: 0;
+    border-radius: 20px;
+  }
+
+  /* LEFT SIDE */
+  .login-left {
+    padding: 2.5rem;
+    border-bottom-left-radius: 80px;
+    border-bottom-right-radius: 80px;
+  }
+
+  .login-logo {
+    width: 50px;
+  }
+
+  .login-title {
+    font-size: 1.5rem;
+  }
+
+  .login-slogan {
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* RIGHT SIDE */
+  .login-right {
+    padding: 2rem;
+    height: 420px;
+  }
+
+  .login-right h2 {
+    font-size: 2rem;
+  }
+
+  .login-right p {
+    font-size: 0.9rem;
+  }
+
+  .label-form input,
+  .email-icon-wrapper input,
+  .password-icon-wrapper input {
+    padding: 0.6rem 1rem 0.6rem 2.5rem;
+    font-size: 0.9rem;
+  }
+
+  .email-icon,
+  .password-icon {
+    font-size: 1rem;
+  }
+
+  .login-right button,
+  .login-right .button-back,
+  .login-right .button-submit-otp {
+    font-size: 0.9rem;
+    padding: 0.6rem;
+  }
+
+  .otp-title h2 {
+    font-size: 1.8rem;
+  }
+
+  .otp-title p {
+    font-size: 0.85rem;
+  }
+
+  .login-footer,
+  .otp-footer {
+    font-size: 0.85rem;
+  }
+}
+
+/* Extra small devices ≤ 480px (phones) */
+@media (max-width: 480px) {
+
+  .login-left {
+    padding: 1.5rem;
+  }
+
+  .login-right {
+    padding: 1.5rem;
+  }
+
+  .login-logo {
+    width: 40px;
+  }
+
+  .login-title {
+    font-size: 1.2rem;
+  }
+
+  .login-slogan {
+    font-size: 0.8rem;
+    margin-bottom: 1rem;
+  }
+
+  .login-right h2 {
+    font-size: 1.5rem;
+  }
+
+  .login-right p {
+    font-size: 0.8rem;
+  }
+
+  .label-form input,
+  .email-icon-wrapper input,
+  .password-icon-wrapper input {
+    padding: 0.5rem 0.75rem 0.5rem 2.2rem;
+    font-size: 0.85rem;
+  }
+
+  .email-icon,
+  .password-icon {
+    font-size: 0.9rem;
+  }
+
+  .login-right button,
+  .login-right .button-back,
+  .login-right .button-submit-otp {
+    font-size: 0.85rem;
+    padding: 0.5rem;
+  }
+
+  .otp-title h2 {
+    font-size: 1.5rem;
+  }
+
+  .otp-title p {
+    font-size: 0.8rem;
+  }
+
+  .login-footer,
+  .otp-footer {
+    font-size: 0.8rem;
+  }
 }

@@ -3,6 +3,14 @@ import { useNavigate } from "react-router-dom";
 import "./HomePage.css";
 import Footer from "./Footer.jsx";
 
+//Icons
+import { FaCircleQuestion } from "react-icons/fa6";
+import { FaCamera } from "react-icons/fa";
+import { MdReport } from "react-icons/md";
+import { FaCheckCircle } from "react-icons/fa";
+import { FaRoad } from "react-icons/fa";
+import { SiMinutemailer } from "react-icons/si";
+
 function HomePage({ onGetStarted, onLearnMore }) {
   //This is for the background image loop if needed later
   /*
@@ -40,30 +48,30 @@ function HomePage({ onGetStarted, onLearnMore }) {
 
         {/* FEATURES SECTION */}
         <section className="features-section">
-          <h2>How It Works</h2>
+          <h2> <FaCircleQuestion className="home-icon" /> How It Works <FaCircleQuestion className="home-icon" /></h2>
 
           <div className="features-grid">
             <div className="feature-card">
               <img src="/lp10.jpg" alt="Snap road damage" />
-              <h3>Snap</h3>
+              <h3>Snap <FaCamera className="home-icon" /></h3>
               <p>Take a photo of road cracks or potholes using your device.</p>
             </div>
 
             <div className="feature-card">
               <img src="/lp2-mapview.jpg" alt="Report location" />
-              <h3>Report</h3>
+              <h3>Report <MdReport className="home-icon" /></h3>
               <p>Send the report with location details for quick action.</p>
             </div>
 
             <div className="feature-card">
               <img src="/lp11.jpg" alt="Fix roads" />
-              <h3>Fix</h3>
+              <h3>Fix <FaCheckCircle className="home-icon" /></h3>
               <p>Authorities receive reports and take action faster.</p>
             </div>
 
             <div className="feature-card">
               <img src="/lp12.jpg" alt="Thriving communities" />
-              <h3>Thriving Communities</h3>
+              <h3>Thriving Communities <FaRoad className="home-icon" /></h3>
               <p>This helps build better roads that lead to better communities.</p>
             </div>
           </div>
@@ -90,7 +98,7 @@ function HomePage({ onGetStarted, onLearnMore }) {
 
       {/* CONTACT SECTION */}
       <section className="contact-section">
-        <h2>Contact the Developers</h2>
+        <h2>Contact the Developers <SiMinutemailer className="home-icon" /></h2>
         <p>If you have questions or feedback, feel free to reach out to our team.</p>
 
         <div className="developers-row">

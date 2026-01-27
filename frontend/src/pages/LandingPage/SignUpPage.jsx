@@ -2,8 +2,21 @@ import { useState } from "react";
 import "./SignUpPage.css";
 import OTPboxes from "./OTPboxes.jsx";
 
+//Icons
+import { BsFillPersonFill } from "react-icons/bs";
+import { MdEmail } from "react-icons/md";
+import { FaKey } from "react-icons/fa6";
+import { IoIosArrowRoundBack } from "react-icons/io";
+import { RiLockPasswordFill } from "react-icons/ri";
+import { IoMdDoneAll } from "react-icons/io";
+import { BsFillEyeFill, BsFillEyeSlashFill } from "react-icons/bs";
+
+
 function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
   const [step, setStep] = useState(1); // Step 1 = signup, Step 2 = OTP, Step 3 = password
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -42,6 +55,11 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
 
   if (!formData.password || !formData.confirmPassword) {
     alert("Please fill all password fields");
+    return;
+  }
+
+   if (formData.password.length < 8) {
+    alert("Password must be at least 8 characters long");
     return;
   }
 
@@ -103,6 +121,8 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
               <form onSubmit={handleSignUpSubmit}>
                 <div className="sign-up-label-form">
                   <label>Full Name</label>
+                  <div className="icon-input-signup">
+                    <BsFillPersonFill className="icon-signup" />
                   <input
                     type="text"
                     name="name"
@@ -110,10 +130,13 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                     required
                     onChange={handleChange}
                   />
+                   </div>
                 </div>
 
                 <div className="sign-up-label-form">
                   <label>Email Address</label>
+                  <div className="icon-input-signup">
+                    <MdEmail className="icon-signup" />
                   <input
                     type="email"
                     name="email"
@@ -121,6 +144,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                     required
                     onChange={handleChange}
                   />
+                    </div>
                 </div>
 
                 <div className="sign-up-label-form-province-city"> 
@@ -192,6 +216,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                 <p className="sign-up-instruction">
                   We have sent a one-time code to your email.
                 </p>
+                <FaKey className="otp-icon-signup-otp" />
               </div>
 
               <form onSubmit={handleOtpSubmit}>
@@ -209,6 +234,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                   Verify and Continue
                 </button>
                 <button className="button-back-signup" type="button" onClick={() => setStep(1)}>
+                  <IoIosArrowRoundBack className="back-icon-otp"/>
                   Back To Sign Up
                 </button>
               </form>
@@ -236,33 +262,46 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
               <form onSubmit={handlePasswordSubmit}>
                 <div className="sign-up-label-form">
                   <label>Password</label>
+                  <div className="icon-input-signup">
+                    <RiLockPasswordFill className="icon-signup" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     name="password"
                     placeholder="Enter Password"
                     required
                     onChange={handleChange}
                   />
+                    <span className="toggle-eye" onClick={() => setShowPassword((prev) => !prev)}>
+                        {showPassword ? <BsFillEyeSlashFill /> : <BsFillEyeFill />}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="sign-up-label-form">
                   <label>Confirm Password</label>
+                  <div className="icon-input-signup">
+                    <RiLockPasswordFill className="icon-signup" />
                   <input
-                    type="password"
+                    type={showConfirmPassword ? "text" : "password"}
                     name="confirmPassword"
                     placeholder="Confirm Password"
                     required
                     onChange={handleChange}
                   />
+                  <span className="toggle-eye" onClick={() => setShowConfirmPassword((prev) => !prev)}>
+                        {showConfirmPassword ? <BsFillEyeSlashFill /> : <BsFillEyeFill />}
+                    </span>
+                  </div>
                 </div>
 
-                <button className="button-submit-password" type="submit">Finish Sign Up</button>
+                <button className="button-submit-password" type="submit">Finish Sign Up <IoMdDoneAll className="finish-signup"/></button>
 
                 <button
                   type="button"
                   className="button-back-signup"
                   onClick={() => setStep(2)}
                 >
+                  <IoIosArrowRoundBack className="back-icon-otp"/>
                   Back to OTP
                 </button>
               </form>

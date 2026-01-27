@@ -2,6 +2,13 @@ import { useState } from "react";
 import "./LoginPage.css";
 import OTPboxes from "./OTPboxes.jsx";
 
+// Icons
+import { MdEmail } from "react-icons/md";
+import { RiLockPasswordFill } from "react-icons/ri";
+import { FaKey } from "react-icons/fa6";
+import { GrFormNextLink } from "react-icons/gr";
+import { IoIosArrowRoundBack } from "react-icons/io";
+
 function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   const [step, setStep] = useState(1); // Step 1 = login, Step 2 = OTP
   const [formData, setFormData] = useState({
@@ -82,7 +89,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
 
     // FRONTEND-ONLY 
     if (formData.email && formData.password) {
-      console.log("Frontend-only login success");
+      console.log("login success");
       setStep(2); // move to OTP
     } else {
       alert("Please enter email and password");
@@ -121,7 +128,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
 
     //FRONTEND-ONLY 
     if (formData.otp.length >= 4) {
-      alert("Frontend-only login successful!");
+      alert("login successful!");
       onClose();
       setStep(1);
       setFormData({ email: "", password: "", otp: "" });
@@ -154,6 +161,8 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
               <form onSubmit={handleLoginSubmit}>
                 <div className="label-form">
                   <label>Email Address</label>
+                  <div className="email-icon-wrapper">
+                    <MdEmail className="email-icon" />
                   <input
                     type="email"
                     name="email"
@@ -161,10 +170,13 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
                     required
                     onChange={handleChange}
                   />
+                  </div>
                 </div>
 
                 <div className="label-form">
                   <label>Password</label>
+                  <div className="password-icon-wrapper">
+                    <RiLockPasswordFill className="password-icon" />
                   <input
                     type="password"
                     name="password"
@@ -172,9 +184,10 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
                     required
                     onChange={handleChange}
                   />
+                  </div>
                 </div>
 
-                <button type="submit">Continue</button>
+                <button type="submit">Continue <GrFormNextLink className="next-icon"/></button>
               </form>
             </>
           )}
@@ -186,6 +199,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
               <p className="login-instruction">
                 We have sent a one-time code to your email.
               </p>
+              <FaKey className="otp-icon" />
               </div>
 
               <form onSubmit={handleOtpSubmit}>
@@ -201,7 +215,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
                 </div>
 
                 <button className="button-submit-otp" type="submit">Verify and Access Dashboard</button>
-                <button className="button-back" type="button" onClick={() => setStep(1)}>Back To Login</button>
+                <button className="button-back" type="button" onClick={() => setStep(1)}> <IoIosArrowRoundBack className="back-icon"/>  Back To Login</button>
               </form>
                 
                 <div className="otp-footer">

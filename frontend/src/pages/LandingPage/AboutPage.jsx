@@ -1,6 +1,14 @@
 import "./AboutPage.css";
 import Footer from "./Footer";
 
+//Icons
+import { MdEmojiObjects } from "react-icons/md";
+import { MdOutlineEmojiObjects } from "react-icons/md";
+import { FaUserShield } from "react-icons/fa6";
+import { MdOutlinePublic } from "react-icons/md";
+import { SiSmartthings } from "react-icons/si";
+
+
 function AboutPage() {
   return (
     <div className="about-container">
@@ -25,7 +33,7 @@ function AboutPage() {
       {/* MISSION & VISION */}
       <section className="about-section">
         <div className="about-card">
-          <h2>Purpose of the Project</h2>
+          <h2>Purpose of the Project <MdEmojiObjects className="about-icon" /></h2>
           <p>
             Snap2Fix PH aims to help citizens report road damage easily and efficiently using
             AI-powered tools. In line with this objective, the system enables authorities to
@@ -36,7 +44,7 @@ function AboutPage() {
         
 
         <div className="about-card">
-          <h2>Objective of the Project</h2>
+          <h2>Objective of the Project <MdEmojiObjects className="about-icon" /></h2>
           <p>
             This project aims to develop a web-based, AI-powered road damage reporting system
             that enables residents to easily report road issues through image uploads, while
@@ -48,7 +56,7 @@ function AboutPage() {
 
       {/* HOW IT STARTED */}
       <section className="about-story">
-        <h2>Project Rationale</h2>
+        <h2>Project Rationale <MdOutlineEmojiObjects className="about-icon" /></h2>
         <p>
           Poor road conditions are a major cause of accidents, traffic delays, and vehicle damage across 
           the Philippines. Snap2Fix PH was created to bridge the gap between citizens and local authorities 
@@ -62,21 +70,21 @@ function AboutPage() {
 
       {/* VALUES */}
       <section className="about-values">
-        <h2>Project Values</h2>
+        <h2>Project Values <MdOutlineEmojiObjects className="about-icon" /></h2>
 
         <div className="values-grid">
           <div className="value-card">
-            <h3>Public Safety</h3>
+            <h3>Public Safety <FaUserShield className="about-icon" /></h3>
             <p>Reducing road hazards through timely reporting.</p>
           </div>
 
           <div className="value-card">
-            <h3>Community Action</h3>
+            <h3>Community Action <MdOutlinePublic className="about-icon" /></h3>
             <p>Empowering citizens to take part in solutions.</p>
           </div>
 
           <div className="value-card">
-            <h3>Smart Technology</h3>
+            <h3>Smart Technology <SiSmartthings className="about-icon" /></h3>
             <p>Using AI to detect, classify, and prioritize road damage.</p>
           </div>
         </div>

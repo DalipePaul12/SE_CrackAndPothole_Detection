@@ -247,3 +247,97 @@
   font-size: 0.95rem;
   color: #414e41;
 }
+
+/*Icons*/
+.home-icon {
+  vertical-align: middle;
+  margin-left: 8px;
+  color: #193919;
+}
+
+/*Responsive*/
+@media (max-width: 768px) {
+
+  /* HOME SECTION */
+  .home-section {
+    margin-top: -70px;
+    height: 100vh;
+    padding: 0 1rem;
+  }
+
+  .home-content h1 {
+    font-size: 3.5rem;
+    -webkit-text-stroke: 1px #000;
+  }
+
+  .home-content p {
+    font-size: 1rem;
+    margin-bottom: 5rem;
+  }
+
+  /* BUTTONS */
+  .home-buttons {
+    flex-direction: column;
+    gap: 1.2rem;
+    margin-top: 2rem;
+  }
+
+  .primary-btn,
+  .secondary-btn {
+    width: 100%;
+    max-width: 200px;
+    margin: 0 auto;
+  }
+
+  /* FEATURES */
+  .features-section {
+    padding: 50px 20px;
+  }
+
+  .features-section h2 {
+    font-size: 1.8rem;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .feature-card {
+    padding: 20px;
+  }
+
+  .feature-card img {
+    height: 160px;
+  }
+
+  /* CTA */
+  .cta-section {
+    padding: 2rem 1rem;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .cta-section p {
+    font-size: 0.95rem;
+  }
+
+  .primary-btn-cta {
+    width: 100%;
+    max-width: 260px;
+  }
+
+  /* CONTACT */
+  .developers-row {
+    flex-direction: row;
+    gap: 20px;
+  }
+
+  .contact-section h2 {
+    font-size: 1.4rem;
+  }
+
+  .contact-section p {
+    font-size: 0.85rem;
+
+  }
+}

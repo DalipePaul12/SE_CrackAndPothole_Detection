@@ -25,7 +25,17 @@
   color: #103410;
   font-size: 36px;
   font-weight: bolder;
+  display: flex;
+  align-items: center;
 }
+
+.logo-icon {
+  font-size: 40px;  
+  color: #103410;       
+  margin-left: 20px;
+  align-items: center;
+}
+
 
 .navbar-right {
   display: flex;
@@ -102,4 +112,51 @@
   box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
   border-radius: 30px;
   color: #ffffff;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .navbar {
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 15px 20px;
+    width: 500px;
+  }
+
+  .logo {
+  color: #103410;
+  font-size: 25px;
+  display: flex;
+  align-items: center;
+  margin-top: 5px;
+}
+
+  .logo-icon {
+    font-size: 30px;  
+    color: #103410;       
+    margin-left: 10px;
+    align-items: center;
+  }
+
+  .navbar-right {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nav-about,
+  .nav-home {
+   display: none;
+  }
+
+  .nav-login {
+    padding: 8px 15px;
+    font-size: 14px;
+  }
+
+  .nav-signup {
+    padding: 8px 15px;
+    font-size: 14px;
+  }
 }
