@@ -1,23 +1,22 @@
 import React from 'react';
-import './Dashboard.css';
+import './MySubmissions.css';
 
 //Imports of Sidebar and Header
 import Sidebar from '../../components/Sidebar.jsx';
 import AppHeader from '../../components/AppHeader.jsx';
 
 
-function Dashboard() {
+function MySubmissions() {
     return (
         <>
-        <AppHeader />
         <Sidebar />
-        
+        <AppHeader />
 
-        <div className="dashboard-container">
-            <h1>Welcome to the Dashboard</h1>
+        <div className="my-submissions-container">
+            <h1>Welcome to the My Submissions Page</h1>
         </div>
         </>
     );  
 }
 
-export default Dashboard;
+export default MySubmissions;

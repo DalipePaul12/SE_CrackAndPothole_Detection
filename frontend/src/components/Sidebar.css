@@ -42,14 +42,22 @@
   align-items: center;
   gap: 12px;
   padding: 12px 15px;
-  border-radius: 15px;
-  background: linear-gradient(180deg, #458745, #a8c898);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #377d3793, #2c6a2c);
  /* background: #436543;*/
   color: white;
   border: 1px solid #000;
   cursor: pointer;
   font-size: 1rem;
   margin-bottom: 15px;
+}
+
+.sidebar-reports-button:hover {
+  background: linear-gradient(360deg, #377d3793, #2c6a2c);
+}
+
+.addreport-icon {
+  font-size: 1.2rem;
 }
 
 .sidebar-section-label {
@@ -91,22 +99,28 @@
   color: black;
   text-decoration: none;
   transition: background 0.3s;
+  border-radius: 30px;
 }
 
 
 .sidebar-link.active {
   background: linear-gradient(180deg, #377d3793, #2c6a2c);
   color: white;
-  border: #000000 0.5px solid;
+  border-radius: 30px;
 }
 
-/*
-.sidebar-link.active:active {
-  background: #B1A58E;
+.sidebar-link.active:hover {
+  background: linear-gradient(90deg, #244f2493, #2c6a2c);
   color: white;
-  border: #000000 1px solid;
+  border-radius: 30px;
 }
-*/
+
+.sidebar-link:hover {
+  background: #207120;
+  color: white;
+  border-radius: 30px;
+}
+
 
 .sidebar-link-others {
   margin-top: 10px;
@@ -118,8 +132,33 @@
   color: black;
   text-decoration: none;
   transition: background 0.3s;
+  border-radius: 30px;
+}
+
+.sidebar-link-others.active {
+  background: linear-gradient(180deg, #377d3793, #2c6a2c);
+  color: white;
+  border-radius: 30px;
+}
+
+.sidebar-link-others.active:hover {
+  background: linear-gradient(90deg, #244f2493, #2c6a2c);
+  color: white;
+  border-radius: 30px;
 }
 
 .sidebar-link-others:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: #207120;
+  color: white;
+  border-radius: 30px;
+}
+
+/* Icon Styles */
+.addreport-icon {
+  font-size: 1.2rem;
+}
+
+.submissions-icon {
+  font-size: 1.2rem;
+  margin-left: -2px;
 }

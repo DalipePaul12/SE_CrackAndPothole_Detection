@@ -1,6 +1,13 @@
 import "./Sidebar.css";
 import { Link } from "react-router-dom";
+
+//Icons Import
 import { FaHome, FaMapMarkedAlt, FaUser } from "react-icons/fa";
+import { IoAddCircleOutline } from "react-icons/io5";
+import { IoSettingsSharp } from "react-icons/io5";
+import { IoNotifications } from "react-icons/io5";
+import { RiCompassDiscoverFill } from "react-icons/ri";
+import { GiBookshelf } from "react-icons/gi";
 
 function Sidebar() {
   return (
@@ -15,7 +22,7 @@ function Sidebar() {
       <nav className="sidebar-nav">
         <div className="sidebar-main-section">
         <button to="/dashboard" className="sidebar-reports-button">
-          <FaHome /> Report Road Damage
+          <IoAddCircleOutline className="addreport-icon" /> Report Road Damage
         </button>
 
       {/* Main Menu */}
@@ -29,12 +36,12 @@ function Sidebar() {
         </Link>
 
 
-        <Link to="/dashboard/reports" className="sidebar-link">
-          <FaMapMarkedAlt /> All Reports
+        <Link to="/dashboard/reports" className={`sidebar-link ${location.pathname === "/dashboard/reports" ? "active" : ""}`}>
+          <GiBookshelf /> All Reports
         </Link>
 
-        <Link to="/dashboard/mapview" className="sidebar-link">
-          <FaUser /> Map View
+        <Link to="/dashboard/mapview" className={`sidebar-link ${location.pathname === "/dashboard/mapview" ? "active" : ""}`}>
+          <FaMapMarkedAlt /> Map View
         </Link>
 
       {/* Personal */}
@@ -42,12 +49,12 @@ function Sidebar() {
             className="sidebar-section-label">Personal
         </label>
 
-        <Link to="/dashboard/profile" className="sidebar-link">
-          <FaHome /> My Profile
+        <Link to="/dashboard/profile" className={`sidebar-link ${location.pathname === "/dashboard/profile" ? "active" : ""}`}>
+          <FaUser /> My Profile
         </Link>
 
-        <Link to="/dashboard/submissions" className="sidebar-link">
-          <FaMapMarkedAlt /> My Submissions
+        <Link to="/dashboard/submissions" className={`sidebar-link ${location.pathname === "/dashboard/submissions" ? "active" : ""}`}>
+          <RiCompassDiscoverFill className="submissions-icon"/> My Submissions
         </Link>
         </div>
 
@@ -55,12 +62,12 @@ function Sidebar() {
 
       {/* Others */}
       <div className="sidebar-other-section">
-        <Link to="/dashboard/notifications" className="sidebar-link-others">
-          <FaHome /> Notifications
+        <Link to="/dashboard/notifications" className={`sidebar-link-others ${location.pathname === "/dashboard/notifications" ? "active" : ""}`}>
+          <IoNotifications /> Notifications
         </Link>
 
-        <Link to="/dashboard/settings" className="sidebar-link-others">
-          <FaMapMarkedAlt /> Settings
+        <Link to="/dashboard/settings" className={`sidebar-link-others ${location.pathname === "/dashboard/settings" ? "active" : ""}`}>
+          <IoSettingsSharp /> Settings
         </Link>
       </div>
 
