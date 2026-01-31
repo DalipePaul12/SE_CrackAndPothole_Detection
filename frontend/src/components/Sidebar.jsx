@@ -1,0 +1,72 @@
+import "./Sidebar.css";
+import { Link } from "react-router-dom";
+import { FaHome, FaMapMarkedAlt, FaUser } from "react-icons/fa";
+
+function Sidebar() {
+  return (
+    <aside className="app-sidebar">
+      {/* LOGO */}
+      <div className="sidebar-logo">
+        <img src="/snap.jpg" alt="Snap2Fix Logo" />
+        <h2>Snap2Fix PH</h2>
+      </div>
+
+      {/* NAV LINKS */}
+      <nav className="sidebar-nav">
+        <div className="sidebar-main-section">
+        <button to="/dashboard" className="sidebar-reports-button">
+          <FaHome /> Report Road Damage
+        </button>
+
+      {/* Main Menu */}
+        <label 
+            className="sidebar-section-label">Main Menu
+        </label>
+
+
+        <Link to="/dashboard"  className={`sidebar-link ${location.pathname === "/dashboard" ? "active" : ""}`}>
+            <FaHome /> Dashboard
+        </Link>
+
+
+        <Link to="/dashboard/reports" className="sidebar-link">
+          <FaMapMarkedAlt /> All Reports
+        </Link>
+
+        <Link to="/dashboard/mapview" className="sidebar-link">
+          <FaUser /> Map View
+        </Link>
+
+      {/* Personal */}
+         <label 
+            className="sidebar-section-label">Personal
+        </label>
+
+        <Link to="/dashboard/profile" className="sidebar-link">
+          <FaHome /> My Profile
+        </Link>
+
+        <Link to="/dashboard/submissions" className="sidebar-link">
+          <FaMapMarkedAlt /> My Submissions
+        </Link>
+        </div>
+
+
+
+      {/* Others */}
+      <div className="sidebar-other-section">
+        <Link to="/dashboard/notifications" className="sidebar-link-others">
+          <FaHome /> Notifications
+        </Link>
+
+        <Link to="/dashboard/settings" className="sidebar-link-others">
+          <FaMapMarkedAlt /> Settings
+        </Link>
+      </div>
+
+      </nav>
+    </aside>
+  );
+}
+
+export default Sidebar;

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./LoginPage.css";
 import OTPboxes from "./OTPboxes.jsx";
 
@@ -11,6 +12,7 @@ import { IoIosArrowRoundBack } from "react-icons/io";
 
 function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   const [step, setStep] = useState(1); // Step 1 = login, Step 2 = OTP
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -132,6 +134,10 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
       onClose();
       setStep(1);
       setFormData({ email: "", password: "", otp: "" });
+
+      // Navigate to Dashboard
+      navigate("/dashboard");
+      
     } else {
       alert("Please enter OTP");
     }

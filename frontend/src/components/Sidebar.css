@@ -1,0 +1,125 @@
+.app-sidebar {
+  width: 260px;
+  height: 100vh;
+  background: linear-gradient(180deg, #5bd35b, #d6f1c8);
+  /*background: #F6F1EA;*/
+  color: black;
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  font-family: "Poppins", sans-serif;
+  border-right: #32433265 1px solid;
+  border-bottom-right-radius: 15px;
+  border-top-right-radius: 10px;
+}
+
+.sidebar-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.sidebar-logo img {
+  margin-top: 20px;
+  width: 60px;
+  height: 60px;
+  border-radius: 30%;
+  border:#000000 1px solid;
+}
+
+.sidebar-logo h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.sidebar-reports-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  border-radius: 15px;
+  background: linear-gradient(180deg, #458745, #a8c898);
+ /* background: #436543;*/
+  color: white;
+  border: 1px solid #000;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-bottom: 15px;
+}
+
+.sidebar-section-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #4b574b;
+  margin-bottom: 5px;
+  margin-top: 5px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-main-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-bottom: 2px solid #324332;
+  padding-bottom: 20px;
+}
+
+.sidebar-others-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  border-radius: 10px;
+  color: black;
+  text-decoration: none;
+  transition: background 0.3s;
+}
+
+
+.sidebar-link.active {
+  background: linear-gradient(180deg, #377d3793, #2c6a2c);
+  color: white;
+  border: #000000 0.5px solid;
+}
+
+/*
+.sidebar-link.active:active {
+  background: #B1A58E;
+  color: white;
+  border: #000000 1px solid;
+}
+*/
+
+.sidebar-link-others {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  border-radius: 10px;
+  color: black;
+  text-decoration: none;
+  transition: background 0.3s;
+}
+
+.sidebar-link-others:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
