@@ -162,3 +162,18 @@
   font-size: 1.2rem;
   margin-left: -2px;
 }
+
+/* Notification Badge Styles */
+.notification-link {
+  position: relative;
+}
+
+.notification-badge {
+  margin-left: auto;
+  background: #e63946;
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+}

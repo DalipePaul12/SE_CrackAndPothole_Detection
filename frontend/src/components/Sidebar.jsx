@@ -1,5 +1,5 @@
 import "./Sidebar.css";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 //Icons Import
 import { FaHome, FaMapMarkedAlt, FaUser } from "react-icons/fa";
@@ -9,7 +9,9 @@ import { IoNotifications } from "react-icons/io5";
 import { RiCompassDiscoverFill } from "react-icons/ri";
 import { GiBookshelf } from "react-icons/gi";
 
-function Sidebar() {
+function Sidebar({unreadCount = 0}) {
+  const location = useLocation();
+
   return (
     <aside className="app-sidebar">
       {/* LOGO */}
@@ -64,6 +66,9 @@ function Sidebar() {
       <div className="sidebar-other-section">
         <Link to="/dashboard/notifications" className={`sidebar-link-others ${location.pathname === "/dashboard/notifications" ? "active" : ""}`}>
           <IoNotifications /> Notifications
+          {unreadCount > 0 && (
+              <span className="notification-badge">{unreadCount}</span>
+            )}
         </Link>
 
         <Link to="/dashboard/settings" className={`sidebar-link-others ${location.pathname === "/dashboard/settings" ? "active" : ""}`}>

@@ -3,6 +3,126 @@
     background-color: whitesmoke;
     min-height: 92vh;
     width: calc(100% - 255px); /* Adjust for sidebar width */
-    margin-top: 60px; /* Height of the header */
+    margin-top: 0px; /* Height of the header */
     margin-left: 255px; /* Width of the sidebar */
+    padding: 20px 100px;
+}
+
+.notifications-panel {
+  max-width: 1100px;
+  margin-top: 90px;
+  background: rgba(245, 245, 245, 0.756);
+  padding: 0 25px;
+  border-radius: 15px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+  border: 2px solid #378530;
+  height: 80vh;
+  overflow-y: auto;
+  scrollbar-width: contain;
+}
+
+.notifications-header {
+  background: whitesmoke;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 1rem;
+  margin-bottom: 20px;
+  padding: 25px 50px;
+  position: sticky;
+  top: 0;
+  z-index: 999;
+  border-bottom: 1px solid #17b72c;
+  box-shadow: 0 3px 0 rgba(10, 153, 86, 0.1);
+  border-bottom-left-radius: 25px;
+  border-bottom-right-radius: 25px;
+  width: 100%;  
+}
+
+.notifications-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mark-all-btn {
+  background: transparent;
+  border: 1px solid #2f6b2f;
+  color: #2f6b2f;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mark-all-btn:hover {
+  background: #2f6b2f;
+  color: white;
+}
+
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 0 50px;
+}
+
+.notification-card {
+  position: relative;
+  display: flex;
+  gap: 15px;
+  background: #f6f6f6;
+  padding: 15px 20px;
+  border-radius: 20px;
+  border: 2px solid #000;
+  transition: background 0.2s;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.notification-card:hover {
+  background: #ececec;
+}
+
+.notification-card.unread {
+  background: #cbf0cb;
+}
+
+.notification-icon {
+  font-size: 1.5rem;
+  color: #458745;
+  margin-top: 5px;
+}
+
+.notification-content h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.notification-content p {
+  margin: 5px 0;
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.notification-time {
+  font-size: 0.75rem;
+  color: #777;
+}
+
+.notification-date {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 0.75rem;
+  color: #3a3939;
+}
+
+/*Icon in header*/
+.fabell-icon {
+  font-size: 1.7rem;
+  color: #458745;
+  margin-left: 20px;
 }
