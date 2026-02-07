@@ -1,6 +1,9 @@
 import "./Sidebar.css";
 import { Link, useLocation } from "react-router-dom";
 
+//Notification Context Import to get the unread count for notifications in the sidebar
+import { useNotifications } from "../pages/Contexts/NotificationContext";
+
 //Icons Import
 import { FaHome, FaMapMarkedAlt, FaUser } from "react-icons/fa";
 import { IoAddCircleOutline } from "react-icons/io5";
@@ -9,7 +12,8 @@ import { IoNotifications } from "react-icons/io5";
 import { RiCompassDiscoverFill } from "react-icons/ri";
 import { GiBookshelf } from "react-icons/gi";
 
-function Sidebar({unreadCount = 0}) {
+function Sidebar() {
+  const {unreadCount } = useNotifications();
   const location = useLocation();
 
   return (
@@ -60,8 +64,6 @@ function Sidebar({unreadCount = 0}) {
         </Link>
         </div>
 
-
-
       {/* Others */}
       <div className="sidebar-other-section">
         <Link to="/dashboard/notifications" className={`sidebar-link-others ${location.pathname === "/dashboard/notifications" ? "active" : ""}`}>
@@ -75,7 +77,6 @@ function Sidebar({unreadCount = 0}) {
           <IoSettingsSharp /> Settings
         </Link>
       </div>
-
       </nav>
     </aside>
   );

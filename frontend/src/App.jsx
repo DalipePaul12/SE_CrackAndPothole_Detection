@@ -8,6 +8,9 @@ import ScrollToTop from './components/ScrollToTop.jsx';
 //Navigation Bar Import
 import Navbar from './components/Navbar.jsx';
 
+//Notification Context Import
+import { NotificationProvider } from "./pages/Contexts/NotificationContext.jsx";
+
 //Landing Page Imports
 import HomePage from './pages/LandingPage/HomePage.jsx';
 import AboutPage from './pages/LandingPage/AboutPage.jsx';
@@ -43,10 +46,14 @@ function App() {
       />
       )}
       
+      {/* Wrap all routes with NotificationContext to provide notification context to all pages */}
+      <NotificationProvider>
+        
         <Routes>
           {/* Landing Page Routes */}
           <Route path="/" element={<HomePage onGetStarted={() => setShowSignUp(true)} />} />
           <Route path="/about" element={<AboutPage />} />
+      
 
           {/* Inside App User Routes */}
           <Route path="/dashboard" element={<Dashboard />} />
@@ -57,6 +64,8 @@ function App() {
           <Route path="/dashboard/notifications" element={<Notifications />} />
           <Route path="/dashboard/settings" element={<Settings />} />
         </Routes>
+      
+      </NotificationProvider>
     </>
   )
 }

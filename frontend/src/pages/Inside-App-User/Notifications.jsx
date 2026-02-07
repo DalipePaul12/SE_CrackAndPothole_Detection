@@ -5,70 +5,33 @@ import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
 import { FaBell, FaExclamationCircle } from "react-icons/fa";
 
+import { useNotifications } from "../Contexts/NotificationContext.jsx";
+
 function Notifications() {
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: "New Road Damage Report",
-      message: "A new pothole was reported near EDSA.",
-      time: "5 minutes ago",
-      date: "2026-03-02",
-      unread: true,
-    },
-    {
-      id: 2,
-      title: "Report Status Updated",
-      message: "Your report has been marked as In Progress.",
-      time: "1 hour ago",
-      date: "2026-03-02",
-      unread: true,
-    },
-    {
-      id: 3,
-      title: "Report Status Updated",
-      message: "Your report has been marked as In Progress.",
-      time: "1 hour ago",
-      date: "2026-03-02",
-      unread: false,
-    },
-  ]);
-
-  //count unread notifications
-  const unreadCount = notifications.filter(n => n.unread).length;
-
-  //mark notification as read
-  const handleRead = (id) => {
-    setNotifications(prev =>
-      prev.map(notif =>
-        notif.id === id ? { ...notif, unread: false } : notif
-      )
-    );
-  };
-
-  //mark all as read
-  const handleMarkAllRead = () => {
-  setNotifications((prev) =>
-    prev.map((notif) => ({ ...notif, unread: false }))
-  );
-};
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications();
 
   return (
     <>
-      <Sidebar unreadCount={unreadCount} />
+      <Sidebar />
       <AppHeader />
 
       <div className="notifications-container">
         <div className="notifications-panel">
           <div className="notifications-header">
             <div className="notifications-header-left">
-            <h1>Notifications</h1>
-            <FaBell className="fabell-icon" />
+              <h1>Notifications</h1>
+              <FaBell />
             </div>
 
             {unreadCount > 0 && (
-            <button className="mark-all-btn" onClick={handleMarkAllRead}>
+              <button className="mark-all-btn" onClick={markAllAsRead}>
                 Mark all as read
-            </button>
+              </button>
             )}
           </div>
 
@@ -77,14 +40,12 @@ function Notifications() {
               <div
                 key={notif.id}
                 className={`notification-card ${notif.unread ? "unread" : ""}`}
-                onClick={() => handleRead(notif.id)}
+                onClick={() => markAsRead(notif.id)}
               >
                 <span className="notification-date">{notif.date}</span>
-
                 <div className="notification-icon">
                   <FaExclamationCircle />
                 </div>
-
                 <div className="notification-content">
                   <h3>{notif.title}</h3>
                   <p>{notif.message}</p>
