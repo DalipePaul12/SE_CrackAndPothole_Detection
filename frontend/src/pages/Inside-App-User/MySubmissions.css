@@ -2,15 +2,14 @@
     padding: 2rem;
     background-color: whitesmoke;
     height: 100vh;
-    width: calc(100% - 255px); /* Adjust for sidebar width */
-    margin-top: 0; /* Height of the header */
-    margin-left: 255px; /* Width of the sidebar */
+    width: calc(100% - 255px); 
+    margin-top: 0;
+    margin-left: 255px; 
 }
 
-/* 🔹 FILTER CONTAINER */
+/* FILTER CONTAINER */
 .submissions-filters {
   display: flex;
-  gap: 150px;
   background: #ffffff;
   padding: 20px;
   border-radius: 12px;
@@ -18,13 +17,23 @@
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
   border-radius: 30px;
   margin-top: 70px;
+  flex-direction: column;
+  border-bottom: 1px solid #3a7d44;
+}
+
+.filters-row {
+  display: flex;
+  gap: 150px;
+  align-items: flex-end;
 }
 
 .mysubmissions h2 {
   font-size: 1.5rem;
-  color: #333;
+  color: #555;
   font-weight: 600;
-
+  margin-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
 }
 
 .filter-group {
@@ -52,6 +61,13 @@
   border: 1px solid #168206;
   background: white;
   cursor: pointer;
+}
+
+.filter-buttons button:hover {
+  background: linear-gradient(360deg, #90e99093, #c4e3c4);
+  color: black;
+  border-color: #3a7d44;
+  box-shadow: 0 4px 5px rgba(0, 0, 0, 0.5);
 }
 
 .filter-buttons button.active {
@@ -83,8 +99,16 @@
   appearance: none;
   -webkit-appearance: none; 
   -moz-appearance: none;
-  background-color: white;
+  background: linear-gradient(360deg, #90e99093, #c4e3c4);
+  box-shadow: 0 4px 5px rgba(0, 0, 0, 0.5);
   cursor: pointer;
+}
+
+.custom-select select:hover {
+  background: linear-gradient(180deg, #659e65c2, #c4e3c4);
+  color: black;
+  border-color: #3a7d44;
+  box-shadow: 0 4px 5px rgba(0, 0, 0, 0.4);
 }
 
 /* Custom arrow */
@@ -111,7 +135,8 @@
   border-radius: 30px;
   padding: 20px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
-  height: 490px;
+  max-height: 440px;
+  border-bottom: 1px solid #3a7d44;
 }
 
 .submissions-table {
@@ -123,7 +148,7 @@
   text-align: left;
   font-size: 1rem;
   text-transform: uppercase;
-  color: #666;
+  color: #444;
   padding-top: 5px;
   padding-bottom: 15px;
   position: sticky;
@@ -134,14 +159,15 @@
 
 .submissions-table td {
   padding: 15px 0;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #bbb;
   padding-left: 40px;
+  font-size: 0.9rem;
 }
 
 .submissions-table tbody {
   display: block;
   overflow-y: auto;
-  max-height: 410px;
+  max-height: 350px;
 }
 
 .submissions-table thead,

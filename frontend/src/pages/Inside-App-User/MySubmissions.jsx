@@ -27,71 +27,7 @@ function MySubmissions() {
       severity: "Non-Critical",
       status: "Pending",
       date: "2026-03-01",
-    },
-     {
-      id: "Report#003",
-      location: "EDSA, Quezon City",
-      type: "Pothole",
-      severity: "Critical",
-      status: "In Progress",
-      date: "2026-03-02",
-    },
-    {
-      id: "Report#004",
-      location: "España Blvd, Manila",
-      type: "Crack",
-      severity: "Non-Critical",
-      status: "Pending",
-      date: "2026-03-01",
-    },
-     {
-      id: "Report#005",
-      location: "EDSA, Quezon City",
-      type: "Pothole",
-      severity: "Critical",
-      status: "In Progress",
-      date: "2026-03-02",
-    },
-    {
-      id: "Report#006",
-      location: "España Blvd, Manila",
-      type: "Crack",
-      severity: "Non-Critical",
-      status: "Pending",
-      date: "2026-03-01",
-    },
-     {
-      id: "Report#007",
-      location: "EDSA, Quezon City",
-      type: "Pothole",
-      severity: "Critical",
-      status: "In Progress",
-      date: "2026-03-02",
-    },
-    {
-      id: "Report#008",
-      location: "España Blvd, Manila",
-      type: "Crack",
-      severity: "Non-Critical",
-      status: "Pending",
-      date: "2026-03-01",
-    },
-     {
-      id: "Report#009",
-      location: "EDSA, Quezon City",
-      type: "Pothole",
-      severity: "Critical",
-      status: "In Progress",
-      date: "2026-03-02",
-    },
-    {
-      id: "Report#010",
-      location: "España Blvd, Manila",
-      type: "Crack",
-      severity: "Non-Critical",
-      status: "Pending",
-      date: "2026-03-01",
-    },
+    },  
   ];
 
   const filteredReports = reports.filter((r) => {
@@ -111,57 +47,59 @@ function MySubmissions() {
         {/* FILTERS */}
         <div className="submissions-filters">
             <div className="mysubmissions">
-            <h2>My Submissions</h2>
+            <h2>My Report Database</h2>
             </div>
-          <div className="filter-group">
-            <label>Damage Type</label>
-            <div className="filter-buttons">
-              {["All", "Crack", "Pothole"].map((type) => (
-                <button
-                  key={type}
-                  className={filters.type === type ? "active" : ""}
-                  onClick={() => setFilters({ ...filters, type })}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          </div>
+            <div className="filters-row">
+                <div className="filter-group">
+                  <label>Damage Type</label>
+                    <div className="filter-buttons">
+                        {["All", "Crack", "Pothole"].map((type) => (
+                          <button
+                            key={type}
+                              className={filters.type === type ? "active" : ""}
+                              onClick={() => setFilters({ ...filters, type })}
+                              >
+                              {type}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
 
-        <div className="filter-group">
-        <label>Severity</label>
+                <div className="filter-group">
+                  <label>Severity</label>
 
-        <div className="custom-select">
-            <select
-            value={filters.severity}
-            onChange={(e) =>
-                setFilters({ ...filters, severity: e.target.value })
-            }
-            >
-            <option value="All">All Severity</option>
-            <option value="Non-Critical">Non-Critical</option>
-            <option value="Critical">Critical</option>
-            </select>
+                    <div className="custom-select">
+                      <select
+                        value={filters.severity}
+                          onChange={(e) =>
+                            setFilters({ ...filters, severity: e.target.value })
+                          }
+                        >
+                          <option value="All">All Severity</option>
+                          <option value="Non-Critical">Non-Critical</option>
+                          <option value="Critical">Critical</option>
+                          </select>
+                    </div>
+                  </div>
+
+                  <div className="filter-group">
+                      <label>Status</label>
+
+                      <div className="custom-select">
+                        <select
+                          value={filters.status}
+                          onChange={(e) =>
+                              setFilters({ ...filters, status: e.target.value })
+                            }
+                          >
+                            <option value="All">All Status</option>
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                          </select>
+                      </div>
+                  </div>
         </div>
-        </div>
-
-          <div className="filter-group">
-            <label>Status</label>
-
-            <div className="custom-select">
-            <select
-              value={filters.status}
-              onChange={(e) =>
-                setFilters({ ...filters, status: e.target.value })
-              }
-            >
-              <option value="All">All Status</option>
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </div>
-          </div>
         </div>
 
         {/*TABLE */}
