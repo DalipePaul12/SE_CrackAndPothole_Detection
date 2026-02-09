@@ -1,6 +1,6 @@
 .settings-container {
     padding: 2rem;
-    background-color: whitesmoke;
+    background-color: rgba(250, 238, 228, 0.722);;
     min-height: 92vh;
     width: calc(100% - 255px); /* Adjust for sidebar width */
     margin-top: 60px; /* Height of the header */

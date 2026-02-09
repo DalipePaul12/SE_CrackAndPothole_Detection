@@ -1,4 +1,5 @@
 import React from "react";
+import { useState } from "react";
 import "./Dashboard.css";
 
 import Sidebar from "../../components/Sidebar.jsx";
@@ -10,6 +11,9 @@ import { IoMdCheckmarkCircleOutline } from "react-icons/io";
 import { FaExclamationCircle } from "react-icons/fa";
 import { FaExclamation } from "react-icons/fa";
 import { FaRegCircleDot } from "react-icons/fa6";
+import { IoBarChart } from "react-icons/io5";
+import { LuActivity } from "react-icons/lu";
+import { FaChartPie } from "react-icons/fa";
 
 // Charts
 import {
@@ -28,27 +32,53 @@ import {
 } from "recharts";
 
 function Dashboard() {
-  /* 🔌 BACKEND-READY DATA (replace with API calls later) */
+  /* BACKEND-READY (replace with API calls) */
 
-  const summary = {
-    total: 120,
-    pending: 30,
-    inProgress: 55,
-    completed: 35,
-  };
+  //this const is for null/undefined value na data
+  const rawSummary = {
+  total: 120,
+  critical: null,
+  noncritical: undefined,
+  completed: 35,
+};
+
+const summary = {
+  total: rawSummary.total ?? 0,
+  critical: rawSummary.critical ?? 0,
+  noncritical: rawSummary.noncritical ?? 0,
+  completed: rawSummary.completed ?? 0,
+};
 
   const damageData = [
     { name: "Crack", value: 45 },
     { name: "Pothole", value: 75 },
   ];
 
-  const trendData = [
-    { period: "Mon", reports: 12 },
-    { period: "Tue", reports: 18 },
-    { period: "Wed", reports: 25 },
-    { period: "Thu", reports: 20 },
-    { period: "Fri", reports: 30 },
-  ];
+  const [trendRange, setTrendRange] = useState("Daily");
+
+  const trendDataMap = {
+    Daily: [
+      { period: "Mon", Reports: 12 },
+      { period: "Tue", Reports: 18 },
+      { period: "Wed", Reports: 25 },
+      { period: "Thu", Reports: 20 },
+      { period: "Fri", Reports: 30 },
+    ],
+    Weekly: [
+      { period: "W1", Reports: 80 },
+      { period: "W2", Reports: 120 },
+      { period: "W3", Reports: 95 },
+      { period: "W4", Reports: 150 },
+    ],
+    Monthly: [
+      { period: "Jan", Reports: 220 },
+      { period: "Feb", Reports: 180 },
+      { period: "Mar", Reports: 260 },
+      { period: "Apr", Reports: 300 },
+    ],
+};
+
+  const trendData = trendDataMap[trendRange];
 
   const statusData = [
     { status: "PENDING", count: 30 },
@@ -62,7 +92,7 @@ function Dashboard() {
     "Crack repair completed in Quezon City",
   ];
 
-  const COLORS = ["#f39c12", "#c0392b"];
+  const COLORS = ["#2ba81d", "#134d05"];
 
   return (
     <>
@@ -79,17 +109,17 @@ function Dashboard() {
 
           <div className="summary-card pending">
             <h3>Resolved <IoMdCheckmarkCircleOutline className="icon" /></h3>
-            <p>{summary.pending}</p>
+            <p>{summary.completed}</p>
           </div>
 
           <div className="summary-card progress">
             <h3>Critical Reports <FaExclamationCircle className="icon" /></h3>
-            <p>{summary.inProgress}</p>
+            <p>{summary.critical}</p>
           </div>
 
           <div className="summary-card completed">
             <h3>Non-Critical Reports <FaExclamation className="icon" /></h3>
-            <p>{summary.completed}</p>
+            <p>{summary.noncritical}</p>
           </div>
         </div>
 
@@ -97,7 +127,7 @@ function Dashboard() {
         <div className="dashboard-grid">
           {/* STATUS SUMMARY */}
           <div className="dashboard-panel">
-            <h3>Status Summary</h3>
+            <h3>Status Summary <IoBarChart className="icon" /></h3>
             <ResponsiveContainer width="95%" height={200}>
               <BarChart data={statusData}>
                <XAxis
@@ -115,7 +145,7 @@ function Dashboard() {
 
             {/* RECENT ACTIVITIES */} {/*ONLY 3 RECENT ACTIVITIES TO SHOW LANG}*/}
             <div className="dashboard-panel">
-            <h3>Recent Activities</h3>
+            <h3>Recent Activities <LuActivity className="icon" /></h3>
 
             <ul className="activity-list">
                 {recentActivities.map((item, index) => (
@@ -130,48 +160,54 @@ function Dashboard() {
 
           {/* DAMAGE CATEGORIES */}
           <div className="dashboard-panel-damagecategories">
-            <h3>Damage Categories</h3>
+            <h3>Damage Categories <FaChartPie className="icon" /></h3>
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
                   data={damageData}
                   dataKey="value"
                   nameKey="name"
-                  outerRadius={60}
+                  cx="50%"
+                  cy="35%"
+                  outerRadius={75}
                 >
                   {damageData.map((_, index) => (
                     <Cell key={index} fill={COLORS[index]} />
                   ))}
                 </Pie>
-                <Legend />
+                <Legend verticalAlign="top" align="left"/>
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
           </div>
 
           {/* SUBMISSION TRENDS */}
-          <div className="dashboard-panel">
+          <div className="dashboard-panel-submissiontrends">
             <div className="panel-header">
               <h3>Submission Trends</h3>
 
               {/* BACKEND-READY FILTER */}
-              <select>
-                <option>Daily</option>
-                <option>Weekly</option>
-                <option>Monthly</option>
+              <select
+                value={trendRange}
+                onChange={(e) => setTrendRange(e.target.value)}
+              >
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
               </select>
+
             </div>
 
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="90%" height={150}>
               <LineChart data={trendData}>
                 <XAxis dataKey="period" />
                 <YAxis />
                 <Tooltip />
                 <Line
                   type="monotone"
-                  dataKey="reports"
-                  stroke="#1976d2"
-                  strokeWidth={3}
+                  dataKey="Reports"
+                  stroke="#087218"
+                  strokeWidth={4}
                 />
               </LineChart>
             </ResponsiveContainer>

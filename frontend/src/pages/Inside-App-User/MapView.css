@@ -3,7 +3,7 @@
   margin-top: 0px; /* header height */
   padding: 25px;
   height: calc(100vh - 70px);
-  background: #f4f7f4;
+  background: rgba(250, 238, 228, 0.722);;
 }
 
 .mapview-header {

@@ -1,6 +1,6 @@
 .my-submissions-container {
     padding: 2rem;
-    background-color: whitesmoke;
+    background-color: rgba(250, 238, 228, 0.722);;
     height: 100vh;
     width: calc(100% - 255px); 
     margin-top: 0;
@@ -14,7 +14,7 @@
   padding: 20px;
   border-radius: 12px;
   margin-bottom: 25px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
   border-radius: 30px;
   margin-top: 70px;
   flex-direction: column;
@@ -134,7 +134,7 @@
   background: #ffffff;
   border-radius: 30px;
   padding: 20px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
   max-height: 440px;
   border-bottom: 1px solid #3a7d44;
 }
