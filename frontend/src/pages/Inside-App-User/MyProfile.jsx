@@ -4,9 +4,30 @@ import "./MyProfile.css";
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
 
+//Icons
+import { ImLocation } from "react-icons/im";
+import {FaPaperPlane, FaSearch, FaTools, FaCheckCircle} from "react-icons/fa";
+
+
 function MyProfile() {
   const [activeTab, setActiveTab] = useState("feed"); // feed | settings
   const [reportFilter, setReportFilter] = useState("all"); // all | resolved
+
+  const stages = ["Submitted", "Reviewing", "In Progress", "Resolved"];
+  const getStageIcon = (stage) => {
+  switch (stage) {
+    case "Submitted":
+      return <FaPaperPlane />;
+    case "Reviewing":
+      return <FaSearch />;
+    case "In Progress":
+      return <FaTools />;
+    case "Resolved":
+      return <FaCheckCircle />;
+    default:
+      return null;
+  }
+};
 
   // BACKEND-READY USER DATA
   const user = {
@@ -22,7 +43,18 @@ function MyProfile() {
   // BACKEND-READY REPORTS
   const reports = [
     {
-      id: "Report#023",
+      id: "Report #01",
+      date: "Mar 2, 2026",
+      time: "10:45 AM",
+      image: "/snap.jpg",
+      damage: "Crack",
+      severity: "Non-Critical",
+      location: "EDSA, Quezon City",
+      description: "Large pothole causing traffic congestion.",
+      status: "In Progress",
+    },
+    {
+      id: "Report #02",
       date: "Mar 2, 2026",
       time: "10:45 AM",
       image: "/snap.jpg",
@@ -30,9 +62,36 @@ function MyProfile() {
       severity: "Critical",
       location: "EDSA, Quezon City",
       description: "Large pothole causing traffic congestion.",
-      status: "In Progress",
+      status: "Submitted",
+    },
+        {
+      id: "Report #03",
+      date: "Mar 2, 2026",
+      time: "10:45 AM",
+      image: "/snap.jpg",
+      damage: "Pothole",
+      severity: "Non-Critical",
+      location: "EDSA, Quezon City",
+      description: "Large pothole causing traffic congestion.",
+      status: "Reviewing",
+    },
+        {
+      id: "Report #04",
+      date: "Mar 2, 2026",
+      time: "10:45 AM",
+      image: "/snap.jpg",
+      damage: "Crack",
+      severity: "Critical",
+      location: "EDSA, Quezon City",
+      description: "Large pothole causing traffic congestion.",
+      status: "Resolved",
     },
   ];
+
+  const filteredReports =
+  reportFilter === "resolved"
+    ? reports.filter((r) => r.status === "Resolved")
+    : reports;
 
   return (
     <>
@@ -93,71 +152,115 @@ function MyProfile() {
         {/* ================= REPORTS FEED ================= */}
         {activeTab === "feed" && (
           <div className="profile-content">
+            <div className="profile-content-header">
+            <div className="profile-content-title">
+              <h2>Personal Activity Feed</h2>
+            </div>
             <div className="feed-filters">
               <button
                 className={reportFilter === "all" ? "active" : ""}
                 onClick={() => setReportFilter("all")}
               >
-                All Reports
+                All
               </button>
               <button
                 className={reportFilter === "resolved" ? "active" : ""}
                 onClick={() => setReportFilter("resolved")}
               >
-                Resolved Reports
+                Resolved
               </button>
             </div>
+            </div>
 
-            {reports.map((report) => (
-              <div key={report.id} className="report-card">
-                {/* TOP INFO */}
-                <div className="report-header">
-                  <div>
-                    <strong>{report.id}</strong>
-                    <p>{report.date} • {report.time}</p>
-                  </div>
-                </div>
+            {filteredReports.length === 0 ? (
+  <div className="no-reports">
+    <h3>No Reports Found</h3>
+    <p>
+      {reportFilter === "resolved"
+        ? "You don't have any resolved reports yet."
+        : "You haven't submitted any reports yet."}
+    </p>
+  </div>
+) : (
+  filteredReports.map((report) => (
+    <div key={report.id} className="report-card">
+      {/* TOP INFO */}
+      <div className="report-header">
+        <div>
+          <strong>{report.id}</strong>
+          <p>{report.date} • {report.time}</p>
+        </div>
+      </div>
 
-                {/* IMAGE + AI RESULT */}
-                <div className="report-main">
-                  <img src={report.image} alt="Report" />
+      {/* IMAGE + AI RESULT */}
+      <div className="report-main">
+        <img src={report.image} alt="Report" />
 
-                  <div className="ai-result">
-                    <p><strong>Damage:</strong> {report.damage}</p>
-                    <p><strong>Severity:</strong> {report.severity}</p>
-                  </div>
-                </div>
+        <div className="ai-result">
+          <h4>AI CLASSIFICATION</h4>
+          <h5>RESULT</h5>
+          <p>
+            <strong>Damage: </strong>
+            <span className={`damage ${report.damage.toLowerCase()}`}>
+              {report.damage}
+            </span>
+          </p>
+          <p>
+            <strong>Severity: </strong>
+            <span
+              className={`severity ${report.severity
+                .toLowerCase()
+                .replace(" ", "-")}`}
+            >
+              {report.severity}
+            </span>
+          </p>
+        </div>
+      </div>
 
-                {/* LOCATION */}
-                <p className="report-location">{report.location}</p>
+      {/* LOCATION */}
+      <p className="report-location">
+        <ImLocation className="report-location-icon" />
+        {report.location}
+      </p>
 
-                {/* DESCRIPTION */}
-                <div className="report-description">
-                  {report.description}
-                </div>
+      {/* DESCRIPTION */}
+      <div className="report-description">
+        {report.description}
+      </div>
 
-                {/* STATUS TIMELINE */}
-                <div className="status-timeline">
-                  {["Submitted", "Reviewing", "In Progress", "Resolved"].map(
-                    (stage, index) => (
-                      <div
-                        key={index}
-                        className={`timeline-step ${
-                          stage === report.status ||
-                          (stage === "Submitted")
-                            ? "active"
-                            : ""
-                        }`}
-                      >
-                        <span></span>
-                        <p>{stage}</p>
-                      </div>
-                    )
-                  )}
-                </div>
+      {/* STATUS TIMELINE */}
+      <div className="status-timeline">
+        {stages.map((stage, index) => {
+          const currentIndex = stages.indexOf(report.status);
+          const isActive = index <= currentIndex;
+
+          return (
+            <div
+              key={stage}
+              className={`timeline-step ${isActive ? "active" : ""}`}
+            >
+              <div className="timeline-icon">
+                {getStageIcon(stage)}
               </div>
-            ))}
+
+              {index !== stages.length - 1 && (
+                <div
+                  className={`timeline-line ${isActive ? "active" : ""}`}
+                />
+              )}
+
+              <p>{stage}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  ))
+)}
+
           </div>
+          
         )}
 
         {/* ================= PROFILE SETTINGS ================= */}
