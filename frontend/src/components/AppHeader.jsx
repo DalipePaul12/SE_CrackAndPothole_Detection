@@ -2,6 +2,7 @@ import "./AppHeader.css";
 import { useNavigate } from "react-router-dom";
 import { FaUserCircle, FaSignOutAlt } from "react-icons/fa";
 
+
 function AppHeader() {
   const navigate = useNavigate();
 
@@ -19,9 +20,14 @@ function AppHeader() {
       {/* RIGHT SIDE*/}
       <div className="app-header-right">
         <span className="user-name">User</span>
-        <FaUserCircle className="profile-icon" />
 
-        <button className="logout-btn " onClick={handleLogout}>
+        <img 
+          src="/snap.jpg"   // change this to your image path or state variable
+          alt="Profile"
+          className="profile-image"
+        />
+
+        <button className="logout-btn" onClick={handleLogout}>
           <FaSignOutAlt />
           Logout
         </button>

@@ -7,6 +7,9 @@ import AppHeader from "../../components/AppHeader.jsx";
 //Icons
 import { ImLocation } from "react-icons/im";
 import {FaPaperPlane, FaSearch, FaTools, FaCheckCircle} from "react-icons/fa";
+import { FaCamera } from "react-icons/fa6";
+import { IoPersonSharp } from "react-icons/io5";
+import { FaUserEdit } from "react-icons/fa";
 
 
 function MyProfile() {
@@ -30,15 +33,18 @@ function MyProfile() {
 };
 
   // BACKEND-READY USER DATA
-  const user = {
-    name: "John Carlo Trajico",
-    bio: "Committed to making the streets of Manila safer for everyone",
-    avatar: "/snap.jpg",
-    totalPosts: 24,
-    resolved: 10,
-    inProgress: 8,
-    badges: 3,
-  };
+  const [user, setUser] = useState({
+  name: "John Carlo Trajico",
+  bio: "Committed to making the streets of Manila safer for everyone",
+  avatar: "/snap.jpg",
+  totalPosts: 24,
+  resolved: 10,
+  inProgress: 8,
+  badges: 3,
+});
+
+  const [formData, setFormData] = useState(user); /*For profile settings*/
+
 
   // BACKEND-READY REPORTS
   const reports = [
@@ -100,35 +106,35 @@ function MyProfile() {
 
       <div className="myprofile-container">
         <div className="profile-header">
-  {/* LEFT: AVATAR */}
-  <img src={user.avatar} alt="Profile" className="profile-avatar" />
+          {/* LEFT: AVATAR */}
+          <img src={user.avatar} alt="Profile" className="profile-avatar" />
 
-  {/* MIDDLE: NAME + BIO */}
-  <div className="profile-info">
-    <h2>{user.name}</h2>
-    <p className="profile-bio">{user.bio}</p>
-  </div>
+          {/* MIDDLE: NAME + BIO */}
+          <div className="profile-info">
+            <h2>{user.name}</h2>
+            <p className="profile-bio">{user.bio}</p>
+          </div>
 
-  {/* RIGHT: STATS */}
-  <div className="profile-stats">
-    <div className="stat-card">
-      <span>{user.totalPosts}</span>
-      <p>Total Posts</p>
-    </div>
-    <div className="stat-card">
-      <span>{user.resolved}</span>
-      <p>Resolved</p>
-    </div>
-    <div className="stat-card">
-      <span>{user.inProgress}</span>
-      <p>In Progress</p>
-    </div>
-    <div className="stat-card">
-      <span>{user.badges}</span>
-      <p>Badges</p>
-    </div>
-  </div>
-</div>
+          {/* RIGHT: STATS */}
+          <div className="profile-stats">
+            <div className="stat-card">
+              <span>{user.totalPosts}</span>
+              <p>Total Posts</p>
+            </div>
+            <div className="stat-card">
+              <span>{user.resolved}</span>
+              <p>Resolved</p>
+            </div>
+            <div className="stat-card">
+              <span>{user.inProgress}</span>
+              <p>In Progress</p>
+            </div>
+            <div className="stat-card">
+              <span>{user.badges}</span>
+              <p>Badges</p>
+            </div>
+          </div>
+        </div>
 
 
 
@@ -143,7 +149,10 @@ function MyProfile() {
 
           <button
             className={activeTab === "settings" ? "active" : ""}
-            onClick={() => setActiveTab("settings")}
+            onClick={() => {
+              setFormData(user); // copy current data
+              setActiveTab("settings");
+            }}
           >
             Profile Settings
           </button>
@@ -267,22 +276,79 @@ function MyProfile() {
         {activeTab === "settings" && (
           <div className="profile-settings">
             <h3>Profile Settings</h3>
-            <p>Update your personal information and profile picture.</p>
+            <p>Customize your profile in Snap2Fix!</p>
 
-            <div className="settings-avatar">
-              <img src={user.avatar} alt="Profile" />
-              <button>Change Photo</button>
-            </div>
+        <div className="settings-avatar">
+          <div className="avatar-wrapper">
+            <img src={formData.avatar} alt="Profile" />
+
+            <label className="camera-btn">
+              <FaCamera className="change-camera-icon" />
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    const imageUrl = URL.createObjectURL(file);
+                    setFormData({ ...formData, avatar: imageUrl });
+                  }
+                }}
+              />
+            </label>
+          </div>
+        </div>
 
             <div className="settings-form">
-              <input type="text" placeholder="Full Name" />
-              <textarea placeholder="Bio" />
+              <label>FULL NAME</label>
+              <div className="input-with-icon">
+                <IoPersonSharp className="input-icon" />
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
+                  placeholder="Full Name"
+                />
+              </div>
+
+              <label>PERSONAL BIO</label>
+              <div className="input-with-icon">
+                <FaUserEdit className="input-icon" />
+                <input
+                  type="text"
+                  value={formData.bio}
+                  onChange={(e) =>
+                    setFormData({ ...formData, bio: e.target.value })
+                  }
+                  placeholder="Bio"
+                />
+              </div>
             </div>
 
-            <div className="settings-actions">
-              <button className="discard">Discard</button>
-              <button className="save">Save Changes</button>
-            </div>
+          <div className="settings-actions">
+            <button
+              className="discard"
+              onClick={() => {
+                setFormData(user);      // reset changes
+                setActiveTab("settings");   // go back
+              }}
+            >
+              Discard
+            </button>
+              
+            <button
+              className="save"
+              onClick={() => {
+                setUser(formData);      // apply changes
+                setActiveTab("settings");   // go back
+              }}
+            >
+              Save Changes
+            </button>
+          </div>
           </div>
         )}
       </div>
