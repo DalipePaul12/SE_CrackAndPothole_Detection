@@ -41,6 +41,12 @@
     letter-spacing: 0.6px;
 }
 
+.settings-card label{
+    color: #555;
+    font-size: 0.8rem;
+    letter-spacing: 0.6px;
+}
+
 .setting-item {
   display: flex;
   justify-content: space-between;
@@ -121,6 +127,13 @@
   letter-spacing: 0.6px;
   font-size: 0.85rem;
 }
+
+.password-actions {
+  margin-top: 15px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 
 .app-info-card {
   text-align: center;

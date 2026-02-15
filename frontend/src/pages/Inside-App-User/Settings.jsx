@@ -22,10 +22,6 @@ function Settings() {
 
   const [message, setMessage] = useState("");
 
-  // -------------------------
-  // HANDLE TOGGLE
-  // -------------------------
-
   const toggleSetting = (key) => {
     setSettings((prev) => ({
       ...prev,
@@ -33,9 +29,6 @@ function Settings() {
     }));
   };
 
-  // -------------------------
-  // HANDLE PASSWORD INPUT
-  // -------------------------
 
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
@@ -45,61 +38,58 @@ function Settings() {
     }));
   };
 
-  // -------------------------
-  // CHECK IF THERE ARE CHANGES
-  // -------------------------
-
   const hasChanges =
     JSON.stringify(settings) !== JSON.stringify(originalSettings) ||
     passwordData.currentPassword ||
     passwordData.newPassword ||
     passwordData.confirmPassword;
 
-  // -------------------------
-  // SAVE SETTINGS
-  // -------------------------
+const handleSave = () => {
+  setMessage(""); // clear old message first
 
-  const handleSave = () => {
-    // Password validation
-    if (passwordData.newPassword || passwordData.confirmPassword) {
-      if (!passwordData.currentPassword) {
-        setMessage("Please enter your current password.");
-        return;
-      }
-
-      if (passwordData.newPassword !== passwordData.confirmPassword) {
-        setMessage("New passwords do not match.");
-        return;
-      }
-
-      if (passwordData.newPassword.length < 6) {
-        setMessage("Password must be at least 6 characters.");
-        return;
-      }
+  if (passwordData.newPassword || passwordData.confirmPassword) {
+    if (!passwordData.currentPassword) {
+      setMessage("Please enter your current password.");
+      return;
     }
 
-    // Save logic (later connect to backend)
-    setOriginalSettings(settings);
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setMessage("New passwords do not match.");
+      return;
+    }
 
-    setPasswordData({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    });
+    if (passwordData.newPassword.length < 6) {
+      setMessage("Password must be at least 6 characters.");
+      return;
+    }
+  }
 
-    setMessage("Settings saved successfully!");
-  };
+  setPasswordData({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
 
-  // -------------------------
-  // LOGOUT
-  // -------------------------
+  setMessage("Password updated successfully!");
+};
 
+
+/*
   const handleLogout = () => {
     localStorage.clear();
     window.location.href = "/";
   };
+*/
 
-  return (
+useEffect(() => {
+  if (originalSettings !== settings) {
+    console.log("Notification settings saved:", settings);
+    setOriginalSettings(settings);
+  }
+}, [settings]);
+
+
+  return ( 
     <>
       <Sidebar />
       <AppHeader />
@@ -168,6 +158,7 @@ function Settings() {
           <p> Change Password </p>
 
           <div className="password-section">
+            <label>Current Password</label>
             <input
               type="password"
               name="currentPassword"
@@ -176,6 +167,7 @@ function Settings() {
               onChange={handlePasswordChange}
             />
 
+            <label>New Password</label>
             <input
               type="password"
               name="newPassword"
@@ -183,7 +175,8 @@ function Settings() {
               value={passwordData.newPassword}
               onChange={handlePasswordChange}
             />
-
+            
+            <label>Confirm New Password</label>
             <input
               type="password"
               name="confirmPassword"
@@ -192,13 +185,29 @@ function Settings() {
               onChange={handlePasswordChange}
             />
           </div>
+
+    {message && <p className="settings-message">{message}</p>}
+
+          <div className="password-actions">
+            <button
+                className="save-btn"
+                onClick={handleSave}
+                disabled={
+                !passwordData.currentPassword &&
+                !passwordData.newPassword &&
+                !passwordData.confirmPassword
+                }
+            >
+                Update Password
+            </button>
+            </div>
         </div>
 
         {/* ---------------- App Info ---------------- */}
 <div className="settings-card app-info-card">
   <div className="app-info-content">
     <img 
-      src="/snap.jpg"   // change to your logo path
+      src="/snap.jpg"
       alt="App Logo"
       className="app-logo"
     />
@@ -232,7 +241,9 @@ function Settings() {
         {/* ---------------- Buttons ---------------- */}
         {/*{message && <p className="settings-message">{message}</p>}*/}
 
+        {/*}
         <div className="settings-actions">
+        
           <button
             className="save-btn"
             onClick={handleSave}
@@ -240,7 +251,7 @@ function Settings() {
           >
             Save Changes
           </button>
-
+        
           <button
             className="logout-btn-page"
             onClick={handleLogout}
@@ -248,6 +259,7 @@ function Settings() {
             Log Out
           </button>
         </div>
+        */}
 
       </div>
     </>
