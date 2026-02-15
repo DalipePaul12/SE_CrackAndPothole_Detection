@@ -1,5 +1,8 @@
 import "./Sidebar.css";
 import { Link, useLocation } from "react-router-dom";
+import { useState } from "react";
+
+import CreateReport from "../pages/Inside-App-User/CreateReport";
 
 //Notification Context Import to get the unread count for notifications in the sidebar
 import { useNotifications } from "../pages/Contexts/NotificationContext";
@@ -15,6 +18,8 @@ import { GiBookshelf } from "react-icons/gi";
 function Sidebar() {
   const {unreadCount } = useNotifications();
   const location = useLocation();
+  const [showReportModal, setShowReportModal] = useState(false);
+
 
   return (
     <aside className="app-sidebar">
@@ -27,9 +32,17 @@ function Sidebar() {
       {/* NAV LINKS */}
       <nav className="sidebar-nav">
         <div className="sidebar-main-section">
-        <button to="/dashboard" className="sidebar-reports-button">
-          <IoAddCircleOutline className="addreport-icon" /> Report Road Damage
+        <button
+          className="sidebar-reports-button"
+          onClick={() => setShowReportModal(true)}
+        >
+          <IoAddCircleOutline className="addreport-icon" />
+          Report Road Damage
         </button>
+
+        {showReportModal && (
+          <CreateReport onClose={() => setShowReportModal(false)} />
+        )}
 
       {/* Main Menu */}
         <label 

@@ -1,0 +1,264 @@
+.report-overlay {
+  position: fixed;
+  inset: 0;
+  backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999999;   /* increase this */
+}
+
+
+.report-modal {
+  width: 60%;
+  /*max-width: 1200px;*/
+  height: 80vh;
+  background: white;
+  border-radius: 30px;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  z-index: 10000;
+}
+
+.report-left, .report-right {
+  flex: 1;
+  padding: 30px;
+  overflow-y: auto;
+}
+
+/*LEFT PART*/
+.report-left {
+    background-color: rgba(250, 238, 228, 0.722);
+}
+
+.report-left h2{
+    letter-spacing: 0.6px;
+}
+
+/*BUTTONS FOR LEFT SIDE*/
+.report-buttons-container {
+    background-color: #fff;
+    border-radius: 15px;
+    display: flex;
+    flex-direction: column;     /* stack items vertically */
+    justify-content: center;    /* vertical center */
+    align-items: center;        /* horizontal center */
+    text-align: center;         /* center text */
+    margin-bottom: 35px;
+    margin-top: 20px;
+}
+
+
+.file-type-buttons {
+  display: flex;
+  justify-content: center;   /* center horizontally */
+  align-items: center;
+  gap: 40px;                 /* space between buttons */
+}
+
+.file-type-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;   /* center icon + text */
+  gap: 12px;
+  padding: 8px 55px;
+  border-radius: 10px;
+  color: black;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  background: white;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+
+.file-type-buttons button.active {
+  background: linear-gradient(180deg, #206220, #43a343);
+  color: white;
+  border: 1px solid #000;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+}
+
+/*UPLOAD*/
+.upload-box {
+  border: 3px dashed #ccc;
+  border-radius: 15px;
+  padding: 110px;
+  text-align: center;
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.upload-box input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.report-left h3 {
+    text-align: center;
+    letter-spacing: 0.6px;
+    color: #206220;
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-bottom: 5px;
+    margin-top: 30px;
+}
+
+/*RESULT BOX*/
+.classification-box {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.result-box {
+  flex: 1;
+  padding: 10px 12px;
+  text-align: center;
+  border-radius: 12px;
+  background: #FFF;
+  font-weight: bold;
+  border: 1px solid #777;
+  margin-top: 10px;
+  font-size: 0.7rem;
+  color: #333;
+}
+
+.result-box.green {
+  background: #1f9644;
+  color: white;
+}
+
+.result-box.red {
+  background: #b00020;
+  color: white;
+}
+
+/*RIGHT PART*/
+.classification-section h3{
+    margin-top: 20px;
+    color: #206220;
+    font-size: 0.8rem;
+    opacity: 0.8;
+    letter-spacing: 0.6px;
+}
+
+.reporter-info {
+  display: flex;
+  gap: 15px;
+}
+
+.location-section label {
+    font-size: 0.9rem;
+    opacity: 0.7;
+    letter-spacing: 0.6px;
+    color: #206220;
+    font-weight: 600;
+}
+
+.location-section .location-input input {
+    padding: 15px 20px;
+    width: 100%;
+    border-radius: 15px;
+    margin-top: 6px;
+    border: 1px solid #ddd;
+    background-color: rgba(250, 238, 228, 0.722);
+    margin-bottom: 20px;
+}
+
+.reporter-info label {
+    font-size: 0.9rem;
+    opacity: 0.7;
+    letter-spacing: 0.6px;
+    color: #206220;
+    font-weight: 600;
+}
+
+.reporter-info input {
+    padding: 10px 20px;
+    width: 100%;
+    border-radius: 15px;
+    margin-top: 6px;
+    border: 1px solid #ddd;
+    background-color: rgba(250, 238, 228, 0.722);
+    margin-bottom: 20px;
+}
+
+.additional-info {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+}
+
+.additional-info label {
+    font-size: 0.9rem;
+    opacity: 0.7;
+    letter-spacing: 0.6px;
+    color: #206220;
+    font-weight: 600;
+}
+
+.additional-info textarea {
+  resize: none;
+  padding: 15px 15px;
+  border-radius: 15px;
+  border: 1px solid #ddd;
+  font-size: 0.8rem;
+  outline: none;
+  transition: all 0.2s ease;
+  background-color: rgba(250, 238, 228, 0.722);
+  margin-top: 7px;
+}
+
+.additional-info textarea:focus {
+  border: 1px solid #0e7a31;
+  background: white;
+}
+
+.char-count {
+  align-self: flex-end;
+  font-size: 0.8rem;
+  margin-top: 5px;
+  color: #777;
+  margin-bottom: 10px;
+}
+
+
+.report-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.submit-btn {
+  background: linear-gradient(180deg, #143e14, #54cf54);
+  color: white;
+  padding: 10px 80px;
+  border-radius: 15px;
+  font-size: 0.9rem;
+  border: 1px solid #000;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+}
+
+.submit-btn:hover {
+   background: linear-gradient(180deg, #247f24, #5fe55f);
+}
+
+.discard-btn {
+  background: #fff;
+  padding: 10px 40px;
+  border-radius: 15px;
+  border: 1px solid #aaa;
+  color: #0e7a31;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 2px rgba(0,0,0,0.4);
+}
+
+.discard-btn:hover {
+    background-color: rgba(250, 238, 228, 0.722);
+}
