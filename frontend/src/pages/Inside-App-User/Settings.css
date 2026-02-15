@@ -1,8 +1,241 @@
 .settings-container {
     padding: 2rem;
-    background-color: rgba(250, 238, 228, 0.722);;
+    background-color: rgba(250, 238, 228, 0.722);
     min-height: 92vh;
     width: calc(100% - 255px); /* Adjust for sidebar width */
-    margin-top: 60px; /* Height of the header */
+    margin-top: 0; /* Height of the header */
     margin-left: 255px; /* Width of the sidebar */
+}
+
+.settings-header h1 {
+    margin-top: 70px;
+    margin-bottom: 5px;
+    color: #555;
+}
+.settings-header p {
+    color: #0e7a306d;
+    font-weight: 700;
+    margin-bottom: 25px;
+    font-size: 0.9rem;
+    letter-spacing: 0.6px;
+}
+
+.settings-card {
+  background: #fff;
+  padding: 20px;
+  border-radius: 25px;
+  margin-bottom: 25px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  border-bottom: 2px solid #0e7a31;
+}
+
+.settings-card h2 {
+    color: #444;
+}
+
+.settings-card p {
+    color: #666;
+    margin-bottom: 15px;
+    margin-top: 5px;
+    font-size: 0.9rem;
+    letter-spacing: 0.6px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  /*border-top: 1px solid #aaa;*/
+  padding: 5px 15px;
+  align-content: center;
+  background: rgba(250, 238, 228, 0.722);
+  border-radius: 20px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.3);
+}
+
+.setting-item h4 {
+   padding-top: 15px;
+}
+
+.setting-item p {
+    color: #0d6f2c;
+}
+
+/* Switch Container */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+}
+
+/* Hide Default Checkbox */
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Slider */
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #ccc;
+  border-radius: 34px;
+  transition: 0.3s;
+}
+
+/* Circle */
+.slider::before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+/* When Checked */
+.switch input:checked + .slider {
+  background-color: #0e7a31;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(24px);
+}
+
+
+.password-section input {
+  display: block;
+  width: 100%;
+  padding: 13px;
+  margin-bottom: 10px;
+  border-radius: 15px;
+  border: 1px solid #ccc;
+  background-color: rgba(250, 238, 228, 0.722);
+  letter-spacing: 0.6px;
+  font-size: 0.85rem;
+}
+
+.app-info-card {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.app-info-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.app-logo {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  margin-bottom: 15px;
+  border-radius: 20px;
+  border: 2px solid #025302;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+.app-name {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.version-badge {
+  background: linear-gradient(180deg,  #049233, #17c456);
+  color: white;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 13px;
+  margin-bottom: 15px;
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.4);
+}
+
+.app-description {
+  max-width: 500px;
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 20px;
+}
+
+.app-meta {
+  font-size: 13px;
+  color: #777;
+}
+
+.team-title {
+  margin-top: 15px;
+  font-size: 16px;
+  margin-bottom: 15px;
+}
+
+.team-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.team-list span {
+  background: linear-gradient(180deg,  #049233, #17c456);
+  padding: 7px 17px;
+  border-radius: 15px;
+  font-size: 15px;
+  color: white;
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.4);
+  border: 1px solid #025302;
+}
+
+.settings-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 15px;
+}
+
+.save-btn {
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: none;
+  background: linear-gradient(180deg, #469d46, #025302);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.save-btn:hover {
+    background: linear-gradient(180deg,  #124512, #29b629);
+    color:white;
+}
+
+.save-btn:disabled {
+  background: #aaa;
+  cursor: not-allowed;
+}
+
+.logout-btn-page {
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: none;
+  background: linear-gradient(180deg,  #9b2d2d, #690303);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.4);
+}
+
+.logout-btn-page:hover {
+    background: linear-gradient(180deg,  #804646, #c41717);
+}
+
+.settings-message {
+  margin-top: 10px;
+  color: #0e7a31;
+  font-weight: 500;
 }
