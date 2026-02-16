@@ -185,7 +185,7 @@ function AllReports() {
                   <tr key={report.id}>
                     <td>
                       <strong>{report.id}</strong>
-                      <div className="report-location-allreports">
+                      <div className="report-location-allreports" title={report.location}>
                         {report.location}
                       </div>
                     </td>

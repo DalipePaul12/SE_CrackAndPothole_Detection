@@ -60,7 +60,7 @@ function MySubmissions() {
                               onClick={() => setFilters({ ...filters, type })}
                               >
                               {type}
-                              </button>
+                              </button> 
                             ))}
                         </div>
                       </div>
@@ -121,7 +121,7 @@ function MySubmissions() {
                   <tr key={report.id}>
                     <td>
                       <strong>{report.id}</strong>
-                      <div className="report-location">
+                      <div className="report-location" title={report.location}>
                         {report.location}
                       </div>
                     </td>

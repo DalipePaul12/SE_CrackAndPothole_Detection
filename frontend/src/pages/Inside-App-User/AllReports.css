@@ -181,6 +181,16 @@
 .report-location-allreports {
   font-size: 0.8rem;
   color: #777;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  /*or 
+    display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  */
 }
 
 /*STATUS & SEVERITY TAGS */
