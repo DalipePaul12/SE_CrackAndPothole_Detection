@@ -3,8 +3,11 @@ import "./Settings.css";
 
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
+import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 
 function Settings() {
+
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const [settings, setSettings] = useState({
     pushNotifications: false,
@@ -38,12 +41,31 @@ function Settings() {
     }));
   };
 
+  const handleChangePassword = (data) => {
+  // apply password change
+  setPasswordData({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+
+  setMessage("Password updated successfully!");
+
+  // TODO: connect with backend to actually update password
+  console.log("Password changed to:", data.newPassword);
+};
+
+/*
   const hasChanges =
     JSON.stringify(settings) !== JSON.stringify(originalSettings) ||
     passwordData.currentPassword ||
     passwordData.newPassword ||
     passwordData.confirmPassword;
+*/
 
+  const [tempPasswordData, setTempPasswordData] = useState(passwordData);
+
+/*
 const handleSave = () => {
   setMessage(""); // clear old message first
 
@@ -72,7 +94,7 @@ const handleSave = () => {
 
   setMessage("Password updated successfully!");
 };
-
+*/
 
 /*
   const handleLogout = () => {
@@ -81,13 +103,14 @@ const handleSave = () => {
   };
 */
 
+/*
 useEffect(() => {
   if (originalSettings !== settings) {
     console.log("Notification settings saved:", settings);
     setOriginalSettings(settings);
   }
 }, [settings]);
-
+*/
 
   return ( 
     <>
@@ -189,17 +212,36 @@ useEffect(() => {
     {message && <p className="settings-message">{message}</p>}
 
           <div className="password-actions">
-            <button
-                className="save-btn"
-                onClick={handleSave}
-                disabled={
-                !passwordData.currentPassword &&
-                !passwordData.newPassword &&
-                !passwordData.confirmPassword
-                }
-            >
-                Update Password
-            </button>
+          <button
+            className="save-btn"
+            onClick={() => {
+              // Validate first
+              if (!passwordData.currentPassword) {
+                setMessage("Please enter your current password.");
+                return;
+              }
+              if (passwordData.newPassword !== passwordData.confirmPassword) {
+                setMessage("New passwords do not match.");
+                return;
+              }
+              if (passwordData.newPassword.length < 6) {
+                setMessage("Password must be at least 6 characters.");
+                return;
+              }
+
+              // Store temp changes
+              setTempPasswordData(passwordData);
+              setShowConfirm(true); // open modal
+            }}
+            disabled={
+              !passwordData.currentPassword &&
+              !passwordData.newPassword &&
+              !passwordData.confirmPassword
+            }
+          >
+            Update Password
+          </button>
+
             </div>
         </div>
 
@@ -260,6 +302,28 @@ useEffect(() => {
           </button>
         </div>
         */}
+
+          {showConfirm && (
+            <ConfirmChangesModal
+              title="Change Password?"
+              message="Before changing your password, make sure it's something secure and memorable."
+              confirmText="Change Password"
+              variant="danger"
+              onCancel={() => {
+                setShowConfirm(false);
+                // revert password fields to previous state
+                setPasswordData({
+                  currentPassword: "",
+                  newPassword: "",
+                  confirmPassword: "",
+                });
+              }}
+              onConfirm={() => {
+                setShowConfirm(false);
+                handleChangePassword(tempPasswordData);
+              }}
+            />
+          )}
 
       </div>
     </>

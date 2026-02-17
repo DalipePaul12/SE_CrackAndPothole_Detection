@@ -3,6 +3,7 @@ import "./MyProfile.css";
 
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
+import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 
 //Icons
 import { ImLocation } from "react-icons/im";
@@ -13,6 +14,14 @@ import { FaUserEdit } from "react-icons/fa";
 
 
 function MyProfile() {
+
+  //confirm changes popup
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleSaveProfile = () => {
+  setUser(formData); // now apply changes officially
+};
+
   const [activeTab, setActiveTab] = useState("feed"); // feed | settings
   const [reportFilter, setReportFilter] = useState("all"); // all | resolved
 
@@ -342,8 +351,7 @@ function MyProfile() {
             <button
               className="save"
               onClick={() => {
-                setUser(formData);      // apply changes
-                setActiveTab("settings");   // go back
+                setShowConfirm(true)
               }}
             >
               Save Changes
@@ -351,6 +359,23 @@ function MyProfile() {
           </div>
           </div>
         )}
+
+        {showConfirm && (
+          <ConfirmChangesModal
+            title="Save Profile Changes?"
+            message="Your updated name and/or bio will be visible to others."
+            confirmText="Save"
+            onCancel={() => {
+              setShowConfirm(false);
+              setFormData(user); // restore original values
+            }}
+            onConfirm={() => {
+              handleSaveProfile(); // apply changes
+              setShowConfirm(false);
+            }}
+          />
+        )}
+
       </div>
     </>
   );

@@ -3,6 +3,8 @@ import "./CreateReport.css";
 import { FaCamera, FaVideo, FaMapMarkerAlt } from "react-icons/fa";
 import ReactDOM from "react-dom";
 
+import ConfirmSubmitModal from "../PopUps/ConfirmSubmitModal";
+
 //map imports
 import "leaflet/dist/leaflet.css";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
@@ -11,6 +13,9 @@ import L from "leaflet";
 
 
 function CreateReport({ onClose }) {
+
+  //confirmation popup in submitting reports
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const userName = "John Carlo Trajico"; // Replace later with auth context
 
@@ -257,6 +262,7 @@ function CreateReport({ onClose }) {
                 type="text"
                 placeholder="Enter or pin location"
                 value={location}
+                required
                 onChange={(e) => setLocation(e.target.value)}
               />
 
@@ -270,7 +276,7 @@ function CreateReport({ onClose }) {
           <div className="reporter-info">
             <div>
               <label>REPORTER'S NAME</label>
-              <input type="text" value={userName} />
+              <input type="text" value={userName} required/>
             </div>
 
             <div>
@@ -278,6 +284,7 @@ function CreateReport({ onClose }) {
               <input
                 type="text"
                 value={contact}
+                required
                 placeholder="Contact Number"
                 onChange={(e) => setContact(e.target.value)}
               />
@@ -302,7 +309,7 @@ function CreateReport({ onClose }) {
 
           <div className="report-actions">
             <button className="discard-btn" onClick={onClose}>Discard</button>
-            <button className="submit-btn" onClick={handleSubmit}>
+            <button className="submit-btn" onClick={() => setShowConfirm(true)}>
               Submit Report
             </button>
           </div>
@@ -364,6 +371,17 @@ function CreateReport({ onClose }) {
             </div>
           )}
 
+          {showConfirm && (
+          <ConfirmSubmitModal
+            title="Submit Report?"
+            message="Are you sure you want to submit this road damage report?"
+            onCancel={() => setShowConfirm(false)}
+            onConfirm={() => {
+              setShowConfirm(false);
+              handleSubmit();
+            }}
+          />
+        )}
 
       </div>
     </div>,

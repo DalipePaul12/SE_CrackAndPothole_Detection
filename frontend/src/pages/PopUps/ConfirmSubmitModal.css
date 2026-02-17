@@ -1,0 +1,84 @@
+/* OVERLAY */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999999;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+/* MODAL */
+.confirm-modal {
+  background-color: rgb(250, 238, 228);
+  width: 430px;
+  padding: 30px;
+  border-radius: 30px;
+  text-align: center;
+  border: 1px solid #000;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  animation: scaleIn 0.2s ease-in-out;
+}
+
+.confirm-modal h3 {
+  margin-bottom: 10px;
+  color: #206220;
+}
+
+.confirm-modal p {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 25px;
+}
+
+/* BUTTON ROW */
+.confirm-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+/* CANCEL */
+.confirm-cancel {
+  flex: 1;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #000;
+  background: white;
+  cursor: pointer;
+  transition: 0.2s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
+}
+
+.confirm-cancel:hover {
+  background: #aaa;
+}
+
+/* CONFIRM */
+.confirm-confirm {
+  flex: 1;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #000;
+  background: linear-gradient(360deg, #206220, #43a343);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
+}
+
+.confirm-confirm:hover {
+  background: linear-gradient(360deg, #184918, #58c758);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0 }
+  to { opacity: 1 }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0 }
+  to { transform: scale(1); opacity: 1 }
+}
