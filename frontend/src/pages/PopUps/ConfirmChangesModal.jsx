@@ -7,21 +7,21 @@ function ConfirmChangesModal({
   onConfirm,
   onCancel,
   variant = "default", // "default" | "danger"
+  hideCancel = false
 }) {
   return (
     <div className="confirm-overlay">
-      <div className="confirm-modal">
+      <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
 
         <h3>{title}</h3>
         <p>{message}</p>
 
         <div className="confirm-actions">
-          <button
-            className="confirm-cancel"
-            onClick={onCancel}
-          >
+        {!hideCancel && (
+          <button className="confirm-cancel" onClick={onCancel}>
             Cancel
           </button>
+        )}
 
           <button
             className={`confirm-confirm ${

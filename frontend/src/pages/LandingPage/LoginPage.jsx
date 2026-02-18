@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "./LoginPage.css";
 import OTPboxes from "./OTPboxes.jsx";
 
+import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
+
 // Icons
 import { MdEmail } from "react-icons/md";
 import { RiLockPasswordFill } from "react-icons/ri";
@@ -11,6 +13,10 @@ import { GrFormNextLink } from "react-icons/gr";
 import { IoIosArrowRoundBack } from "react-icons/io";
 
 function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
+  
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpMessage, setOtpMessage] = useState("");
+
   const [step, setStep] = useState(1); // Step 1 = login, Step 2 = OTP
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -20,11 +26,12 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   });
 
   const handleResendOtp = () => {
-    // For frontend only
-    alert(`OTP resent to ${formData.email}`);
-    
+    setOtpMessage("A new OTP has been resent to your email address.");
+    setShowOtpModal(true);
+
     setFormData(prev => ({ ...prev, otp: "" }));
   };
+
 
   /* BackEnd Ready
   const handleResendOtp = async () => {
@@ -93,6 +100,9 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
     if (formData.email && formData.password) {
       console.log("login success");
       setStep(2); // move to OTP
+
+      setOtpMessage("An OTP has been sent to your email address.");
+      setShowOtpModal(true);
     } else {
       alert("Please enter email and password");
     }
@@ -130,7 +140,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
 
     //FRONTEND-ONLY 
     if (formData.otp.length >= 4) {
-      alert("login successful!");
+      /*alert("login successful!");*/
       onClose();
       setStep(1);
       setFormData({ email: "", password: "", otp: "" });
@@ -138,9 +148,10 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
       // Navigate to Dashboard
       navigate("/dashboard");
       
-    } else {
+    } 
+    /*else {
       alert("Please enter OTP");
-    }
+    }*/
   };
 
   return (
@@ -245,8 +256,22 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
               </p>
             </div>
           )}
-        </div>
+        </div>  
+            
+        {showOtpModal && (
+      <ConfirmChangesModal
+        title="OTP Sent"
+        message={otpMessage}
+        confirmText="OK"
+        variant="info"
+        hideCancel={true}
+        onConfirm={() => setShowOtpModal(false)}
+      />
+    )}
       </div>
+
+
+
     </div>
   );
 }

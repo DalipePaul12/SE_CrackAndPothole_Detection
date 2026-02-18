@@ -2,6 +2,8 @@ import { useState } from "react";
 import "./SignUpPage.css";
 import OTPboxes from "./OTPboxes.jsx";
 
+import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
+
 //Icons
 import { BsFillPersonFill } from "react-icons/bs";
 import { MdEmail } from "react-icons/md";
@@ -13,6 +15,14 @@ import { BsFillEyeFill, BsFillEyeSlashFill } from "react-icons/bs";
 
 
 function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
+
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpMessage, setOtpMessage] = useState("");
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
+
+
   const [step, setStep] = useState(1); // Step 1 = signup, Step 2 = OTP, Step 3 = password
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -43,7 +53,8 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
 
     if (formData.name && formData.email /*&& formData.password*/) {
       /*console.log("signup success");*/
-      alert(`OTP sent to ${formData.email}`);
+      setOtpMessage(`An OTP has been sent to ${formData.email}.`);
+      setShowOtpModal(true);
       setStep(2); // move to OTP
     } else {
       alert("Please fill all fields");
@@ -51,37 +62,52 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
   };
 
   const handlePasswordSubmit = (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!formData.password || !formData.confirmPassword) {
-    alert("Please fill all password fields");
-    return;
-  }
+    if (!formData.password || !formData.confirmPassword) {
+      setPasswordMessage("Please fill in all password fields.");
+      setShowPasswordModal(true);
+      return;
+    }
 
-   if (formData.password.length < 8) {
-    alert("Password must be at least 8 characters long");
-    return;
-  }
+    if (formData.password.length < 8) {
+      setPasswordMessage("Your password must be at least 8 characters long.");
+      setShowPasswordModal(true);
+      return;
+    }
 
-  if (formData.password !== formData.confirmPassword) {
-    alert("Passwords do not match");
-    return;
-  }
+    if (formData.password !== formData.confirmPassword) {
+      setPasswordMessage("Passwords do not match. Please review and try again.");
+      setShowPasswordModal(true);
+      return;
+    }
 
-  alert("signup successful!");
-  onClose();
-  setStep(1);
-  setFormData({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    city: "",
-    barangay: "",
-    province: "",
-    otp: ""
-  });
-};
+    // Success
+    setPasswordMessage("Your account has been successfully created!");
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordModalConfirm = () => {
+    if (passwordMessage === "Your account has been successfully created!") {
+      setShowPasswordModal(false);
+      setStep(1);
+      onClose();
+      onSwitchToLogin();
+      setFormData({
+        name: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        city: "",
+        barangay: "",
+        province: "",
+        otp: ""
+      });
+    }
+
+    setShowPasswordModal(false);
+  };
+
 
 
   const handleOtpSubmit = (e) => {
@@ -95,9 +121,18 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
   };
 
   const handleResendOtp = () => {
+    setOtpMessage(`A new OTP has been resent to ${formData.email}.`);
+    setShowOtpModal(true);
+
+    setFormData(prev => ({ ...prev, otp: "" }));
+  };
+
+  /*
+  const handleResendOtp = () => {
     alert(`OTP resent to ${formData.email}`);
     setFormData(prev => ({ ...prev, otp: "" }));
   };
+*/
 
   return (
     <div className="sign-up-overlay" onClick={onClose}>
@@ -157,7 +192,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                     onChange={handleChange}
                     value={formData.province}
                   >
-                    <option value="">Select Province</option>
+                    <option value="" disabled hidden>Select Province</option>
                     <option value="Metro Manila">Metro Manila</option>
                     <option value="Cebu">Cebu</option>
                     <option value="Davao del Sur">Davao del Sur</option>
@@ -173,7 +208,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                     onChange={handleChange}
                     value={formData.city}
                   >
-                    <option value="">Select City</option>
+                    <option value="" disabled hidden>Select City</option>
                     <option value="Quezon City">Quezon City</option>
                     <option value="Makati">Makati</option>
                     <option value="Cebu City">Cebu City</option>
@@ -185,11 +220,12 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                   <label>Barangay</label>
                   <select
                     name="barangay"
+                    placeholder="Select Barangay"
                     required
                     onChange={handleChange}
                     value={formData.barangay}
                   >
-                    <option value="">Select Barangay</option>
+                    <option value=""disabled hidden>Select Barangay</option>
                     <option value="Barangay 1">Barangay 1</option>
                     <option value="Barangay 2">Barangay 2</option>
                     <option value="Barangay 3">Barangay 3</option>
@@ -272,7 +308,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                     onChange={handleChange}
                   />
                     <span className="toggle-eye" onClick={() => setShowPassword((prev) => !prev)}>
-                        {showPassword ? <BsFillEyeSlashFill /> : <BsFillEyeFill />}
+                        {showPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
                     </span>
                   </div>
                 </div>
@@ -289,7 +325,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                     onChange={handleChange}
                   />
                   <span className="toggle-eye" onClick={() => setShowConfirmPassword((prev) => !prev)}>
-                        {showConfirmPassword ? <BsFillEyeSlashFill /> : <BsFillEyeFill />}
+                        {showConfirmPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
                     </span>
                   </div>
                 </div>
@@ -308,6 +344,33 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
             </>
           )}
         </div>
+
+        {showOtpModal && (
+        <ConfirmChangesModal
+          title="OTP Sent"
+          message={otpMessage}
+          confirmText="OK"
+          hideCancel={true}
+          variant="info"
+          onConfirm={() => setShowOtpModal(false)}
+        />
+      )}
+
+      {showPasswordModal && (
+      <ConfirmChangesModal
+        title="Sign Up Status"
+        message={passwordMessage}
+        confirmText="OK"
+        hideCancel={true}
+        variant={
+          passwordMessage === "Your account has been successfully created!"
+            ? "success"
+            : "warning"
+        }
+        onConfirm={handlePasswordModalConfirm}
+      />
+    )}
+
       </div>
     </div>
   );

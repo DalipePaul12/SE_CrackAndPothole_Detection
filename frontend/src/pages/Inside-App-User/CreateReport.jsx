@@ -16,6 +16,8 @@ function CreateReport({ onClose }) {
 
   //confirmation popup in submitting reports
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showRequiredModal, setShowRequiredModal] = useState(false); //its a popup for completing the reqs
+
 
   const userName = "John Carlo Trajico"; // Replace later with auth context
 
@@ -36,12 +38,16 @@ function CreateReport({ onClose }) {
   const [contact, setContact] = useState("");
   const [additionalInfo, setAdditionalInfo] = useState("");
 
-  const handleSubmit = () => {
-    if (!uploadedFile || !location || !contact) {
-      alert("Please complete required fields.");
-      return;
-    }
+  const validateBeforeConfirm = () => {
+  if (!uploadedFile || !location || !contact) {
+    setShowRequiredModal(true);
+    return;
+  }
 
+  setShowConfirm(true);
+};
+
+  const handleSubmit = () => {
     const reportData = {
       file: uploadedFile,
       imageType,
@@ -276,7 +282,7 @@ function CreateReport({ onClose }) {
           <div className="reporter-info">
             <div>
               <label>REPORTER'S NAME</label>
-              <input type="text" value={userName} required/>
+              <input type="text" value={userName} required readOnly/>
             </div>
 
             <div>
@@ -309,7 +315,7 @@ function CreateReport({ onClose }) {
 
           <div className="report-actions">
             <button className="discard-btn" onClick={onClose}>Discard</button>
-            <button className="submit-btn" onClick={() => setShowConfirm(true)}>
+            <button className="submit-btn" onClick={validateBeforeConfirm}>
               Submit Report
             </button>
           </div>
@@ -382,6 +388,16 @@ function CreateReport({ onClose }) {
             }}
           />
         )}
+
+        {showRequiredModal && (
+        <ConfirmSubmitModal
+          title="Incomplete Report"
+          message="Please complete all required fields before submitting your report."
+          confirmText="OK"
+          hideCancel={true}
+          onConfirm={() => setShowRequiredModal(false)}
+        />
+      )}
 
       </div>
     </div>,

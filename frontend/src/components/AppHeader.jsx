@@ -1,10 +1,14 @@
 import "./AppHeader.css";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { FaUserCircle, FaSignOutAlt } from "react-icons/fa";
 
+import ConfirmChangesModal from "../pages/PopUps/ConfirmChangesModal";
 
 function AppHeader() {
   const navigate = useNavigate();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
 
   const handleLogout = () => {
     navigate("/");
@@ -27,11 +31,23 @@ function AppHeader() {
           className="profile-image"
         />
 
-        <button className="logout-btn" onClick={handleLogout}>
+        <button className="logout-btn" onClick={() => setShowLogoutConfirm(true)}>
           <FaSignOutAlt />
           Logout
         </button>
       </div>
+
+      {showLogoutConfirm && (
+      <ConfirmChangesModal
+        title="Log Out?"
+        message="Are you sure you want to log out of your account?"
+        confirmText="Log Out"
+        variant="danger"
+        onCancel={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+      />
+    )}
+
     </header>
   );
 }
