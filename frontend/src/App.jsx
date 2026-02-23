@@ -24,14 +24,19 @@ import MySubmissions from "./pages/Inside-App-User/MySubmissions.jsx";
 import Notifications from "./pages/Inside-App-User/Notifications.jsx";
 import Settings from "./pages/Inside-App-User/Settings.jsx";
 
+//Inside App Admin Imports
+import AdminPanel from "./pages/Inside-App-Admin/AdminPanel.jsx";
+
 
 function App() {
   const location = useLocation();
   const [showLogin, setShowLogin] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
 
-  //HIdes the Navigation Bar on Inside App User Pages
-  const hideNavbar = location.pathname.startsWith("/dashboard");
+  //HIdes the Navigation Bar on Inside App User and Admin Pages
+  const hideNavbar =
+  location.pathname.startsWith("/dashboard") ||
+  location.pathname.startsWith("/adminpanel");
 
   return (
     <>
@@ -63,6 +68,11 @@ function App() {
           <Route path="/dashboard/submissions" element={<MySubmissions />} />
           <Route path="/dashboard/notifications" element={<Notifications />} />
           <Route path="/dashboard/settings" element={<Settings />} />
+
+          {/*Admin Panel Routes*/}
+          <Route path="/adminpanel" element={<AdminPanel />} />
+
+
         </Routes>
       
       </NotificationProvider>

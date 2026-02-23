@@ -141,13 +141,16 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
     //FRONTEND-ONLY 
     if (formData.otp.length >= 4) {
       /*alert("login successful!");*/
+      const isAdmin = formData.email === "admin@gmail.com";
       onClose();
       setStep(1);
       setFormData({ email: "", password: "", otp: "" });
 
-      // Navigate to Dashboard
-      navigate("/dashboard");
-      
+        if (isAdmin) {
+        navigate("/adminpanel");
+      } else {
+        navigate("/dashboard");
+      }
     } 
     /*else {
       alert("Please enter OTP");
