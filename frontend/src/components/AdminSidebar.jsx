@@ -3,9 +3,10 @@ import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
 
 // Icons
-import { FaHome, FaUsers, FaClipboardList } from "react-icons/fa";
+import { FaHome, FaMapMarkedAlt, FaClipboardList } from "react-icons/fa";
 import { IoSettingsSharp } from "react-icons/io5";
 import { MdAdminPanelSettings } from "react-icons/md";
+import { GiBookshelf } from "react-icons/gi";
 
 function AdminSidebar() {
   const location = useLocation();
@@ -45,7 +46,7 @@ function AdminSidebar() {
             location.pathname === "/adminpanel/reports" ? "active" : ""
           }`}
         >
-          <FaUsers /> All Reports
+          <GiBookshelf /> All Reports
         </Link>
 
         <Link
@@ -54,7 +55,7 @@ function AdminSidebar() {
             location.pathname === "/adminpanel/map" ? "active" : ""
           }`}
         >
-          <FaClipboardList /> Map View
+          <FaMapMarkedAlt /> Map View
         </Link>
 
         <Link

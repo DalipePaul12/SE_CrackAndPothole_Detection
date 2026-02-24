@@ -1,0 +1,242 @@
+/* MAIN CONTAINER */
+.admin-manage-container {
+    padding: 2rem;
+    background-color: rgba(250, 238, 228, 0.722);;
+    height: 100vh;
+    width: calc(100% - 255px); 
+    margin-top: 0;
+    margin-left: 255px; 
+}
+
+/* HEADER */
+.admin-filters-container h2 {
+    font-size: 1.5rem;
+    color: #555;
+    font-weight: 600;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #bbb;
+    padding-bottom: 10px;
+}
+
+/* FILTERS CONTAINER */
+.admin-filters-container {
+  display: flex;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  border-radius: 30px;
+  margin-top: 70px;
+  flex-direction: column;
+  border-bottom: 1px solid #3a7d44;
+}
+
+.admin-filters-row {
+    display: flex;
+    gap: 150px;
+    align-items: flex-end;
+}
+
+.admin-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.admin-filter-group label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+}
+
+.admin-filter-buttons {
+    display: flex;
+    gap: 25px;
+}
+
+.admin-filter-buttons button {
+    padding: 10px 30px;
+    border-radius: 20px;
+    border: 1px solid #168206;
+    background: white;
+    cursor: pointer;
+}
+
+.admin-filter-buttons button:hover {
+    background: linear-gradient(360deg, #90e99093, #c4e3c4);
+    color: black;
+    border-color: #3a7d44;
+    box-shadow: 0 4px 5px rgba(0, 0, 0, 0.5);
+}
+
+.admin-filter-buttons button.active {
+    background: linear-gradient(360deg, #33733393, #367636);
+    color: white;
+    border-color: #3a7d44;
+    box-shadow: 0 4px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* Custom select */
+.admin-custom-select {
+    position: relative;
+    width: 230px;
+}
+
+.admin-custom-select select {
+    width: 100%;
+    padding: 10px 40px 10px 12px;
+    border-radius: 15px;
+    border: 1px solid #168206;
+    appearance: none;
+    -webkit-appearance: none; 
+    -moz-appearance: none;
+    background: linear-gradient(360deg, #90e99093, #c4e3c4);
+    box-shadow: 0 4px 5px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+}
+
+.admin-custom-select select:hover {
+    background: linear-gradient(180deg, #659e65c2, #c4e3c4);
+    color: black;
+    border-color: #3a7d44;
+    box-shadow: 0 4px 5px rgba(0, 0, 0, 0.4);
+}
+
+.admin-custom-select::after {
+    content: "▼";
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 0.79rem;
+    color: #555;
+}
+
+.admin-custom-select select:focus {
+    outline: 1px solid #0c4802;
+    border-color: #3a7d44;
+}
+
+/* TABLE CONTAINER */
+.submissions-table-container {
+    background: #ffffff;
+    border-radius: 30px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+    max-height: 440px;
+    border-bottom: 1px solid #3a7d44;
+}
+
+.submissions-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.submissions-table th {
+    text-align: left;
+    font-size: 1rem;
+    text-transform: uppercase;
+    color: #444;
+    padding-top: 5px;
+    padding-bottom: 15px;
+    position: sticky;
+    top: 0;
+    padding-left: 40px;
+}
+
+.submissions-table td {
+    padding: 15px 0;
+    border-top: 1px solid #bbb;
+    padding-left: 40px;
+    font-size: 0.9rem;
+}
+
+.submissions-table tbody {
+    display: block;
+    overflow-y: auto;
+    max-height: 350px;
+}
+
+.submissions-table thead,
+.submissions-table tbody tr {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+}
+
+.report-location {
+    font-size: 0.8rem;
+    color: #777;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* STATUS & SEVERITY TAGS */
+.severity.critical {
+    color: #740505;
+    font-weight: 600;
+}
+
+.severity.non-critical {
+    color: #0ea91d;
+    font-weight: 600;
+}
+
+.status.declined {
+    color: #a00000;
+    font-weight: 600;
+}
+
+.status.confirmed{
+    color:#0ea91d;
+    font-weight: 600;
+}
+
+/* ACTION BUTTONS */
+.admin-action-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.admin-confirm-btn {
+    background: linear-gradient(360deg, #2e6c2e, #52b352);
+    color: white;
+    border: 1px solid #3a7d44;
+    padding: 5px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.admin-decline-btn {
+    background: white;
+    color: #a00000;
+    border: 1px solid #a00000;
+    padding: 5px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.admin-confirm-btn:hover {
+    background: linear-gradient(360deg, #8de48d, #07e107);
+    color: white;
+}
+
+.admin-decline-btn:hover {
+    background: linear-gradient(360deg, #64091a93, #832525);
+    color: white;
+}
+
+/* NO DATA */
+.no-data {
+    text-align: center;
+    padding: 20px;
+    color: #888;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}

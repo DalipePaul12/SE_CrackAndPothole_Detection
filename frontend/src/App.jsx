@@ -26,6 +26,9 @@ import Settings from "./pages/Inside-App-User/Settings.jsx";
 
 //Inside App Admin Imports
 import AdminPanel from "./pages/Inside-App-Admin/AdminPanel.jsx";
+import AdminAllReports from "./pages/Inside-App-Admin/AdminAllReports.jsx";
+import AdminMapView from "./pages/Inside-App-Admin/AdminMapView.jsx";
+import AdminManageRequests from "./pages/Inside-App-Admin/AdminManageRequests.jsx";
 
 
 function App() {
@@ -71,6 +74,9 @@ function App() {
 
           {/*Admin Panel Routes*/}
           <Route path="/adminpanel" element={<AdminPanel />} />
+          <Route path="/adminpanel/reports" element={<AdminAllReports />} />
+          <Route path="/adminpanel/map" element={<AdminMapView />} />
+          <Route path="/adminpanel/requests" element={<AdminManageRequests />} />
 
 
         </Routes>
