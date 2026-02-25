@@ -120,7 +120,7 @@ function AdminManageRequests() {
                   <tr key={report.id}>
                     <td>
                       <strong>{report.id}</strong>
-                      <div className="report-location">{report.location}</div>
+                      <div className="report-location" title={report.location}>{report.location}</div>
                     </td>
 
                     <td>{report.type}</td>

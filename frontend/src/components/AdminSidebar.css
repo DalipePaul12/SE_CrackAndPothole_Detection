@@ -64,7 +64,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border-bottom: 2px solid #32433237;
+ /* border-bottom: 2px solid #32433237;*/
   padding-bottom: 90px;
 }
 

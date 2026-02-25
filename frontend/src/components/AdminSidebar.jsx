@@ -7,6 +7,7 @@ import { FaHome, FaMapMarkedAlt, FaClipboardList } from "react-icons/fa";
 import { IoSettingsSharp } from "react-icons/io5";
 import { MdAdminPanelSettings } from "react-icons/md";
 import { GiBookshelf } from "react-icons/gi";
+import { IoBook } from "react-icons/io5";
 
 function AdminSidebar() {
   const location = useLocation();
@@ -67,8 +68,19 @@ function AdminSidebar() {
           <FaClipboardList /> Manage Requests
         </Link>
 
+        <Link
+          to="/adminpanel/managereports"
+          className={`admin-sidebar-link ${
+            location.pathname === "/adminpanel/managereports" ? "active" : ""
+          }`}
+        >
+          <IoBook /> Manage Reports
+        </Link>
         </div>
+
+
         {/* System Section */}
+        {/*}
         <div className="admin-sidebar-others-section">
           System
         </div>
@@ -90,7 +102,7 @@ function AdminSidebar() {
         >
           <MdAdminPanelSettings /> Settings
         </Link>
-
+*/}
       </nav>
     </aside>
   );

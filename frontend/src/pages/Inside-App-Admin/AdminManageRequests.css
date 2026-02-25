@@ -148,7 +148,7 @@
 }
 
 .submissions-table td {
-    padding: 15px 0;
+    padding: 12px 0;
     border-top: 1px solid #bbb;
     padding-left: 40px;
     font-size: 0.9rem;
@@ -173,6 +173,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: normal;
 }
 
 /* STATUS & SEVERITY TAGS */

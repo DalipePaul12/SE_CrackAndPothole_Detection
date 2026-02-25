@@ -29,6 +29,7 @@ import AdminPanel from "./pages/Inside-App-Admin/AdminPanel.jsx";
 import AdminAllReports from "./pages/Inside-App-Admin/AdminAllReports.jsx";
 import AdminMapView from "./pages/Inside-App-Admin/AdminMapView.jsx";
 import AdminManageRequests from "./pages/Inside-App-Admin/AdminManageRequests.jsx";
+import AdminManageReports from "./pages/Inside-App-Admin/AdminManageReports.jsx";
 
 
 function App() {
@@ -77,6 +78,7 @@ function App() {
           <Route path="/adminpanel/reports" element={<AdminAllReports />} />
           <Route path="/adminpanel/map" element={<AdminMapView />} />
           <Route path="/adminpanel/requests" element={<AdminManageRequests />} />
+          <Route path="/adminpanel/managereports" element={<AdminManageReports />} />
 
 
         </Routes>
