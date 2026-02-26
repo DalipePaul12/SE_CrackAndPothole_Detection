@@ -220,6 +220,11 @@
   font-weight: 600;
 }
 
+.status.declined {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 .no-data {
   text-align: center;
   padding: 20px;

@@ -45,7 +45,7 @@ function AllReports() {
       location: "España Blvd, Manila",
       type: "Crack",
       severity: "Non-Critical",
-      status: "Pending",
+      status: "Completed",
       date: "2026-03-01",
       fileUrl: "/snap.jpg",
       fileType: "image",
@@ -64,7 +64,7 @@ function AllReports() {
       location: "España Blvd, Manila",
       type: "Crack",
       severity: "Non-Critical",
-      status: "Pending",
+      status: "Completed",
       date: "2026-03-01",
     },
      {
@@ -80,7 +80,7 @@ function AllReports() {
       location: "España Blvd, Manila",
       type: "Crack",
       severity: "Non-Critical",
-      status: "Pending",
+      status: "Completed",
       date: "2026-03-01",
     },
      {
@@ -96,7 +96,7 @@ function AllReports() {
       location: "España Blvd, Manila",
       type: "Crack",
       severity: "Non-Critical",
-      status: "Pending",
+      status: "Completed",
       date: "2026-03-01",
     },
      {
@@ -112,7 +112,7 @@ function AllReports() {
       location: "España Blvd, Manila",
       type: "Crack",
       severity: "Non-Critical",
-      status: "Pending",
+      status: "In Progress",
       date: "2026-03-01",
     },
   ];
@@ -180,7 +180,6 @@ function AllReports() {
                             }
                           >
                             <option value="All">All Status</option>
-                            <option value="Pending">Pending</option>
                             <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
                           </select>

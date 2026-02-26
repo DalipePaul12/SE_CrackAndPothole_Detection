@@ -77,7 +77,7 @@ function MyProfile() {
       severity: "Critical",
       location: "EDSA, Quezon City",
       description: "Large pothole causing traffic congestion.",
-      status: "Submitted",
+      status: "Declined",
     },
         {
       id: "Report #03",
@@ -248,31 +248,46 @@ function MyProfile() {
       </div>
 
       {/* STATUS TIMELINE */}
-      <div className="status-timeline">
-        {stages.map((stage, index) => {
-          const currentIndex = stages.indexOf(report.status);
-          const isActive = index <= currentIndex;
+<div className="status-timeline">
+  {stages.map((stage, index) => {
+    const stopIndex =
+      report.status === "Declined"
+        ? stages.indexOf("Reviewing")
+        : stages.indexOf(report.status);
 
-          return (
-            <div
-              key={stage}
-              className={`timeline-step ${isActive ? "active" : ""}`}
-            >
-              <div className="timeline-icon">
-                {getStageIcon(stage)}
-              </div>
+    const isStepActive = index <= stopIndex;
+    const isLineActive = index < stopIndex; // IMPORTANT FIX
 
-              {index !== stages.length - 1 && (
-                <div
-                  className={`timeline-line ${isActive ? "active" : ""}`}
-                />
-              )}
+    const isDeclined =
+      report.status === "Declined" &&
+      stage === "Reviewing";
 
-              <p>{stage}</p>
-            </div>
-          );
-        })}
+    return (
+      <div
+        key={stage}
+        className={`timeline-step 
+          ${isStepActive ? "active" : ""} 
+          ${isDeclined ? "declined" : ""}
+        `}
+      >
+        <div className="timeline-icon">
+          {getStageIcon(stage)}
+        </div>
+
+        {index !== stages.length - 1 && (
+          <div
+            className={`timeline-line 
+              ${isLineActive ? "active" : ""} 
+              ${isDeclined ? "declined" : ""}
+            `}
+          />
+        )}
+
+        <p>{stage}</p>
       </div>
+    );
+  })}
+</div>
     </div>
   ))
 )}

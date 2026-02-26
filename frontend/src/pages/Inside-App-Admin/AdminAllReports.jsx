@@ -38,7 +38,7 @@ function AdminAllReports() {
       location: "España Blvd, Manila",
       type: "Crack",
       severity: "Non-Critical",
-      status: "Pending",
+      status: "Completed",
       date: "2026-03-01",
     },
     // Add more if needed
@@ -109,7 +109,6 @@ function AdminAllReports() {
                   }
                 >
                   <option value="All">All Status</option>
-                  <option value="Pending">Pending</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Completed">Completed</option>
                 </select>

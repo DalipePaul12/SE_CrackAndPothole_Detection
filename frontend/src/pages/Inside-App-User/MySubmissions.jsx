@@ -46,6 +46,19 @@ function MySubmissions() {
       status: "Pending",
       date: "2026-03-01",
     },  
+        {
+      id: "Report#003",
+      reporterName: "Juan Dela Cruz",
+      contact: "09171234567",
+      location: "EDSA, Quezon City",
+      type: "Pothole",
+      severity: "Critical",
+      status: "Declined",
+      date: "2026-03-02",
+      fileUrl: "/snap.jpg",
+      fileType: "image",
+      additionalInfo: "Large pothole near the bus stop.",
+    },
   ];
 
   const filteredReports = reports.filter((r) => {
@@ -112,6 +125,7 @@ function MySubmissions() {
                           >
                             <option value="All">All Status</option>
                             <option value="Pending">Pending</option>
+                            <option value="Declined">Declined</option>
                             <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
                           </select>
