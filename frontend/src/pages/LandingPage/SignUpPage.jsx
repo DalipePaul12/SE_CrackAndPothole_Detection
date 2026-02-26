@@ -140,7 +140,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
         {/* LEFT COLUMN */}
         <div className="sign-up-left">
           <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />
-          <h1 className="sign-up-title">Snap2Fix PH</h1>
+          <h1 className="sign-up-title">Snap2Fix</h1>
           <p className="sign-up-slogan">
             Report road damage. Improve safety. Build better streets.
           </p>

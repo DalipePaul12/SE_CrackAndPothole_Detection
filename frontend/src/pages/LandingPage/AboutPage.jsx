@@ -15,7 +15,7 @@ function AboutPage() {
       
       {/* HERO SECTION */}
       <section className="about-hero">
-        <h1>Snap2Fix PH</h1>
+        <h1>Snap2Fix</h1>
         <p>
           Empowering communities to build safer roads through technology.
         </p>
@@ -23,7 +23,7 @@ function AboutPage() {
 
       <section className="meaning-section">
           <p>
-            Snap2Fix PH is designed to empower citizens to easily report road damage through an 
+            Snap2Fix is designed to empower citizens to easily report road damage through an 
             AI-powered web system. Its objective is to accurately detect, classify, and manage 
             road issues efficiently, enabling faster response from authorities and improving road 
             safety for communities.
@@ -35,7 +35,7 @@ function AboutPage() {
         <div className="about-card">
           <h2>Purpose of the Project <MdEmojiObjects className="about-icon" /></h2>
           <p>
-            Snap2Fix PH aims to help citizens report road damage easily and efficiently using
+            Snap2Fix aims to help citizens report road damage easily and efficiently using
             AI-powered tools. In line with this objective, the system enables authorities to
             quickly detect, classify, and respond to reported issues—leading to faster action,
             improved public safety, and better road conditions for communities.
@@ -59,7 +59,7 @@ function AboutPage() {
         <h2>Project Rationale <MdOutlineEmojiObjects className="about-icon" /></h2>
         <p>
           Poor road conditions are a major cause of accidents, traffic delays, and vehicle damage across 
-          the Philippines. Snap2Fix PH was created to bridge the gap between citizens and local authorities 
+          the Philippines. Snap2Fix was created to bridge the gap between citizens and local authorities 
           by providing a simple, transparent, and data-driven platform for reporting road damage. By enabling 
           residents to quickly capture and submit reports, the system empowers communities to take an active 
           role in improving local infrastructure. At the same time, authorities gain access to accurate and 

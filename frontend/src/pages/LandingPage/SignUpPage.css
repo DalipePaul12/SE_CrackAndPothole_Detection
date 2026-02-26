@@ -20,6 +20,7 @@ input[type="password"]::-webkit-textfield-decoration-container {
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  animation: fadeIn 0.4s ease forwards;
 }
 
 .sign-up-content {
@@ -33,6 +34,9 @@ input[type="password"]::-webkit-textfield-decoration-container {
   overflow: hidden;
   border: 1px solid #2d552dd6;
   box-shadow: 0 2px 4px rgba(1, 48, 32, 0.3);
+  transform: scale(0.9);
+  opacity: 0;
+  animation: popUp 0.4s ease forwards;
 }
 
 .sign-up-content.signup-small {
@@ -341,6 +345,54 @@ input[type="password"]::-webkit-textfield-decoration-container {
 .toggle-eye:hover {
   color: #2f6b2f;
 }
+
+/*animations*/
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popUp {
+  to { transform: scale(1); opacity: 1; }
+}
+
+.sign-up-label-form input,
+.icon-input-signup input,
+.sign-up-label-form select {
+  transition: all 0.3s ease;
+}
+
+.sign-up-label-form input:focus,
+.icon-input-signup input:focus,
+.sign-up-label-form select:focus {
+  outline: none;
+  border-color: #2d6a2d;
+  box-shadow: 0 0 0 4px rgba(45, 106, 45, 0.15);
+  background-color: #ffffff;
+  transform: translateY(-2px);
+}
+
+.sign-up-right button:active,
+.sign-up-right .button-submit-password:active {
+  transform: scale(0.97);
+}
+
+.toggle-eye:hover {
+  color: #2f6b2f;
+  transform: scale(1.1);
+  transition: all 0.2s ease;
+}
+
+@keyframes floatEffectSignup {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-50px); }
+  100% { transform: translateY(0); }
+}
+
+.sign-up-logo {
+  animation: floatEffectSignup 3s ease-in-out infinite;
+}
+
 
 /*Responsive*/
 /* Tablets / small screens ≤ 768px */

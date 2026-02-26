@@ -26,7 +26,7 @@ function Sidebar() {
       {/* LOGO */}
       <div className="sidebar-logo">
         <img src="/snap.jpg" alt="Snap2Fix Logo" />
-        <h2>Snap2Fix PH</h2>
+        <h2>Snap2Fix</h2>
       </div>
 
       {/* NAV LINKS */}

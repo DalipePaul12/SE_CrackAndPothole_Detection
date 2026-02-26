@@ -36,7 +36,7 @@ function HomePage({ onGetStarted, onLearnMore }) {
         {/* HOME SECTION */}
         <section className="home-section" /*style={homeStyle}*/>
           <div className="home-content">
-            <h1>Snap2Fix PH</h1>
+            <h1>Snap2Fix</h1>
             <p>AI - Powered Road Damage Reporting System</p>
 
             <div className="home-buttons">

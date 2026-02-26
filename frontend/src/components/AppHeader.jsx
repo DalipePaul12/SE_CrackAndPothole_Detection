@@ -18,7 +18,7 @@ function AppHeader() {
     <header className="app-header">
       {/* LEFT SIDE*/}
       <div className="app-header-left">
-        <h2>Snap2Fix PH</h2>
+        <h2>Snap2Fix</h2>
       </div>
 
       {/* RIGHT SIDE*/}

@@ -17,7 +17,7 @@ function Navbar({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
     <nav className="navbar">
 
       <div className="navbar-left">
-        <h1 className="logo">Snap2Fix PH <GiCrackedDisc className="logo-icon" /></h1>
+        <h1 className="logo">Snap2Fix <GiCrackedDisc className="logo-icon" /></h1>
       </div>
 
       <div className="navbar-right">

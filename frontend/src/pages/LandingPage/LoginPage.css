@@ -7,6 +7,7 @@
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  animation: fadeIn 0.35s ease forwards;
 }
 
 .login-content {
@@ -20,6 +21,9 @@
   overflow: hidden;
   border: 1px solid #2d552dd6;
   box-shadow: 0 2px 4px rgba(1, 48, 32, 0.3);
+  animation: popUp 0.4s ease forwards;
+  transform: scale(0.9);
+  opacity: 0;
 }
 
 /* LEFT SIDE */
@@ -82,10 +86,18 @@
 .label-form input {
   padding: 0.75rem 1.3rem;
   border-radius: 25px;
-  border: 0.5px solid #1832189d;
+  border: 1px solid #1832189d;
   color:#183218;
-  background-color: rgba(202, 241, 221, 0.556);
-  transition: border-color 0.2s, background-color 0.2s;
+  background-color: rgba(202, 241, 221, 0.811);
+  transition: all 0.3s ease;
+}
+
+.label-form input:focus {
+  outline: none;
+  border-color: #2d6a2d;
+  box-shadow: 0 0 0 4px rgba(45, 106, 45, 0.15);
+  background-color: #ffffff98;
+  transform: translateY(-1px);
 }
 
 .label-form ::placeholder {
@@ -127,6 +139,11 @@
 
 .login-right button:hover {
   background: linear-gradient(360deg,#316b34,#1c381e);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+}
+
+.login-right button:active {
+  transform: scale(0.97);
 }
 
 
@@ -134,6 +151,10 @@
   font-size: 1rem;     /* icon size */
   transition: transform 0.3s ease;
   margin-left: 10px;
+}
+
+.login-right button:hover .next-icon {
+  transform: translateX(6px);
 }
 
 
@@ -198,6 +219,7 @@
 .login-right .button-back:hover {
   background: #e0e0e0;
 }
+
 
 .login-right .button-submit-otp {
   margin-top: -5px;
@@ -282,6 +304,34 @@
   display: block;
   margin: 0 auto 1rem auto;
 }
+
+/*animations*/
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes popUp {
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes floatEffect {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-30px); }
+  100% { transform: translateY(0px); }
+}
+
+.login-logo {
+  animation: floatEffect 3s ease-in-out infinite;
+}
+
 
 /*Responsive*/
 /* Tablets / small screens ≤ 768px */
