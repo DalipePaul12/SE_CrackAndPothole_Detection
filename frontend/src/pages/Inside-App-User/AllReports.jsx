@@ -11,22 +11,45 @@ function AllReports() {
     status: "All",
   });
 
+  const [selectedReport, setSelectedReport] = useState(null); // NEW
+  const [isModalOpen, setIsModalOpen] = useState(false); // NEW
+
+  const handleRowClick = (report) => {
+    setSelectedReport(report);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedReport(null);
+  };
+
   const Allreports = [
     {
       id: "Report#001",
+      reporterName: "Juan Dela Cruz",
+      contact: "09171234567",
       location: "EDSA, Quezon City",
       type: "Pothole",
       severity: "Critical",
       status: "In Progress",
       date: "2026-03-02",
+      fileUrl: "/snap.jpg",
+      fileType: "image",
+      additionalInfo: "Large pothole near the bus stop.",
     },
     {
       id: "Report#002",
+      reporterName: "Maria Santos",
+      contact: "09181234567",
       location: "España Blvd, Manila",
       type: "Crack",
       severity: "Non-Critical",
       status: "Pending",
       date: "2026-03-01",
+      fileUrl: "/snap.jpg",
+      fileType: "image",
+      additionalInfo: "Small crack forming near intersection.",
     },
      {
       id: "Report#003",
@@ -182,7 +205,9 @@ function AllReports() {
             <tbody>
               {filteredAllReports.length > 0 ? (
                 filteredAllReports.map((report) => (
-                  <tr key={report.id}>
+                  <tr key={report.id}
+                    onClick={() => handleRowClick(report)}
+                    className="clickable-row">
                     <td>
                       <strong>{report.id}</strong>
                       <div className="report-location-allreports" title={report.location}>
@@ -221,6 +246,55 @@ function AllReports() {
             </tbody>
           </table>
         </div>
+
+        {/* MODAL */}
+        {isModalOpen && selectedReport && (
+          <div className="modal-overlay" onClick={closeModal}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close-btn" onClick={closeModal}>×</button>
+              <h3 className="modal-title">Report Details</h3>
+
+              <div className="modal-body">
+                {/* LEFT SIDE */}
+                <div className="modal-left">
+                  <div className="reporter-info">
+                    <div className="info-row">
+                      <strong>Report:</strong> {selectedReport.id}
+                    </div>
+                    <div className="info-row">
+                      <strong>Reporter Name:</strong> {selectedReport.reporterName}
+                    </div>
+                    <div className="info-row">
+                      <strong>Contact:</strong> {selectedReport.contact}
+                    </div>
+                  </div>
+
+                  <div className="info-card">
+                    <p><strong>Damage Type:</strong> {selectedReport.type}</p>
+                    <p><strong>Severity:</strong> {selectedReport.severity}</p>
+                    <p><strong>Additional Info:</strong></p>
+                    <p className="additional-info">{selectedReport.additionalInfo}</p>
+                  </div>
+
+                  <div className="location-info">
+                    <p><strong>Location:</strong> {selectedReport.location}</p>
+                  </div>
+                </div>
+
+                {/* RIGHT SIDE */}
+                <div className="modal-right">
+                  <div className="modal-media">
+                    {selectedReport.fileUrl && selectedReport.fileType === "video" ? (
+                      <video src={selectedReport.fileUrl} controls />
+                    ) : (
+                      <img src={selectedReport.fileUrl} alt="Report File" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
