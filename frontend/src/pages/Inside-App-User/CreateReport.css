@@ -200,7 +200,7 @@
     letter-spacing: 0.6px;
 }
 
-.reporter-info {
+.reporter-infoo {
   display: flex;
   gap: 15px;
 }
@@ -310,7 +310,7 @@
 }
 
 
-.reporter-info label {
+.reporter-infoo label {
     font-size: 0.9rem;
     opacity: 0.7;
     letter-spacing: 0.6px;
@@ -318,7 +318,7 @@
     font-weight: 600;
 }
 
-.reporter-info input {
+.reporter-infoo input {
     padding: 10px 20px;
     width: 100%;
     border-radius: 15px;
@@ -328,13 +328,13 @@
     margin-bottom: 20px;
 }
 
-.additional-info {
+.additional-infoo {
   display: flex;
   flex-direction: column;
   margin-top: 0;
 }
 
-.additional-info label {
+.additional-infoo label {
     font-size: 0.9rem;
     opacity: 0.7;
     letter-spacing: 0.6px;
@@ -342,7 +342,7 @@
     font-weight: 600;
 }
 
-.additional-info textarea {
+.additional-infoo textarea {
   resize: none;
   padding: 15px 15px;
   border-radius: 15px;
@@ -354,7 +354,7 @@
   margin-top: 7px;
 }
 
-.additional-info textarea:focus {
+.additional-infoo textarea:focus {
   border: 1px solid #0e7a31;
   background: white;
 }

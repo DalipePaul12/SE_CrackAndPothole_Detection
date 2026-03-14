@@ -8,6 +8,7 @@ import { IoSettingsSharp } from "react-icons/io5";
 import { MdAdminPanelSettings } from "react-icons/md";
 import { GiBookshelf } from "react-icons/gi";
 import { IoBook } from "react-icons/io5";
+import { FaStreetView } from "react-icons/fa6";
 
 function AdminSidebar() {
   const location = useLocation();
@@ -75,6 +76,15 @@ function AdminSidebar() {
           }`}
         >
           <IoBook /> Manage Reports
+        </Link>
+
+        <Link
+          to="/adminpanel/managestreets"
+          className={`admin-sidebar-link ${
+            location.pathname === "/adminpanel/managestreets" ? "active" : ""
+          }`}
+        >
+          <FaStreetView /> Manage Streets
         </Link>
         </div>
 

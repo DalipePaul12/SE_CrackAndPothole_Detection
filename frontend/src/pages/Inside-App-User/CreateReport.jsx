@@ -279,7 +279,7 @@ function CreateReport({ onClose }) {
             </div>
           </div>
 
-          <div className="reporter-info">
+          <div className="reporter-infoo">
             <div>
               <label>REPORTER'S NAME</label>
               <input type="text" value={userName} required readOnly/>
@@ -297,7 +297,7 @@ function CreateReport({ onClose }) {
             </div>
           </div>
 
-            <div className="additional-info">
+            <div className="additional-infoo">
             <label>ADDITIONAL INFORMATION</label>
 
             <textarea

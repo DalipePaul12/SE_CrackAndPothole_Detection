@@ -1,0 +1,392 @@
+/* ── PAGE CONTAINER ─────────────────────────────────────────────────────────── */
+.asr-container {
+  padding: 2rem;
+  background-color: rgba(250, 238, 228, 0.722);
+  min-height: 100vh;
+  width: calc(100% - 255px);
+  margin-left: 255px;
+}
+
+/* ── FILTERS CARD ────────────────────────────────────────────────────────────── */
+.asr-filters-card {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  padding: 20px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  border-radius: 30px;
+  margin-top: 70px;
+  border-bottom: 1px solid #3a7d44;
+}
+
+.asr-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+}
+
+.asr-header h2 {
+  font-size: 1.5rem;
+  color: #555;
+  font-weight: 600;
+  margin: 0;
+}
+
+.asr-total-badge {
+  background: linear-gradient(135deg, #3a7d44, #5dab6a);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 20px;
+  letter-spacing: 0.03em;
+}
+
+.asr-filters-row {
+  display: flex;
+  gap: 150px;
+  align-items: flex-end;
+}
+
+/* Reuse existing filter group + select styles via shared classes */
+/* (admin-filter-group, admin-filter-buttons, admin-custom-select are defined
+    in AdminAllReports.css which is globally loaded — we just reference them) */
+
+/* ── TABLE CARD ──────────────────────────────────────────────────────────────── */
+.asr-table-card {
+  background: #ffffff;
+  border-radius: 30px;
+  padding: 20px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid #3a7d44;
+  overflow-x: auto;
+}
+
+/* ── TABLE ───────────────────────────────────────────────────────────────────── */
+.asr-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.asr-table thead tr {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fff;
+}
+
+.asr-table th {
+  text-align: left;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: #444;
+  padding: 0 0 15px 18px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.col-expand {
+  width: 36px;
+  padding-left: 12px !important;
+}
+
+/* ── STREET ROW ──────────────────────────────────────────────────────────────── */
+.asr-street-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.asr-street-row td {
+  padding: 14px 0 14px 18px;
+  border-top: 1px solid #ddd;
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+.asr-street-row:hover {
+  background: rgba(201, 231, 206, 0.35);
+}
+
+.asr-street-row.expanded {
+  background: rgba(58, 125, 68, 0.06);
+}
+
+.asr-street-name {
+  font-weight: 600;
+  color: #2e4b2f;
+  font-size: 0.95rem;
+}
+
+/* Chevron */
+.chevron {
+  display: inline-block;
+  font-size: 1.3rem;
+  color: #3a7d44;
+  transition: transform 0.25s ease;
+  line-height: 1;
+  font-weight: 700;
+}
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+/* Total pill */
+.asr-total-pill {
+  display: inline-block;
+  background: linear-gradient(135deg, #3a7d44, #5dab6a);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 4px 14px;
+  border-radius: 20px;
+  min-width: 32px;
+  text-align: center;
+}
+
+/* Type badges */
+.asr-type-badges,
+.asr-sev-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.type-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.type-badge.pothole {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+}
+
+.type-badge.crack {
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+}
+
+.sev-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.sev-badge.critical {
+  background: #fdecea;
+  color: #740505;
+  border: 1px solid #ef9a9a;
+}
+
+.sev-badge.non-critical {
+  background: #e8f5e9;
+  color: #0ea91d;
+  border: 1px solid #a5d6a7;
+}
+
+/* ── CHILD HEADER ROW ────────────────────────────────────────────────────────── */
+.asr-child-header-row td {
+  padding: 10px 0 6px 18px;
+  background: rgba(58, 125, 68, 0.05);
+}
+
+.asr-child-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 20px;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.asr-child-count {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #3a7d44;
+  background: #e8f5e9;
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+
+/* ── CHILD REPORT ROWS ───────────────────────────────────────────────────────── */
+.asr-child-row td {
+  padding: 11px 0 11px 18px;
+  border-top: 1px dashed #ddd;
+  font-size: 0.88rem;
+  background: rgba(248, 253, 249, 0.8);
+  vertical-align: middle;
+}
+
+.asr-child-row:hover td {
+  background: rgba(180, 230, 190, 0.25) !important;
+}
+
+.asr-report-id {
+  font-size: 0.88rem;
+  color: #2e4b2f;
+}
+
+/* ── SPACER ──────────────────────────────────────────────────────────────────── */
+.asr-spacer-row td {
+  padding: 6px 0;
+  background: transparent;
+  border: none;
+}
+
+/* ── STATUS / SEVERITY (reused from AdminAllReports) ─────────────────────────── */
+.admin-severity.critical     { color: #740505; font-weight: 600; }
+.admin-severity.non-critical { color: #0ea91d; font-weight: 600; }
+.admin-status.pending        { color: #777;    font-weight: 600; }
+.admin-status.in-progress    { color: #e97537; font-weight: 600; }
+.admin-status.completed      { color: #2e7d32; font-weight: 600; }
+.admin-no-data               { text-align: center; padding: 20px; color: #888; font-size: 0.9rem; text-transform: uppercase; }
+
+/* ── MODAL (mirrors AdminAllReports exactly) ──────────────────────────────────── */
+.modal-overlay {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  background: #fff;
+  width: 80%; max-width: 900px;
+  border-radius: 20px;
+  padding: 25px;
+  position: relative;
+  display: flex; flex-direction: column;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+}
+
+.modal-close-btn {
+  position: absolute; top: 15px; right: 20px;
+  background: transparent; border: none;
+  font-size: 1.8rem; cursor: pointer;
+  color: #444; font-weight: bold;
+}
+
+.modal-title {
+  font-size: 1.5rem; text-align: center;
+  color: #12691c; margin-bottom: 20px;
+}
+
+.modal-body { display: flex; gap: 30px; flex-wrap: wrap; }
+
+.modal-left {
+  flex: 1; min-width: 250px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+.reporter-info {
+  background: #e8f5e9; border-radius: 15px;
+  padding: 15px; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.info-row {
+  display: flex; justify-content: space-between;
+  font-weight: 500; color: #333;
+}
+
+.info-card {
+  display: flex; flex-direction: column;
+  background: #f0fdf4; border-radius: 15px;
+  padding: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.info-card p { margin-bottom: 10px; font-size: 0.95rem; color: #333; }
+
+.additional-info {
+  background: #fff; padding: 10px;
+  border-radius: 10px; border: 1px solid #c4e3c4;
+  font-style: italic; color: #555;
+  max-height: 150px; overflow-y: auto;
+  word-wrap: break-word; white-space: pre-wrap;
+}
+
+.location-info {
+  background: #f0fdf4; border-radius: 15px;
+  padding: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  max-height: 120px; overflow-y: auto;
+  text-align: center; word-wrap: break-word;
+}
+
+.modal-right {
+  flex: 1; min-width: 250px;
+  display: flex; justify-content: center; align-items: center;
+}
+
+.modal-media {
+  display: flex; justify-content: center; align-items: center;
+  background: #f4f4f4; padding: 10px;
+  border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  min-height: 200px; min-width: 200px;
+}
+
+.modal-media img, .modal-media video {
+  max-width: 100%; border-radius: 15px;
+}
+
+.modal-no-media {
+  color: #aaa; font-size: 0.9rem; font-style: italic;
+}
+
+/* ── FILTER WIDGETS (duplicated here for self-containment) ───────────────────── */
+.admin-filter-group {
+  display: flex; flex-direction: column;
+  gap: 12px; margin-left: 18px;
+}
+.admin-filter-group label {
+  font-size: 0.9rem; font-weight: 600;
+  color: #666; text-transform: uppercase;
+}
+.admin-filter-buttons { display: flex; gap: 25px; }
+.admin-filter-buttons button {
+  padding: 10px 30px; border-radius: 20px;
+  border: 1px solid #168206; background: white; cursor: pointer;
+}
+.admin-filter-buttons button:hover {
+  background: linear-gradient(360deg, #90e99093, #c4e3c4);
+  color: black; border-color: #3a7d44;
+  box-shadow: 0 4px 5px rgba(0,0,0,0.5);
+}
+.admin-filter-buttons button.active {
+  background: linear-gradient(360deg, #33733393, #367636);
+  color: white; border-color: #3a7d44;
+  box-shadow: 0 4px 5px rgba(0,0,0,0.5);
+}
+.admin-custom-select { position: relative; width: 230px; }
+.admin-custom-select select {
+  width: 100%; padding: 10px 40px 10px 12px;
+  border-radius: 15px; border: 1px solid #168206;
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background: linear-gradient(360deg, #90e99093, #c4e3c4);
+  box-shadow: 0 4px 5px rgba(0,0,0,0.5); cursor: pointer;
+}
+.admin-custom-select select:hover {
+  background: linear-gradient(180deg, #659e65c2, #c4e3c4);
+  color: black; border-color: #3a7d44;
+  box-shadow: 0 4px 5px rgba(0,0,0,0.4);
+}
+.admin-custom-select::after {
+  content: "▼"; position: absolute;
+  right: 12px; top: 50%; transform: translateY(-50%);
+  pointer-events: none; font-size: 0.79rem; color: #555;
+}
+.admin-custom-select select:focus {
+  outline: 1px solid #0c4802; border-color: #3a7d44;
+}
+.clickable-row { cursor: pointer; }
