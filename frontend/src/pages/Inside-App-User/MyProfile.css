@@ -576,3 +576,379 @@
 .no-reports p {
   font-size: 0.9rem;
 }
+
+/* ================= TABLET ================= */
+@media (max-width: 1024px) {
+
+  .myprofile-container{
+    width:100%;
+    margin-left:0;
+    padding:20px;
+  }
+
+  .profile-header{
+    gap:20px;
+    padding:25px;
+  }
+
+  .profile-avatar{
+    width:100px;
+    height:100px;
+  }
+
+  .profile-info h2{
+    font-size:1.6rem;
+  }
+
+  .profile-bio{
+    font-size:0.85rem;
+  }
+
+  .stat-card{
+    min-width:90px;
+    padding:12px;
+  }
+
+  .stat-card span{
+    font-size:1.4rem;
+  }
+
+  .report-card{
+    max-width:95%;
+    padding:25px;
+  }
+
+  .report-main img{
+    width:230px;
+    height:170px;
+  }
+
+}
+
+/* ================= MOBILE ================= */
+@media (max-width: 768px){
+
+  .myprofile-container{
+    margin-left: 0;
+    padding: 10px;
+  }
+
+  /* PROFILE HEADER */
+  .profile-header{
+    flex-direction: column;
+    text-align: center;
+    gap: 15px;
+    padding: 50px 10px;
+    display: flex;
+    background: #fff;
+    border-radius: 45px;
+    box-shadow: 0 6px 5px rgba(0, 0, 0, 0.4);
+    align-items: center;
+    margin-top: 90px;
+    border-bottom: 1px solid #0e7a31;
+    margin-bottom: 40px;
+  }
+
+  .profile-avatar{
+    width: 120px;
+    height: 120px;
+  }
+
+  .profile-info h2{
+    font-size: 2rem;
+    max-width: 100%;
+  }
+
+  .profile-bio{
+    font-size: 0.8rem;
+    max-width: 100%;
+    color:#034503;
+  }
+
+  /* STATS */
+  .profile-stats{
+    justify-content:center;
+    gap: 10px;
+  }
+
+  .stat-card{
+    min-width:90px;
+    padding:15px;
+  }
+
+  .stat-card span{
+    font-size:1.5rem;
+  }
+
+  .stat-card p{
+    font-size:0.75rem;
+  }
+
+  /* TABS */
+  .profile-tabs{
+    gap: 30px;
+    justify-content:center;
+    flex-wrap:wrap;
+  }
+
+  .profile-tabs button{
+    padding: 10px 45px;
+    font-size: 0.8rem;
+    border-radius: 20px;
+  }
+
+  .profile-content {
+  background-color: rgba(250, 238, 228, 0.722);
+  border-radius: 30px;
+  padding: 20px;
+}
+.profile-content-header {
+  display: flex;
+  justify-content: space-between; /* key line */
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.profile-content .profile-content-title h2 {
+  font-size: 0.9rem;
+  color: #4e6c4ac1;
+  text-transform: uppercase;
+  margin-left: 10px;
+}
+
+.feed-filters {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 10px;
+  margin-right: 10px;
+  margin-top: 10px;
+}
+
+.feed-filters button {
+  padding: 5px 15px;
+  border-radius: 15px;
+  border: 1px solid #000;
+  background: #e6ebe8;
+  cursor: pointer;
+}
+
+  /* REPORT CARD */
+  .report-card{
+    padding: 30px;
+    border-radius: 30px;
+    max-width: 100%;
+  }
+
+  .report-main{
+    flex-direction: column;
+    align-items: center;
+    gap: 25px;
+  }
+
+  .report-main img{
+    width: 380px;
+    height: 280px;
+    object-fit: cover;
+  }
+
+  .ai-result{
+    width: 100%;
+    min-width: auto;
+  }
+
+  .ai-result h4{
+    font-size: 1rem;
+  }
+
+  .ai-result h5{
+    font-size: 0.9rem;
+  }
+
+  .ai-result p{
+    font-size:0.8rem;
+  }
+
+  .report-location{
+    font-size:0.8rem;
+  }
+
+  .report-description{
+    font-size:0.8rem;
+  }
+
+}
+
+@media (max-width:768px){
+
+  .status-timeline{
+    gap:5px;
+  }
+
+  .timeline-step{
+    flex:1;
+  }
+
+  .timeline-icon{
+    width:32px;
+    height:32px;
+    font-size:0.9rem;
+  }
+
+  .timeline-step p{
+    font-size:0.6rem;
+  }
+
+  .timeline-line{
+    top:16px;
+    height:3px;
+  }
+
+}
+
+@media (max-width:480px){
+
+  .profile-info h2{
+    font-size:1.1rem;
+  }
+
+  .profile-bio{
+    font-size:0.75rem;
+  }
+
+  .timeline-icon{
+    width:28px;
+    height:28px;
+    font-size:0.8rem;
+  }
+
+  .timeline-step p{
+    font-size:0.55rem;
+  }
+
+}
+
+@media (max-width: 1024px){
+
+  .profile-settings{
+    width:100%;
+    padding:25px;
+  }
+
+  .profile-settings h3{
+    font-size:1.35rem;
+  }
+
+  .profile-settings p{
+    font-size:0.8rem;
+  }
+
+  .avatar-wrapper{
+    width:130px;
+    height:130px;
+  }
+
+  .settings-form input,
+  .settings-form textarea{
+    font-size:0.85rem;
+  }
+
+}
+
+@media (max-width:768px){
+
+  .profile-settings{
+    width: 100%;
+    padding: 30px;
+    border-radius: 30px;
+  }
+
+  .profile-settings h3{
+    font-size: 1.5rem;
+    justify-content: center;
+    align-content: center;
+    display: flex;
+  }
+
+  .profile-settings p{
+    font-size:0.85rem;
+    text-align: center;
+  }
+
+  /* AVATAR */
+  .avatar-wrapper{
+    width: 110px;
+    height: 110px;
+  }
+
+  .camera-btn{
+    width: 34px;
+    height: 34px;
+  }
+
+  .change-camera-icon{
+    font-size:1rem;
+  }
+
+  /* FORM */
+  .settings-form input,
+  .settings-form textarea{
+    padding: 15px 12px;
+    font-size: 0.8rem;
+    border-radius: 30px;
+  }
+
+  .settings-form label{
+    font-size:0.75rem;
+    letter-spacing: 0px;
+    margin-top: -5px;
+  }
+
+  .input-icon{
+    font-size: 13px;
+    left: 17px;
+  }
+
+  .input-with-icon input{
+    padding-left: 45px;
+  }
+
+  /* BUTTONS */
+  .settings-actions{
+    flex-direction:column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .settings-actions button{
+    width: 100%;
+    font-size:0.9rem;
+    padding: 10px;
+  }
+
+}
+
+@media (max-width:480px){
+
+  .profile-settings{
+    padding:15px;
+  }
+
+  .profile-settings h3{
+    font-size:1.1rem;
+  }
+
+  .profile-settings p{
+    font-size:0.7rem;
+  }
+
+  .avatar-wrapper{
+    width:95px;
+    height:95px;
+  }
+
+  .settings-form input,
+  .settings-form textarea{
+    font-size:0.75rem;
+  }
+
+}

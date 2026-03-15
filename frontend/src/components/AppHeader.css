@@ -85,6 +85,8 @@
   display: none;
 }
 
+
+/*responsiveness*/
 /* show burger only on tablet/mobile */
 @media (max-width: 1024px){
 

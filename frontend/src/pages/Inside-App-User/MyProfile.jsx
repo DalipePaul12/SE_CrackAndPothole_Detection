@@ -113,6 +113,14 @@ function MyProfile() {
       <Sidebar />
       <AppHeader />
 
+      <div 
+      className="sidebar-overlay"
+      onClick={() => {
+        document.querySelector(".app-sidebar").classList.remove("active");
+        document.querySelector(".sidebar-overlay").classList.remove("active");
+      }}
+    ></div>
+
       <div className="myprofile-container">
         <div className="profile-header">
           {/* LEFT: AVATAR */}
