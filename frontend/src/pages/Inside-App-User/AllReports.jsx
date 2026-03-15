@@ -130,6 +130,14 @@ function AllReports() {
       <Sidebar />
       <AppHeader />
 
+      <div 
+      className="sidebar-overlay"
+      onClick={() => {
+        document.querySelector(".app-sidebar").classList.remove("active");
+        document.querySelector(".sidebar-overlay").classList.remove("active");
+      }}
+    ></div>
+
       <div className="allreports-container">
         {/* FILTERS */}
         <div className="allreports-filters">

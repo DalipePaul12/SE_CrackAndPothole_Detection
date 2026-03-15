@@ -387,3 +387,164 @@
 .clickable-row:hover {
   background: rgba(201, 231, 206, 0.3);
 }
+
+/* ================= TABLET ================= */
+@media (max-width: 1024px) {
+ 
+  .my-submissions-container {
+    width: 100%;
+    margin-left: 0;
+    background-color: rgba(250, 238, 228, 0.722);
+    height: 100vh;
+  }
+ 
+  .filters-row {
+    flex-wrap: wrap;
+    gap: 40px;
+  }
+ 
+  .filter-buttons {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+ 
+  .custom-select {
+    width: 200px;
+  }
+ 
+}
+ 
+/* ================= MOBILE ================= */
+@media (max-width: 768px) {
+ 
+  .my-submissions-container {
+    padding: 15px;
+    height: 100vh;
+    background-color: rgba(250, 238, 228, 0.722);
+  }
+ 
+  .submissions-filters {
+    padding: 25px;
+  }
+ 
+  .filters-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+ 
+  .filter-group {
+    margin-left: 0;
+    width: 100%;
+  }
+ 
+  .filter-buttons {
+    width: 100%;
+    padding: 0 20px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+ 
+  .filter-buttons button {
+    flex: 1;
+    padding: 5px 10px;
+    font-size: 0.85rem;
+  }
+ 
+  .custom-select {
+    width: 100%;
+  }
+ 
+}
+ 
+/* ================= TABLE SCROLL FOR MOBILE ================= */
+@media (max-width: 768px) {
+ 
+  /* Target th and td more specifically */
+  .submissions-table thead th,
+  .submissions-table tbody tr td {
+    font-size: 0.80rem;  /* smaller font for all cells */
+    padding: 10px 6px;    /* reduce padding */
+  }
+
+  .submissions-table tbody tr td {
+    font-size: 0.77rem;  /* smaller font for all cells */
+  }
+
+  /* If you have location cell class */
+  .submissions-table .report-location {
+    font-size: 0.65rem;
+  }
+
+  .submissions-table-container {
+    padding: 5px;
+  }
+
+  /* Fix table layout */
+  .submissions-table {
+    table-layout: fixed;
+    width: 100%;
+  }
+ 
+  .submissions-table th,
+  .submissions-table td {
+    word-break: break-word;
+  }
+ 
+  button {
+    min-height: 40px;
+  }
+ 
+  select {
+    min-height: 40px;
+  }
+ 
+}
+ 
+/* ================= MOBILE MODAL ================= */
+@media (max-width: 768px) {
+ 
+  .modal-content {
+    width: 90%;
+    max-width: 600px;
+    padding: 15px;
+  }
+ 
+  .modal-body {
+    gap: 15px;
+  }
+ 
+  .modal-left {
+    min-width: 150px;
+  }
+ 
+  .modal-right {
+    min-width: 150px;
+  }
+ 
+  .modal-title {
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+  }
+ 
+  .info-card p,
+  .info-row {
+    font-size: 0.8rem;
+  }
+ 
+  .additional-info {
+    font-size: 0.75rem;
+  }
+ 
+  .location-info {
+    font-size: 0.8rem;
+  }
+ 
+  .modal-media img,
+  .modal-media video {
+    width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+  }
+ 
+}

@@ -411,6 +411,17 @@
   .otp-footer {
     font-size: 0.85rem;
   }
+
+  
+@keyframes floatEffect {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+  100% { transform: translateY(0px); }
+}
+
+.login-logo {
+  animation: floatEffect 3s ease-in-out infinite;
+}
 }
 
 /* Extra small devices ≤ 480px (phones) */

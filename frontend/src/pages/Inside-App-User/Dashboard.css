@@ -187,3 +187,77 @@
   justify-content: space-between;
   align-items: center;
 }
+
+/* ================= MOBILE RESPONSIVENESS ================= */
+
+/* Tablet */
+@media (max-width: 1024px) {
+
+  .dashboard-summary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-container {
+    width: 100%;
+    margin-left: 0;
+    padding: 1.5rem;
+    height: 100%;
+  }
+
+  .dashboard-panel,
+  .dashboard-panel-damagecategories,
+  .dashboard-panel-submissiontrends{
+    padding:15px;
+    border-radius:25px;
+  }
+
+  .dashboard-panel-submissiontrends {
+    margin-bottom: 20px;
+  }
+
+}
+
+
+/* Mobile */
+@media (max-width: 768px) {
+
+  .dashboard-summary {
+    grid-template-columns: 1fr;
+    /*grid-template-columns: repeat(2, 1fr);*/
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-container {
+    padding: 15px;
+  }
+
+  .dashboard-panel-damagecategories{
+    height:250px;
+  }
+
+  .activity-card{
+    width:100%;
+    padding:12px 16px;
+    font-size:0.85rem;
+  }
+
+} 
+
+@media (max-width:1024px){
+
+  .dashboard-container{
+    margin-left:0;
+    width:100%;
+    margin-top: 15px;
+    padding-bottom: 10px;
+  }
+
+}

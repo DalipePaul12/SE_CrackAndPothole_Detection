@@ -38,6 +38,7 @@
   border-bottom-left-radius: 25px;
   border-bottom-right-radius: 25px;
   width: 100%;  
+  flex-wrap: wrap;
 }
 
 .notifications-header-left {
@@ -125,4 +126,144 @@
   font-size: 1.7rem;
   color: #458745;
   margin-left: 20px;
+}
+
+/* ===== Mobile Responsiveness ===== */
+
+@media (max-width: 1024px) {
+  .notifications-container {
+    width: 100%;
+    margin-left: 0;
+    padding: 15px 20px;
+  }
+
+  .notifications-panel {
+    max-width: 100%;
+    padding: 15px 15px;
+    margin-top: 70px;
+    height: 86.5vh;
+  }
+
+  .notifications-header {
+    padding: 15px 20px;
+    font-size: 0.7rem;
+    flex-direction: row; /* Keep row layout on mobile */
+    justify-content: space-between; /* Push button to the right */
+    align-items: center;
+    gap: 8px;
+    z-index: 0;
+  }
+
+  .notifications-header-left {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .notifications-container {
+    width: 100%;
+    margin-left: 0;
+    padding: 15px 20px;
+  }
+
+  .notifications-panel {
+    max-width: 100%;
+    padding: 15px 15px;
+    margin-top: 70px;
+    height: 86.5vh;
+  }
+
+  .notifications-header {
+    padding: 15px 20px;
+    font-size: 0.7rem;
+    flex-direction: row; /* Keep row layout on mobile */
+    justify-content: space-between; /* Push button to the right */
+    align-items: center;
+    gap: 8px;
+    z-index: 0;
+  }
+  
+
+  .notifications-header-left {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .mark-all-btn {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    flex-shrink: 0; /* Prevent button from shrinking too small */
+  }
+
+  .notifications-list {
+    padding: 10px 15px;
+    gap: 5px;
+  }
+
+  .notification-card {
+    flex-direction: column;
+    padding: 5px 15px;
+    border-radius: 15px;
+  }
+
+  .notification-icon {
+    font-size: 1rem;
+  }
+
+  .notification-content h3 {
+    font-size: 0.95rem;
+  }
+
+  .notification-content p {
+    font-size: 0.85rem;
+  }
+
+  .notification-time,
+  .notification-date {
+    font-size: 0.7rem;
+  }
+
+  .fabell-icon {
+    font-size: 1.5rem;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .notifications-header {
+    padding: 10px 15px;
+    font-size: 0.85rem;
+  }
+
+  .mark-all-btn {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+
+  .notifications-list {
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .notification-card {
+    padding: 10px 12px;
+  }
+
+  .notification-content h3 {
+    font-size: 0.9rem;
+  }
+
+  .notification-content p {
+    font-size: 0.8rem;
+  }
+
+  .notification-time,
+  .notification-date {
+    font-size: 0.65rem;
+  }
+
+  .notification-icon {
+    font-size: 1.2rem;
+  }
 }

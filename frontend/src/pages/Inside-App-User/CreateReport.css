@@ -402,3 +402,162 @@
 .discard-btn:hover {
   background-color: rgba(250, 238, 228, 0.722);
 }
+
+/* ================= MOBILE RESPONSIVENESS ================= */
+@media (max-width: 768px) {
+  .report-modal {
+    width: 92%;
+    height: 88vh;
+    flex-direction: column;  /* stack left on top of right */
+    overflow-y: auto;        /* single continuous scroll for the whole modal */
+    overflow-x: hidden;
+    border-radius: 20px;
+  }
+
+  /* both panels flow naturally — no fixed height, no individual scroll */
+  .report-left,
+  .report-right {
+    flex: none;
+    width: 100%;
+    height: auto;
+    overflow-y: visible;
+    padding: 20px;
+  }
+
+  .report-left {
+    border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .file-type-buttons {
+    gap: 15px;
+  }
+
+  .file-type-buttons button {
+    padding: 8px 58px;
+    font-size: 0.75rem;
+  }
+
+  .upload-box {
+    height: 210px;
+  }
+
+  .camera-button,
+  .upload-btn {
+    min-width: 130px;
+    font-size: 0.8rem;
+    padding: 8px;
+  }
+
+  .classification-box {
+    gap: 8px;
+  }
+
+  .reporter-infoo {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .report-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .submit-btn {
+    padding: 12px;
+    width: 100%;
+    text-align: center;
+  }
+
+  .discard-btn {
+    padding: 12px;
+    width: 100%;
+    text-align: center;
+  }
+
+  .map-modal {
+    width: 90%;
+    height: auto;
+    max-height: 85vh;
+    padding: 15px 20px;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .report-modal {
+    width: 96%;
+    height: 92vh;
+    border-radius: 15px;
+  }
+
+  .report-left,
+  .report-right {
+    padding: 15px;
+  }
+
+  .report-left h2 {
+    font-size: 1rem;
+  }
+
+  .file-type-buttons {
+    gap: 10px;
+  }
+
+  .file-type-buttons button {
+    padding: 7px 18px;
+    font-size: 0.7rem;
+    gap: 6px;
+  }
+
+  .upload-box {
+    height: 170px;
+  }
+
+  .camera-button,
+  .upload-btn {
+    min-width: 110px;
+    font-size: 0.75rem;
+    padding: 7px 6px;
+  }
+
+  .result-box {
+    font-size: 0.65rem;
+    padding: 8px;
+  }
+
+  .location-section .location-input input,
+  .reporter-infoo input,
+  .additional-infoo textarea {
+    font-size: 0.8rem;
+    padding: 10px 15px;
+  }
+
+  .location-section .location-input input {
+    padding-right: 40px;
+  }
+
+  .location-icon {
+    font-size: 15px;
+    right: 12px;
+  }
+
+  .submit-btn,
+  .discard-btn {
+    font-size: 0.85rem;
+    border-radius: 12px;
+  }
+
+  .map-modal {
+    width: 95%;
+    padding: 12px 15px;
+  }
+
+  .map-modal h3 {
+    font-size: 0.95rem;
+  }
+
+  .map-modal .current-loc {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+}

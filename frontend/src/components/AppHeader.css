@@ -17,6 +17,12 @@
   border-bottom: #19391993 2px solid;
 }
 
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
 .app-header-left h2 {
   font-size: 1.6rem;
   color: #193919;
@@ -68,4 +74,46 @@
 
 .logout-btn:hover {
   background: #184a18;
+}
+
+.burger-btn{
+  font-size: 1.4rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  margin-right: 15px;
+  display: none;
+}
+
+/* show burger only on tablet/mobile */
+@media (max-width: 1024px){
+
+  .burger-btn{
+    display: block;
+  }
+
+}
+
+@media (max-width: 1024px){
+
+  .app-header{
+    left: 0;
+  }
+
+}
+
+@media (max-width: 768px){
+
+  .app-header{
+    padding: 0 20px;
+  }
+
+  .app-header-right{
+    gap: 15px;
+  }
+
+  .user-name{
+    display:none; /* optional if space is tight */
+  }
+
 }

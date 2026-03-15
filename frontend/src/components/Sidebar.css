@@ -177,3 +177,46 @@
   border-radius: 10px;
   font-weight: 600;
 }
+
+/* SIDEBAR BACKGROUND OVERLAY */
+.sidebar-overlay{
+  position: fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.2);
+  opacity:0;
+  visibility:hidden;
+  transition:0.3s;
+  z-index:900;
+}
+
+.sidebar-overlay.active{
+  opacity:1;
+  visibility:visible;
+}
+
+.app-sidebar{
+  z-index:1000;
+}
+
+/* MOBILE SIDEBAR */
+@media (max-width: 1024px) {
+
+  .app-sidebar {
+    position: fixed;
+    left: -300px;
+    top: 0;
+    height: 100%;
+    transition: 0.3s;
+    z-index: 1000;
+  }
+
+  .app-sidebar.active {
+    left: 0;
+  }
+
+}
+

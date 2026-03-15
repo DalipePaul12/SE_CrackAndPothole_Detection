@@ -99,6 +99,14 @@ const summary = {
       <AppHeader />
       <Sidebar />
 
+      <div 
+      className="sidebar-overlay"
+      onClick={() => {
+        document.querySelector(".app-sidebar").classList.remove("active");
+        document.querySelector(".sidebar-overlay").classList.remove("active");
+      }}
+    ></div>
+
       <div className="dashboard-container">
         {/* TOP SUMMARY */}
         <div className="dashboard-summary">
