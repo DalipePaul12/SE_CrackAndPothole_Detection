@@ -30,7 +30,7 @@ python-multipart
 slowapi
 
 # AI / Media Processing
-opencv-python
+opencv-python-headless
 ffmpeg-python
 
 # Background Jobs & Caching
@@ -41,3 +41,5 @@ celery
 loguru
 pytest
 httpx
+
+aiofiles
