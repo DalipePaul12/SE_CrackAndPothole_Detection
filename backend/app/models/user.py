@@ -16,6 +16,7 @@ class User(Base):
     country = Column(String, default="Philippines") # Default na PH
     city = Column(String, nullable=True)
     barangay = Column(String, nullable=True)
+    street = Column(String, nullable=True)
     # ---------------------
 
     role = Column(String, default="citizen") 
