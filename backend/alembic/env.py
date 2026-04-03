@@ -11,7 +11,6 @@ load_dotenv()
 # Add backend to path so we can import our models
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.config import settings
 from app.db.base import Base
 
 # Import ALL models here so Alembic can detect them
@@ -30,14 +29,19 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the database URL from settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# ✅ Securely load DATABASE_URL from environment
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise ValueError("❌ DATABASE_URL is not set in environment variables")
+
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # Target metadata for autogenerate
 target_metadata = Base.metadata
 
 
-# ✅ This tells Alembic to IGNORE PostGIS system tables
+# ✅ Ignore PostGIS system tables
 def include_object(object, name, type_, reflected, compare_to):
     EXCLUDED_TABLES = [
         "spatial_ref_sys",
@@ -59,8 +63,9 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        include_object=include_object,  # ✅ added
+        include_object=include_object,
     )
+
     with context.begin_transaction():
         context.run_migrations()
 
@@ -71,12 +76,14 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
+
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            include_object=include_object,  # ✅ added
+            include_object=include_object,
         )
+
         with context.begin_transaction():
             context.run_migrations()
 
