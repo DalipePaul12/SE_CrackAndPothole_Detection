@@ -399,6 +399,11 @@
     padding: 0.6rem;
   }
 
+  button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transition: all 0.2s ease;
+}
   .otp-title h2 {
     font-size: 1.8rem;
   }

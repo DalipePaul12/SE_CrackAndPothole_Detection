@@ -1,60 +1,51 @@
-import os
-import sys
+"""
+Alembic async migration environment.
+Reads DATABASE_URL from settings so no credentials are hardcoded.
+
+Usage:
+    alembic revision --autogenerate -m "description"
+    alembic upgrade head
+"""
+import asyncio
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+
+from sqlalchemy import pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
+
 from alembic import context
-from dotenv import load_dotenv
 
-# Load .env file
-load_dotenv()
+# ── Load app settings ──────────────────────────────────────────────────────────
+from app.core.config import settings
 
-# Add backend to path so we can import our models
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+# Import all models so Alembic can detect them
+from app.db.init_db import *  # noqa: F401, F403
 from app.db.base import Base
+import app.models 
 
-# Import ALL models here so Alembic can detect them
-from app.models.user import User
-from app.models.report import Report
-from app.models.project import Project
-from app.models.comment import Comment
-from app.models.audit_log import AuditLog
-from app.models.otp import OTP
-from app.models.notification import Notification
-
-# Alembic Config object
+# ── Alembic config ─────────────────────────────────────────────────────────────
 config = context.config
 
-# Setup loggers
+# Set the DB URL from settings (overrides the empty value in alembic.ini)
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.DATABASE_URL
+    .replace("postgresql://", "postgresql+asyncpg://")
+    .replace("postgres://", "postgresql+asyncpg://")
+    .replace("postgresql+psycopg2://", "postgresql+asyncpg://"),
+)
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# ✅ Securely load DATABASE_URL from environment
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-if not DATABASE_URL:
-    raise ValueError("❌ DATABASE_URL is not set in environment variables")
-
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
-
-# Target metadata for autogenerate
 target_metadata = Base.metadata
 
-
-# ✅ Ignore PostGIS system tables
 def include_object(object, name, type_, reflected, compare_to):
-    EXCLUDED_TABLES = [
-        "spatial_ref_sys",
-        "cctvs",
-        "geography_columns",
-        "geometry_columns",
-        "raster_columns",
-        "raster_overviews",
-    ]
-    if type_ == "table" and name in EXCLUDED_TABLES:
+    """Exclude PostGIS system tables from migrations."""
+    if type_ == "table" and name in ("spatial_ref_sys", "geometry_columns", "geography_columns", "raster_columns", "raster_overviews"):
         return False
     return True
-
+# ── Run migrations ─────────────────────────────────────────────────────────────
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
@@ -63,29 +54,30 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        include_object=include_object,
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
 
-def run_migrations_online() -> None:
-    connectable = engine_from_config(
+def do_run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+    await connectable.dispose()
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            include_object=include_object,
-        )
 
-        with context.begin_transaction():
-            context.run_migrations()
+def run_migrations_online() -> None:
+    asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():

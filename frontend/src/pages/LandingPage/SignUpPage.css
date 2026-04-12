@@ -25,11 +25,11 @@ input[type="password"]::-webkit-textfield-decoration-container {
 
 .sign-up-content {
   display: grid;
-  grid-template-columns: 1fr 1.2fr;
+  grid-template-columns: 1fr 1.4fr;
   background: #ffffff;
   border-radius: 30px;
-  width: 900px;
-  height: 610px;
+  width: 960px;
+  max-height: 92vh;
   max-width: 100%;
   overflow: hidden;
   border: 1px solid #2d552dd6;
@@ -40,24 +40,24 @@ input[type="password"]::-webkit-textfield-decoration-container {
 }
 
 .sign-up-content.signup-small {
-  height: 500px;
+  max-height: 520px;
 }
 
 /* LEFT SIDE */
 .sign-up-left {
-  background: linear-gradient(90deg,#488a48, #0e370e);
+  background: linear-gradient(90deg, #488a48, #0e370e);
   color: white;
-  padding: 4.5rem;
+  padding: 3rem 2.5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .sign-up-logo {
   width: 70px;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .sign-up-title {
@@ -66,88 +66,96 @@ input[type="password"]::-webkit-textfield-decoration-container {
 }
 
 .sign-up-slogan {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   opacity: 0.7;
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 
 /* RIGHT SIDE */
 .sign-up-right {
-  padding: 3.5rem;
+  padding: 2rem 2.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .sign-up-right h2 {
-  font-size: 2.5rem;
+  font-size: 2rem;
   text-align: center;
   color: #1f451f;
   font-weight: bold;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .sign-up-right p {
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   opacity: 0.7;
   text-align: center;
   color: #183218;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .sign-up-right form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.65rem;
 }
 
 .sign-up-label-form input {
-  padding: 0.75rem 1.3rem;
+  padding: 0.6rem 1.1rem;
   border-radius: 25px;
   border: 0.5px solid #1832189d;
-  color:#183218;
+  color: #183218;
   background-color: rgba(202, 241, 221, 0.556);
   transition: border-color 0.2s, background-color 0.2s;
+  width: 100%;
+  font-size: 0.875rem;
 }
 
-
 .sign-up-label-form input:hover {
-  border-color: 2px solid #205920; 
+  border-color: 2px solid #205920;
 }
 
 .sign-up-label-form {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .sign-up-label-form label {
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: bold;
   color: #213721;
   opacity: 0.7;
 }
 
 .sign-up-right button {
-  margin-top: 0.5rem;
-  font-size: 1rem;
-  padding: 0.75rem;
-  background: linear-gradient(180deg,#316b34,#1c381e);
+  margin-top: 0.4rem;
+  font-size: 0.95rem;
+  padding: 0.65rem;
+  background: linear-gradient(180deg, #316b34, #1c381e);
   color: white;
   border: none;
   border-radius: 40px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .sign-up-right button:hover {
-  background: linear-gradient(360deg,#316b34,#1c381e);
+  background: linear-gradient(360deg, #316b34, #1c381e);
 }
 
 .sign-up-footer {
   border-top: #1832188f 1px solid;
-  padding-top: 1rem;
-  margin-top: 1rem;
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
   text-align: center;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   color: #414e41;
 }
 
@@ -158,17 +166,16 @@ input[type="password"]::-webkit-textfield-decoration-container {
 }
 
 .login-link:hover {
-  /*text-decoration: wavy underline #205920;*/
   text-decoration: underline #205920;
 }
 
-/*OTP PART*/
+/* OTP PART */
 .otp-footer-signup {
   border-top: #1832188f 1px solid;
-  padding-top: 1.5rem;
-  margin-top: 1rem;
+  padding-top: 1rem;
+  margin-top: 0.75rem;
   text-align: center;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   color: #2d552d;
 }
 
@@ -179,14 +186,13 @@ input[type="password"]::-webkit-textfield-decoration-container {
 }
 
 .sign-up-right .resend-link:hover {
-  /*text-decoration: wavy underline #205920;*/
   text-decoration: underline #205920;
 }
 
 .sign-up-right .button-back-signup {
-  margin-top: -10px;
-  font-size: 1rem;
-  padding: 0.75rem;
+  margin-top: -6px;
+  font-size: 0.95rem;
+  padding: 0.65rem;
   background: #ffffff;
   color: rgb(36, 81, 43);
   border: none;
@@ -198,56 +204,58 @@ input[type="password"]::-webkit-textfield-decoration-container {
   background: #e0e0e0;
 }
 
-
 .sign-up-right .button-submit-otp {
-  font-size: 1rem;
-  padding: 0.75rem;
+  font-size: 0.95rem;
+  padding: 0.65rem;
   background-color: #3b5b3b;
   color: white;
   border: none;
   border-radius: 40px;
   cursor: pointer;
   box-shadow: 2px 3px 4px rgba(0.5, 0.5, 0.5, 0.5);
-  border:1px solid #0000003e;
-  margin-top: -10px;
+  border: 1px solid #0000003e;
+  margin-top: -6px;
 }
 
-.sign-up-right .otp-title-signup h2{
+.sign-up-right .otp-title-signup h2 {
   text-align: center;
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 600;
   color: #295638;
-  margin-bottom: 0.5rem;
-  
+  margin-bottom: 0.25rem;
 }
 
-.sign-up-right .otp-title-signup p{
-  margin-bottom: 1.5rem;
+.sign-up-right .otp-title-signup p {
+  margin-bottom: 1rem;
 }
 
+/* City + Barangay row */
 .sign-up-label-form-province-city {
-  display: flex;
-  gap: 4rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
 }
 
-.sign-up-label-form-province-city .sign-up-label-form select{
-  width: 130%;
-  padding: 0.6rem;
+.sign-up-label-form-province-city .sign-up-label-form select {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
   border-radius: 40px;
   border: 0.5px solid #1832189d;
-  color:#5c5f5c;
-  font-size: 0.85rem;
+  color: #5c5f5c;
+  font-size: 0.875rem;
   outline: none;
+  background-color: rgba(202, 241, 221, 0.556);
 }
 
 .sign-up-label-form select {
   width: 100%;
-  padding: 0.6rem;
+  padding: 0.6rem 0.75rem;
   border-radius: 40px;
   border: 0.5px solid #1832189d;
-  color:#5c5f5c;
-  font-size: 0.85rem;
+  color: #5c5f5c;
+  font-size: 0.875rem;
   outline: none;
+  background-color: rgba(202, 241, 221, 0.556);
 }
 
 .sign-up-label-form select:focus {
@@ -255,101 +263,99 @@ input[type="password"]::-webkit-textfield-decoration-container {
 }
 
 .password-title-signup h2 {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: bold;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .password-title-signup .sign-up-instruction {
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   opacity: 0.7;
   text-align: center;
   color: #183218;
-  margin-bottom: 2.5rem;
+  margin-bottom: 1.5rem;
 }
 
-
 .sign-up-right .button-submit-password {
-  font-size: 1rem;
-  padding: 0.75rem;
+  font-size: 0.95rem;
+  padding: 0.65rem;
   background-color: #3b5b3b;
   color: white;
   border: none;
   border-radius: 40px;
   cursor: pointer;
   box-shadow: 2px 3px 4px rgba(0.5, 0.5, 0.5, 0.5);
-  border:1px solid #0000003e;
-  margin-top: 30px;
+  border: 1px solid #0000003e;
+  margin-top: 16px;
 }
 
 
-/*Icons*/
+/* Icons */
 .icon-input-signup {
   position: relative;
+  display: flex;
+  align-items: center;
   width: 100%;
 }
 
 .icon-input-signup input {
   width: 100%;
-  padding: 0.75rem 0.75rem 0.75rem 2.75rem; /* space for icon */
+  padding: 0.6rem 2.5rem 0.6rem 2.5rem;
+  border-radius: 25px;
+  border: 0.5px solid #1832189d;
+  color: #183218;
+  background-color: rgba(202, 241, 221, 0.556);
+  font-size: 0.875rem;
 }
-
 
 .icon-signup {
   position: absolute;
   top: 50%;
-  left: 15px;
+  left: 13px;
   transform: translateY(-50%);
   opacity: 0.7;
+  font-size: 1rem;
+  pointer-events: none;
 }
 
 .otp-icon-signup-otp {
   font-size: 2rem;
   color: #4a7d4a;
   display: block;
-  margin: 0 auto 1rem auto;
+  margin: 0 auto 0.75rem auto;
 }
 
 .back-icon-otp {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   color: #183218;
   vertical-align: middle;
-  margin-right: 8px;
+  margin-right: 6px;
 }
 
 .finish-signup {
   font-size: 1rem;
   color: #d4f5d4;
-  margin-left: 8px;
-}
-
-.icon-input-signup {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.icon-input-signup input {
-  width: 100%;
-  padding-right: 40px; /* space for eye */
 }
 
 .toggle-eye {
   position: absolute;
-  right: 15px;
+  right: 13px;
   cursor: pointer;
   color: #777;
-  font-size: 18px;
+  font-size: 17px;
+  flex-shrink: 0;
 }
 
 .toggle-eye:hover {
   color: #2f6b2f;
+  transform: scale(1.1);
+  transition: all 0.2s ease;
 }
 
-/*animations*/
+/* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
 
 @keyframes popUp {
@@ -369,7 +375,7 @@ input[type="password"]::-webkit-textfield-decoration-container {
   border-color: #2d6a2d;
   box-shadow: 0 0 0 4px rgba(45, 106, 45, 0.15);
   background-color: #ffffff;
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .sign-up-right button:active,
@@ -377,16 +383,16 @@ input[type="password"]::-webkit-textfield-decoration-container {
   transform: scale(0.97);
 }
 
-.toggle-eye:hover {
-  color: #2f6b2f;
-  transform: scale(1.1);
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
   transition: all 0.2s ease;
 }
 
 @keyframes floatEffectSignup {
-  0% { transform: translateY(0); }
-  50% { transform: translateY(-50px); }
-  100% { transform: translateY(0); }
+  0%   { transform: translateY(0);   }
+  50%  { transform: translateY(-8px); }
+  100% { transform: translateY(0);   }
 }
 
 .sign-up-logo {
@@ -394,21 +400,19 @@ input[type="password"]::-webkit-textfield-decoration-container {
 }
 
 
-/*Responsive*/
-/* Tablets / small screens ≤ 768px */
+/* Responsive — Tablets ≤ 768px */
 @media (max-width: 768px) {
   .sign-up-content {
-    grid-template-columns: 1fr; /* single column */
-    width: 90%;
-    height: 700px;
+    grid-template-columns: 1fr;
+    width: 92%;
+    max-height: 95vh;
     border-radius: 20px;
-    padding: 0;
   }
 
   .sign-up-left {
-    padding: 1rem;
-    border-bottom-left-radius: 80px;
-    border-bottom-right-radius: 80px;
+    padding: 1.25rem;
+    border-bottom-left-radius: 60px;
+    border-bottom-right-radius: 60px;
   }
 
   .sign-up-logo {
@@ -421,93 +425,39 @@ input[type="password"]::-webkit-textfield-decoration-container {
 
   .sign-up-slogan {
     font-size: 0.85rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.5rem;
   }
 
   .sign-up-right {
-    padding: 1.5rem;
-    overflow-y: auto;
+    padding: 1.25rem 1.5rem;
   }
 
   .sign-up-right h2 {
-    font-size: 2rem;
+    font-size: 1.75rem;
   }
-
-  .sign-up-right p {
-    font-size: 0.9rem;
-  }
-
-  .sign-up-label-form input,
-  .icon-input-signup input {
-    font-size: 0.9rem;
-    padding: 0.6rem 1rem 0.6rem 2.5rem;
-  }
-
-  .sign-up-content.signup-small {
-    height: 650px;
-  }
-
-  .icon-signup {
-    font-size: 1rem;
-    left: 12px;
-  }
-
-  .toggle-eye {
-    font-size: 16px;
-    right: 12px;
-  }
-
-  .sign-up-right button,
-  .sign-up-right .button-back-signup,
-  .sign-up-right .button-submit-otp,
-  .sign-up-right .button-submit-password {
-    font-size: 0.9rem;
-    padding: 0.6rem;
-  }
-
-  .password-title-signup h2 {
-    font-size: 2rem;
-  }
-
-  .password-title-signup .sign-up-instruction {
-    font-size: 0.85rem;
-  }
-
-  .otp-title-signup h2 {
-    font-size: 2rem;
-  }
-
-  .otp-title-signup p {
-    font-size: 0.85rem;
-  }
-
-  .sign-up-footer,
-  .otp-footer-signup {
-    font-size: 0.85rem;
-  }
-
-  .sign-up-label-form select{
-    width: 100%;
-   }
 
   .sign-up-label-form-province-city {
-    flex-direction: column;
-    gap: 1rem;
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
   }
 
   .sign-up-label-form-province-city .sign-up-label-form select {
     width: 100%;
   }
+
+  .sign-up-content.signup-small {
+    max-height: 95vh;
+  }
 }
 
-/* Extra small devices ≤ 480px (phones) */
+/* Extra small ≤ 480px */
 @media (max-width: 480px) {
   .sign-up-left {
-    padding: 1.5rem;
+    padding: 1rem;
   }
 
   .sign-up-right {
-    padding: 1.5rem;
+    padding: 1rem 1.25rem;
   }
 
   .sign-up-logo {
@@ -518,34 +468,8 @@ input[type="password"]::-webkit-textfield-decoration-container {
     font-size: 1.2rem;
   }
 
-  .sign-up-slogan {
-    font-size: 0.8rem;
-    margin-bottom: 1rem;
-  }
-
   .sign-up-right h2 {
     font-size: 1.5rem;
-  }
-
-  .sign-up-right p {
-    font-size: 0.8rem;
-  }
-
-  .sign-up-label-form input,
-  .sign-up-label-form select,
-  .icon-input-signup input {
-    font-size: 0.85rem;
-    padding: 0.5rem 0.75rem 0.5rem 2.2rem;
-  }
-
-  .icon-signup {
-    font-size: 0.9rem;
-    left: 10px;
-  }
-
-  .toggle-eye {
-    font-size: 14px;
-    right: 10px;
   }
 
   .sign-up-right button,
@@ -553,27 +477,6 @@ input[type="password"]::-webkit-textfield-decoration-container {
   .sign-up-right .button-submit-otp,
   .sign-up-right .button-submit-password {
     font-size: 0.85rem;
-    padding: 0.5rem;
-  }
-
-  .password-title-signup h2 {
-    font-size: 1.8rem;
-  }
-
-  .password-title-signup .sign-up-instruction {
-    font-size: 0.8rem;
-  }
-
-  .otp-title-signup h2 {
-    font-size: 1.8rem;
-  }
-
-  .otp-title-signup p {
-    font-size: 0.8rem;
-  }
-
-  .sign-up-footer,
-  .otp-footer-signup {
-    font-size: 0.8rem;
+    padding: 0.55rem;
   }
 }

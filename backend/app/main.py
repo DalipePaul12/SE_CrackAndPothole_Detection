@@ -1,88 +1,116 @@
+"""
+SE_CrackAndPothole_Detection — FastAPI application entry point.
+
+Startup order:
+  1. Configure logging
+  2. Load settings (validates env vars + YOLO model path)
+  3. Register exception handlers
+  4. Register middleware (CORS → Rate limiter → Audit logger)
+  5. Mount static files
+  6. Include all routers
+  7. Pre-load YOLO model on startup
+"""
 import os
-import json  
-from contextlib import asynccontextmanager
+import logging
+
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv 
+from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import IntegrityError
 
-load_dotenv()
+from app.core.config import settings
+from app.utils.logger import configure_logging
 
-# 1. DATABASE IMPORTS 
-from app.db.base import Base
-from app.db.session import engine
+configure_logging()
+logger = logging.getLogger(__name__)
 
-# Import Models
-from app.models.user import User
-from app.models.report import Report
-from app.models.project import Project
-from app.models.comment import Comment
-from app.models.audit_log import AuditLog
-from app.models.otp import OTP
-from app.models.notification import Notification
+from app.middleware.audit_middleware import AuditMiddleware
+from app.middleware.error_handler import (
+    validation_exception_handler,
+    integrity_error_handler,
+    unhandled_exception_handler,
+)
+from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 
-# 2. API ROUTER IMPORTS
-from app.api.v1 import auth, users, reports, projects, analytics, notifications 
+# Routers
+from app.routers import auth, users, reports, projects, notifications, comments, ws
+from app.api.v1 import analytics, cctv, media
 
-# 3. LIFESPAN - CREATE TABLES ON STARTUP
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    try:
-        Base.metadata.create_all(bind=engine)
-        print("✅ Tables created successfully")
-    except Exception as e:
-        print(f"⚠️ Could not create tables: {e}")
-    yield
 
-# 4. FASTAPI APP
 app = FastAPI(
-    title="Road Defect Detection API",
-    version="0.1.0",
-    lifespan=lifespan
+    title=settings.PROJECT_NAME,
+    version="1.0.0",
+    description="LGU Road Damage Reporting System with AI-powered pothole/crack detection.",
+    docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
+    redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
+    openapi_url="/openapi.json" if settings.ENVIRONMENT != "production" else None,
 )
 
-# 5. STATIC FILES
-UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+# ── Exception handlers ─────────────────────────────────────────────────────────
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(IntegrityError, integrity_error_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
-# 6. CORS 
-origins_str = os.getenv("BACKEND_CORS_ORIGINS")
-
-if origins_str:
-    try:
-        origins = json.loads(origins_str)
-    except json.JSONDecodeError:
-        print("⚠️ Error format on .env BACKEND_CORS_ORIGINS. Using default localhost.")
-        origins = ["http://localhost:3000"]
-else:
-    origins = ["http://localhost:3000"]
-
-print(f"Allowed Origins: {origins}") 
-
+# ── Middleware (order matters — outermost = last added) ────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
-    allow_methods=["*"], 
-    allow_headers=["*"], 
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(AuditMiddleware)
 
-# 7. REGISTER ROUTERS
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
-app.include_router(users.router, prefix="/api/v1/users", tags=["Users"]) 
-app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
-app.include_router(projects.router, prefix="/api/v1/projects", tags=["Projects"])
-app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"]) 
-app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"]) 
+# ── Static files ───────────────────────────────────────────────────────────────
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
-# 8. ROOT ENDPOINT
-@app.get("/")
-def read_root():
+# ── Routers ────────────────────────────────────────────────────────────────────
+PREFIX = settings.API_V1_STR
+
+app.include_router(auth.router,          prefix=PREFIX)
+app.include_router(users.router,         prefix=PREFIX)
+app.include_router(reports.router,       prefix=PREFIX)
+app.include_router(projects.router,      prefix=PREFIX)
+app.include_router(notifications.router, prefix=PREFIX)
+app.include_router(comments.router,      prefix=PREFIX)
+app.include_router(analytics.router,     prefix=PREFIX)
+app.include_router(cctv.router,          prefix=PREFIX)
+app.include_router(media.router,         prefix=PREFIX)
+app.include_router(ws.router)   # WebSocket has no /api/v1 prefix
+
+
+# ── Startup / shutdown ─────────────────────────────────────────────────────────
+@app.on_event("startup")
+async def startup():
+    logger.info("Starting %s [%s]", settings.PROJECT_NAME, settings.ENVIRONMENT)
+    if settings.AI_ENABLED:
+        try:
+            from app.services.ml_service import load_model
+            load_model()
+            logger.info("YOLO model loaded successfully.")
+        except Exception as e:
+            logger.error("Failed to load YOLO model: %s", e)
+            logger.warning("AI endpoints will fail until model is available.")
+    logger.info("Startup complete.")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    logger.info("Shutting down.")
+
+
+# ── Health check ───────────────────────────────────────────────────────────────
+@app.get("/health", tags=["Health"])
+async def health():
     return {
-        "status": "active", 
-        "message": "Road Defect Detection API is running!",
-        "cors_origins": origins
+        "status": "ok",
+        "environment": settings.ENVIRONMENT,
+        "ai_enabled": settings.AI_ENABLED,
+        "fake_detection_enabled": settings.AI_FAKE_DETECTION_ENABLED,
+        "version": "1.0.0",
     }

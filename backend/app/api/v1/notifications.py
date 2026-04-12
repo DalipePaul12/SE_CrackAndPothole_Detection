@@ -1,82 +1,105 @@
+"""
+Notifications router.
+GET    /notifications              — list my notifications
+PATCH  /notifications/{id}/read   — mark one as read
+PATCH  /notifications/read-all    — mark all as read
+DELETE /notifications/clear-all   — delete all notifications  ← added from legacy
+DELETE /notifications/{id}        — delete one notification
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import delete as sql_delete, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from app.db.session import get_db
+from app.middleware.auth_middleware import get_current_user
 from app.models.notification import Notification
 from app.models.user import User
-from app.api.v1.auth import get_current_user
+from app.schemas.notification import NotificationResponse
 
-router = APIRouter()
+router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
-@router.get("/")
-def get_my_notifications(
-    skip: int = 0, 
-    limit: int = 20, 
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+
+@router.get("", response_model=list[NotificationResponse])
+async def list_notifications(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Fetch logged-in user's notifications."""
-    return db.query(Notification)\
-        .filter(Notification.user_id == current_user.id)\
-        .order_by(Notification.created_at.desc())\
-        .offset(skip).limit(limit).all()
-@router.put("/read-all")
-def mark_all_as_read(
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    result = await db.execute(
+        select(Notification)
+        .where(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(50)
+    )
+    return result.scalars().all()
+
+
+# NOTE: /read-all and /clear-all must come BEFORE /{notification_id}
+# to avoid FastAPI routing conflict (it would try to parse "read-all" as an int id)
+
+@router.patch("/read-all", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_all_read(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Mark all notifications as read."""
-    db.query(Notification)\
-        .filter(Notification.user_id == current_user.id, Notification.is_read == False)\
-        .update({"is_read": True})
-        
-    db.commit()
-    return {"message": "All notifications marked as read"}
-@router.put("/{notification_id}/read")
-def mark_notification_as_read(
-    notification_id: int, 
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    from datetime import datetime, timezone
+    await db.execute(
+        update(Notification)
+        .where(
+            Notification.user_id == current_user.id,
+            Notification.is_read == False,
+        )
+        .values(is_read=True, read_at=datetime.now(timezone.utc))
+    )
+    await db.commit()
+
+
+@router.delete("/clear-all", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_all_notifications(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Mark a specific notification as read."""
-    notif = db.query(Notification).filter(
-        Notification.id == notification_id, 
-        Notification.user_id == current_user.id
-    ).first()
-    
+    """Delete ALL notifications for the logged-in user. Added from legacy router."""
+    await db.execute(
+        sql_delete(Notification).where(Notification.user_id == current_user.id)
+    )
+    await db.commit()
+
+
+@router.patch("/{notification_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_read(
+    notification_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from datetime import datetime, timezone
+    result = await db.execute(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.user_id == current_user.id,
+        )
+    )
+    notif = result.scalar_one_or_none()
     if not notif:
-        raise HTTPException(status_code=404, detail="Notification not found")
-        
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found.")
     notif.is_read = True
-    db.commit()
-    return {"message": "Marked as read"}
-@router.delete("/{notification_id}")
-def delete_notification(
-    notification_id: int, 
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
-):
-    """Delete a specific notification."""
-    notif = db.query(Notification).filter(
-        Notification.id == notification_id, 
-        Notification.user_id == current_user.id
-    ).first()
-    
-    if not notif:
-        raise HTTPException(status_code=404, detail="Notification not found")
-        
-    db.delete(notif)
-    db.commit()
-    return {"message": "Notification deleted"}  
-@router.delete("/clear-all")
-def clear_all_notifications(
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
-):
-    """Delete all notifications for the logged-in user."""
-    db.query(Notification)\
-        .filter(Notification.user_id == current_user.id)\
-        .delete()
-    db.commit()
-    return {"message": "All notifications cleared"}
+    notif.read_at = datetime.now(timezone.utc)
+    await db.commit()
 
+
+@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_notification(
+    notification_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.user_id == current_user.id,
+        )
+    )
+    notif = result.scalar_one_or_none()
+    if not notif:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found.")
+    await db.delete(notif)
+    await db.commit()

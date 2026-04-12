@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import "./Settings.css";
 
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 
+import { useUser } from "../../hooks/useUser";
+
 function Settings() {
+  const { updatePassword } = useUser();
 
   const [showConfirm, setShowConfirm] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState(""); // "success" | "error"
 
   const [settings, setSettings] = useState({
     pushNotifications: false,
@@ -15,324 +20,161 @@ function Settings() {
     systemAlerts: true,
   });
 
-  const [originalSettings, setOriginalSettings] = useState(settings);
-
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
 
-  const [message, setMessage] = useState("");
-
   const toggleSetting = (key) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
 
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
-    setPasswordData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setPasswordData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleChangePassword = (data) => {
-  // apply password change
-  setPasswordData({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-
-  setMessage("Password updated successfully!");
-
-  // TODO: connect with backend to actually update password
-  console.log("Password changed to:", data.newPassword);
-};
-
-/*
-  const hasChanges =
-    JSON.stringify(settings) !== JSON.stringify(originalSettings) ||
-    passwordData.currentPassword ||
-    passwordData.newPassword ||
-    passwordData.confirmPassword;
-*/
-
-  const [tempPasswordData, setTempPasswordData] = useState(passwordData);
-
-/*
-const handleSave = () => {
-  setMessage(""); // clear old message first
-
-  if (passwordData.newPassword || passwordData.confirmPassword) {
+  const validatePassword = () => {
     if (!passwordData.currentPassword) {
       setMessage("Please enter your current password.");
-      return;
+      setMessageType("error");
+      return false;
     }
-
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setMessage("New passwords do not match.");
-      return;
+      setMessageType("error");
+      return false;
     }
-
-    if (passwordData.newPassword.length < 6) {
-      setMessage("Password must be at least 6 characters.");
-      return;
+    if (passwordData.newPassword.length < 8) {
+      setMessage("Password must be at least 8 characters.");
+      setMessageType("error");
+      return false;
     }
-  }
-
-  setPasswordData({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-
-  setMessage("Password updated successfully!");
-};
-*/
-
-/*
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.href = "/";
+    return true;
   };
-*/
 
-/*
-useEffect(() => {
-  if (originalSettings !== settings) {
-    console.log("Notification settings saved:", settings);
-    setOriginalSettings(settings);
-  }
-}, [settings]);
-*/
+  const handleChangePassword = async () => {
+    try {
+      await updatePassword(passwordData.currentPassword, passwordData.newPassword);
+      setMessage("Password updated successfully!");
+      setMessageType("success");
+      setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      setMessage(err?.detail || "Failed to update password. Check your current password.");
+      setMessageType("error");
+    }
+    setShowConfirm(false);
+  };
 
-  return ( 
+  return (
     <>
       <Sidebar />
       <AppHeader />
 
-      <div 
-      className="sidebar-overlay"
-      onClick={() => {
-        document.querySelector(".app-sidebar").classList.remove("active");
-        document.querySelector(".sidebar-overlay").classList.remove("active");
-      }}
-    ></div>
+      <div
+        className="sidebar-overlay"
+        onClick={() => {
+          document.querySelector(".app-sidebar")?.classList.remove("active");
+          document.querySelector(".sidebar-overlay")?.classList.remove("active");
+        }}
+      />
 
       <div className="settings-container">
         <div className="settings-header">
-            <h1>Preferences</h1>
-            <p>Customize your Snap2Fix experience.</p>
+          <h1>Preferences</h1>
+          <p>Customize your Snap2Fix experience.</p>
         </div>
 
-        {/* ---------------- Notifications ---------------- */}
+        {/* NOTIFICATIONS */}
         <div className="settings-card">
           <h2>Notifications</h2>
           <p>How do you want to be notified?</p>
 
-          <div className="setting-item">
-            <div>
-              <h4>Push Notifications</h4>
-              <p>Receive instant updates directly on your device.</p>
+          {[
+            { key: "pushNotifications", label: "Push Notifications", desc: "Receive instant updates directly on your device." },
+            { key: "emailSummaries", label: "Email Summaries", desc: "Get daily or weekly activity summaries via email." },
+            { key: "systemAlerts", label: "System Alerts", desc: "Important alerts about account and system changes." },
+          ].map(({ key, label, desc }) => (
+            <div key={key} className="setting-item">
+              <div><h4>{label}</h4><p>{desc}</p></div>
+              <label className="switch">
+                <input type="checkbox" checked={settings[key]} onChange={() => toggleSetting(key)} />
+                <span className="slider"></span>
+              </label>
             </div>
-           <label className="switch">
-            <input
-                type="checkbox"
-                checked={settings.pushNotifications}
-                onChange={() => toggleSetting("pushNotifications")}
-            />
-            <span className="slider"></span>
-            </label>
-          </div>
-
-          <div className="setting-item">
-            <div>
-              <h4>Email Summaries</h4>
-              <p>Get daily or weekly activity summaries via email.</p>
-            </div>
-            <label className="switch">
-            <input
-                type="checkbox"
-                checked={settings.emailSummaries}
-                onChange={() => toggleSetting("emailSummaries")}
-            />
-            <span className="slider"></span>
-            </label>
-
-          </div>
-
-          <div className="setting-item">
-            <div>
-              <h4>System Alerts</h4>
-              <p>Important alerts about account and system changes.</p>
-            </div>
-            <label className="switch">
-            <input
-                type="checkbox"
-                checked={settings.systemAlerts}
-                onChange={() => toggleSetting("systemAlerts")}
-            />
-            <span className="slider"></span>
-            </label>
-          </div>
+          ))}
         </div>
 
-        {/* ---------------- Privacy & Security ---------------- */}
+        {/* PASSWORD */}
         <div className="settings-card">
           <h2>Privacy & Security</h2>
-          <p> Change Password </p>
+          <p>Change Password</p>
 
           <div className="password-section">
             <label>Current Password</label>
-            <input
-              type="password"
-              name="currentPassword"
-              placeholder="Current Password"
-              value={passwordData.currentPassword}
-              onChange={handlePasswordChange}
-            />
+            <input type="password" name="currentPassword" placeholder="Current Password"
+              value={passwordData.currentPassword} onChange={handlePasswordChange} />
 
             <label>New Password</label>
-            <input
-              type="password"
-              name="newPassword"
-              placeholder="New Password"
-              value={passwordData.newPassword}
-              onChange={handlePasswordChange}
-            />
-            
+            <input type="password" name="newPassword" placeholder="New Password"
+              value={passwordData.newPassword} onChange={handlePasswordChange} />
+
             <label>Confirm New Password</label>
-            <input
-              type="password"
-              name="confirmPassword"
-              placeholder="Confirm New Password"
-              value={passwordData.confirmPassword}
-              onChange={handlePasswordChange}
-            />
+            <input type="password" name="confirmPassword" placeholder="Confirm New Password"
+              value={passwordData.confirmPassword} onChange={handlePasswordChange} />
           </div>
 
-    {message && <p className="settings-message">{message}</p>}
-
-          <div className="password-actions">
-          <button
-            className="save-btn"
-            onClick={() => {
-              // Validate first
-              if (!passwordData.currentPassword) {
-                setMessage("Please enter your current password.");
-                return;
-              }
-              if (passwordData.newPassword !== passwordData.confirmPassword) {
-                setMessage("New passwords do not match.");
-                return;
-              }
-              if (passwordData.newPassword.length < 6) {
-                setMessage("Password must be at least 6 characters.");
-                return;
-              }
-
-              // Store temp changes
-              setTempPasswordData(passwordData);
-              setShowConfirm(true); // open modal
-            }}
-            disabled={
-              !passwordData.currentPassword &&
-              !passwordData.newPassword &&
-              !passwordData.confirmPassword
-            }
-          >
-            Update Password
-          </button>
-
-            </div>
-        </div>
-
-        {/* ---------------- App Info ---------------- */}
-<div className="settings-card app-info-card">
-  <div className="app-info-content">
-    <img 
-      src="/snap.jpg"
-      alt="App Logo"
-      className="app-logo"
-    />
-
-    <h2 className="app-name">Snap2Fix PH</h2>
-
-    <span className="version-badge">Version 1.0.0</span>
-
-    <p className="app-description">
-      An AI-powered road damage reporting system that helps communities
-      identify, report, and monitor infrastructure issues efficiently.
-    </p>
-
-<div className="app-meta">
-  <h3 className="team-title">Developed By</h3>
-
-  <div className="team-list">
-    <span>Paul Angelo Dalipe</span>
-    <span>Brian Dapito</span>
-    <span>Mave Rick Sandoval</span>
-    <span>Krislyn Sayat</span>
-    <span>John Carlo Trajico</span>
-  </div>
-</div>
-
-
-  </div>
-</div>
-
-
-        {/* ---------------- Buttons ---------------- */}
-        {/*{message && <p className="settings-message">{message}</p>}*/}
-
-        {/*}
-        <div className="settings-actions">
-        
-          <button
-            className="save-btn"
-            onClick={handleSave}
-            disabled={!hasChanges}
-          >
-            Save Changes
-          </button>
-        
-          <button
-            className="logout-btn-page"
-            onClick={handleLogout}
-          >
-            Log Out
-          </button>
-        </div>
-        */}
-
-          {showConfirm && (
-            <ConfirmChangesModal
-              title="Change Password?"
-              message="Before changing your password, make sure it's something secure and memorable."
-              confirmText="Change Password"
-              variant="danger"
-              onCancel={() => {
-                setShowConfirm(false);
-                // revert password fields to previous state
-                setPasswordData({
-                  currentPassword: "",
-                  newPassword: "",
-                  confirmPassword: "",
-                });
-              }}
-              onConfirm={() => {
-                setShowConfirm(false);
-                handleChangePassword(tempPasswordData);
-              }}
-            />
+          {message && (
+            <p className="settings-message" style={{ color: messageType === "error" ? "red" : "green" }}>
+              {message}
+            </p>
           )}
 
+          <div className="password-actions">
+            <button
+              className="save-btn"
+              onClick={() => { if (validatePassword()) setShowConfirm(true); }}
+              disabled={!passwordData.currentPassword && !passwordData.newPassword && !passwordData.confirmPassword}
+            >
+              Update Password
+            </button>
+          </div>
+        </div>
+
+        {/* APP INFO */}
+        <div className="settings-card app-info-card">
+          <div className="app-info-content">
+            <img src="/snap.jpg" alt="App Logo" className="app-logo" />
+            <h2 className="app-name">Snap2Fix PH</h2>
+            <span className="version-badge">Version 1.0.0</span>
+            <p className="app-description">
+              An AI-powered road damage reporting system that helps communities
+              identify, report, and monitor infrastructure issues efficiently.
+            </p>
+            <div className="app-meta">
+              <h3 className="team-title">Developed By</h3>
+              <div className="team-list">
+                <span>Paul Angelo Dalipe</span>
+                <span>Brian Dapito</span>
+                <span>Mave Rick Sandoval</span>
+                <span>Krislyn Sayat</span>
+                <span>John Carlo Trajico</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {showConfirm && (
+          <ConfirmChangesModal
+            title="Change Password?"
+            message="Before changing your password, make sure it's something secure and memorable."
+            confirmText="Change Password"
+            variant="danger"
+            onCancel={() => setShowConfirm(false)}
+            onConfirm={handleChangePassword}
+          />
+        )}
       </div>
     </>
   );

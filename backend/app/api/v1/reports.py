@@ -1,231 +1,389 @@
+"""
+Reports router.
+POST   /reports                    — create report (citizen)
+GET    /reports                    — list reports (all authenticated)
+GET    /reports/my-reports         — list own reports (citizen)
+GET    /reports/{id}               — get single report
+PATCH  /reports/{id}               — update status (admin/contractor)
+DELETE /reports/{id}               — delete report (admin)
+POST   /reports/{id}/media         — upload image/video
+POST   /reports/{id}/upvote        — toggle upvote
+PUT    /reports/{id}/validate      — admin: mark verified
+PUT    /reports/{id}/decline       — admin: decline with reason
+GET    /reports/{id}/comments      — list comments on a report
+POST   /reports/{id}/comments      — add comment
+DELETE /reports/comments/{id}      — delete comment (owner or admin)
+GET    /reports/{id}/nearby-cctv   — find CCTV cameras near a report
+"""
+from fastapi import (
+    APIRouter, BackgroundTasks, Depends, File,
+    HTTPException, Query, Request, UploadFile, Form, status,
+)
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-import os
-from datetime import datetime
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Request, status
-from sqlalchemy.orm import Session, joinedload
-from pydantic import BaseModel 
+from app.core.config import settings
 from app.db.session import get_db
-from app.models.report import Report
-from app.models.audit_log import AuditLog
+from app.middleware.auth_middleware import (
+    get_current_user, require_admin, require_admin_or_contractor,
+)
+from app.middleware.rate_limiter import limiter
+from app.models.cctv import CCTV
+from app.models.comment import Comment
+from app.models.enums import MediaType, NotificationType, ReportStatus, UserRole
 from app.models.notification import Notification
+from app.models.report import Report
 from app.models.user import User
-from app.models.comment import Comment 
-from app.models.cctv import CCTV  # Siguraduhing nagawa mo na ito sa models
-from app.api.v1.auth import get_current_user
-# --- UTILS IMPORTS ---
-from app.utils.image import save_upload_file
-from app.utils.ai import analyze_image
-from app.utils.geo import calculate_distance # Import para sa CCTV proximity check
-router = APIRouter()
-# --- SCHEMAS ---
+from app.schemas.report import ReportCreate, ReportListResponse, ReportResponse, ReportUpdate
+from app.services import ml_service, report_service, upload_service
+from app.services.notification_service import notify_background
+from app.utils.geo import calculate_distance
+
+router = APIRouter(prefix="/reports", tags=["Reports"])
+
+
+# ── Schemas (inline — small enough not to need a separate file) ────────────────
+
 class CommentCreate(BaseModel):
     content: str
-# --- ENDPOINTS ---
-@router.post("/submit")
-async def submit_report(
+
+
+# ── Core CRUD ──────────────────────────────────────────────────────────────────
+
+@router.post("", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
+async def create_report(
     request: Request,
-    latitude: float = Form(...),
-    longitude: float = Form(...),
-    description: str = Form(...),
-    barangay: str = Form(...),
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    data: ReportCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    # 1. SAVE IMAGE
-    try:
-        filename = save_upload_file(file)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
-    # 2. GENERATE URL
-    base_url = str(request.base_url)
-    image_url = f"{base_url}uploads/{filename}"
-    # 3. AI ANALYSIS (YOLOv8 + Fake Detection)
-    file_path = f"uploads/{filename}"
-    ai_result = analyze_image(file_path)
-    
-    damage_type = ai_result.get("damage_type", "Unknown")
-    severity = ai_result.get("severity", "Low")
-    confidence = ai_result.get("confidence", 0.0)
-    is_valid = ai_result.get("valid", True)
-    
-    # 4. SAVE TO DB
-    new_report = Report(
-        owner_id=current_user.id,
-        latitude=latitude,
-        longitude=longitude,
-        barangay=barangay,
-        description=description,
-        image_url=image_url,
-        ai_damage_type=damage_type,
-        ai_severity=severity,
-        ai_confidence=confidence,
-        is_flagged_fake=not is_valid, # Flagged kung suspicious
-        status="PENDING"
+    """Create a new damage report. Upload image separately via /reports/{id}/media."""
+    report = await report_service.create_report(db, data, current_user.id)
+    upvote_count = await report_service.get_upvote_count(db, report.id)
+    response = ReportResponse.model_validate(report)
+    response.upvote_count = upvote_count
+    return response
+
+
+@router.get("", response_model=ReportListResponse)
+@limiter.limit("60/minute")
+async def list_reports(
+    request: Request,
+    status: ReportStatus | None = Query(None),
+    barangay: str | None = Query(None, max_length=100),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    reports, total = await report_service.list_reports(
+        db, status=status, barangay=barangay, page=page, page_size=page_size
     )
-    
-    db.add(new_report)
-    db.commit()
-    db.refresh(new_report)
-    
-    # Ibabalik ang report kasama ang AI analysis para sa Frontend Warning
-    return {
-        "report": new_report,
-        "ai_analysis": ai_result 
-    }
-# --- NEW: CCTV NEARBY CHECK (Para sa Admin Map View) ---
-@router.get("/{report_id}/nearby-cctv")
-def get_nearby_cctv(report_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """
-    Kukuha ng listahan ng mga aktibong CCTV malapit sa report radius (100m).
-    """
-    report = db.query(Report).filter(Report.id == report_id).first()
+    results = []
+    for r in reports:
+        item = ReportResponse.model_validate(r)
+        item.upvote_count = await report_service.get_upvote_count(db, r.id)
+        results.append(item)
+
+    return ReportListResponse(
+        total=total, page=page, page_size=page_size, results=results
+    )
+
+
+# NOTE: /my-reports must be declared BEFORE /{report_id} to avoid routing conflict
+@router.get("/my-reports", response_model=ReportListResponse)
+@limiter.limit("60/minute")
+async def get_my_reports(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return only reports submitted by the authenticated citizen."""
+    reports, total = await report_service.list_reports(
+        db, owner_id=current_user.id, page=page, page_size=page_size
+    )
+    results = []
+    for r in reports:
+        item = ReportResponse.model_validate(r)
+        item.upvote_count = await report_service.get_upvote_count(db, r.id)
+        results.append(item)
+    return ReportListResponse(total=total, page=page, page_size=page_size, results=results)
+
+
+@router.get("/{report_id}", response_model=ReportResponse)
+async def get_report(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    report = await report_service.get_report(db, report_id)
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    # Kukunin lahat ng CCTV na active
-    cameras = db.query(CCTV).filter(CCTV.is_active == True).all()
-    
-    nearby_list = []
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    response = ReportResponse.model_validate(report)
+    response.upvote_count = await report_service.get_upvote_count(db, report.id)
+    return response
+
+
+@router.patch("/{report_id}", response_model=ReportResponse)
+async def update_report(
+    report_id: int,
+    data: ReportUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_contractor),
+):
+    """Admin/contractor only — update report status."""
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    updated = await report_service.update_report_status(db, report, data, current_user)
+
+    if report.owner_id and data.status:
+        background_tasks.add_task(
+            notify_background,
+            user_id=report.owner_id,
+            title="Report Status Updated",
+            message=f"Your report #{report_id} is now {data.status.value}.",
+            type=NotificationType.info,
+            report_id=report_id,
+        )
+
+    response = ReportResponse.model_validate(updated)
+    response.upvote_count = await report_service.get_upvote_count(db, report_id)
+    return response
+
+
+@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_report(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    await db.delete(report)
+    await db.commit()
+
+
+# ── Media upload ───────────────────────────────────────────────────────────────
+
+@router.post("/{report_id}/media", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("20/minute")
+async def upload_media(
+    request: Request,
+    report_id: int,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Upload image or video for a report.
+    Returns 202 immediately — AI analysis runs in background.
+    """
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    if report.owner_id != current_user.id and current_user.role.value != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    content_type = file.content_type or ""
+    if content_type in settings.ALLOWED_IMAGE_TYPES:
+        media_type = MediaType.image
+    elif content_type in settings.ALLOWED_VIDEO_TYPES:
+        media_type = MediaType.video
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Unsupported file type: {content_type}",
+        )
+
+    attachment, raw_bytes = await upload_service.save_upload(db, report, file, media_type)
+
+    if settings.AI_FAKE_DETECTION_ENABLED:
+        hive_key = getattr(settings, "HIVE_API_KEY", None)
+        if hive_key:
+            background_tasks.add_task(
+                ml_service.detect_ai_generated, db, attachment, raw_bytes, hive_key
+            )
+
+    if settings.AI_ENABLED and media_type == MediaType.image:
+        background_tasks.add_task(
+            ml_service.run_detection, db, report, attachment, raw_bytes
+        )
+
+    return {"message": "Media uploaded. AI analysis running in background.", "media_id": attachment.id}
+
+
+# ── Upvote ─────────────────────────────────────────────────────────────────────
+
+@router.post("/{report_id}/upvote")
+async def toggle_upvote(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    added = await report_service.toggle_upvote(db, report_id, current_user.id)
+    count = await report_service.get_upvote_count(db, report_id)
+    return {"upvoted": added, "upvote_count": count}
+
+
+# ── Admin actions (from legacy — these were missing in production) ─────────────
+
+@router.put("/{report_id}/validate", status_code=status.HTTP_200_OK)
+async def validate_report(
+    report_id: int,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin: Quickly mark a report as VERIFIED."""
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    report.status = ReportStatus.VERIFIED
+    await db.commit()
+
+    if report.owner_id:
+        background_tasks.add_task(
+            notify_background,
+            user_id=report.owner_id,
+            title="Report Verified",
+            message=f"Your report #{report_id} has been verified.",
+            type=NotificationType.success,
+            report_id=report_id,
+        )
+
+    return {"message": "Report verified successfully."}
+
+
+@router.put("/{report_id}/decline", status_code=status.HTTP_200_OK)
+async def decline_report(
+    report_id: int,
+    background_tasks: BackgroundTasks,
+    reason: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin: Decline a report with a reason."""
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    report.status = ReportStatus.DECLINED
+    report.decline_reason = reason
+    await db.commit()
+
+    if report.owner_id:
+        background_tasks.add_task(
+            notify_background,
+            user_id=report.owner_id,
+            title="Report Declined",
+            message=f"Your report #{report_id} was declined. Reason: {reason}",
+            type=NotificationType.warning,
+            report_id=report_id,
+        )
+
+    return {"message": "Report declined."}
+
+
+# ── Comments (from legacy — missing in production) ─────────────────────────────
+
+# NOTE: /comments/{id} must come BEFORE /{report_id} to avoid routing conflict
+@router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(
+    comment_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Comment).where(Comment.id == comment_id))
+    comment = result.scalar_one_or_none()
+    if not comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found.")
+    if comment.user_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized.")
+    await db.delete(comment)
+    await db.commit()
+
+
+@router.get("/{report_id}/comments")
+async def get_comments(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Comment)
+        .options(selectinload(Comment.user))
+        .where(Comment.report_id == report_id)
+        .order_by(Comment.created_at.asc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/{report_id}/comments", status_code=status.HTTP_201_CREATED)
+async def add_comment(
+    report_id: int,
+    data: CommentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    comment = Comment(
+        report_id=report_id,
+        user_id=current_user.id,
+        content=data.content,
+    )
+    db.add(comment)
+    await db.commit()
+    await db.refresh(comment)
+    return comment
+
+
+# ── Nearby CCTV (from legacy — missing in production) ─────────────────────────
+
+@router.get("/{report_id}/nearby-cctv")
+async def get_nearby_cctv(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return active CCTV cameras within 100m of the report location."""
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    cam_result = await db.execute(select(CCTV).where(CCTV.is_active == True))
+    cameras = cam_result.scalars().all()
+
+    nearby = []
     for cam in cameras:
-        # Gamit ang geo util function
         dist = calculate_distance(report.latitude, report.longitude, cam.latitude, cam.longitude)
-        
-        # Isama kung malapit (100 meters)
         if dist <= 100:
-            nearby_list.append({
+            nearby.append({
                 "id": cam.id,
                 "name": cam.location_name,
                 "lat": cam.latitude,
                 "lng": cam.longitude,
                 "distance_meters": round(dist, 2),
-                "stream_url": cam.stream_url # Ito ang iki-click sa map
+                "stream_url": cam.stream_url,
             })
-            
-    return nearby_list
-@router.get("/")
-def get_reports(status: str = None, db: Session = Depends(get_db)):
-    query = db.query(Report)
-    if status:
-        query = query.filter(Report.status == status)
-    return query.all()
-@router.get("/my-reports")
-def get_my_reports(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(Report).filter(Report.owner_id == current_user.id).all()
-@router.put("/{report_id}/validate")
-def validate_report(report_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["lgu_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    report = db.query(Report).filter(Report.id == report_id).first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    
-    report.status = "VALIDATED"
-    report.updated_at = datetime.now()
-    
-    notif = Notification(
-        user_id=report.owner_id,
-        title="Report Validated",
-        message=f"Your report in {report.barangay} has been validated.",
-        type="success"
-    )
-    db.add(notif)
-    log = AuditLog(
-        user_id=current_user.id,
-        action="VALIDATE_REPORT",
-        target_resource=f"Report ID {report_id}",
-        details="Report marked as validated via CCTV/Field verification."
-    )
-    db.add(log)
-    
-    db.commit()
-    return {"message": "Report validated successfully"}
-@router.put("/{report_id}/decline")
-def decline_report(
-    report_id: int, 
-    reason: str = Form(...), 
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
-):
-    if current_user.role not in ["lgu_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    report = db.query(Report).filter(Report.id == report_id).first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    
-    report.status = "DECLINED"
-    report.decline_reason = reason
-    report.updated_at = datetime.now()
-    
-    notif = Notification(
-        user_id=report.owner_id,
-        title="Report Declined",
-        message=f"Reason: {reason}",
-        type="warning"
-    )
-    db.add(notif)
-    
-    log = AuditLog(
-        user_id=current_user.id,
-        action="DECLINE_REPORT",
-        target_resource=f"Report ID {report_id}",
-        details=f"Reason: {reason}"
-    )
-    db.add(log)
-    db.commit()
-    return {"message": "Report declined"}
-# --- COMMENTS ---
-@router.post("/{report_id}/comments")
-def add_comment(report_id: int, comment_data: CommentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    report = db.query(Report).filter(Report.id == report_id).first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    new_comment = Comment(
-        report_id=report_id,
-        user_id=current_user.id,
-        content=comment_data.content
-    )
-    db.add(new_comment)
-    db.commit()
-    db.refresh(new_comment)
-    return new_comment
-@router.get("/{report_id}/comments")
-def get_comments(report_id: int, db: Session = Depends(get_db)):
-    return db.query(Comment)\
-        .options(joinedload(Comment.user))\
-        .filter(Comment.report_id == report_id)\
-        .order_by(Comment.created_at.asc())\
-        .all()
-@router.delete("/comments/{comment_id}")
-def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    comment = db.query(Comment).filter(Comment.id == comment_id).first()
-    if not comment:
-        raise HTTPException(status_code=404, detail="Comment not found")
-    if comment.user_id != current_user.id and current_user.role not in ["lgu_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this comment")
-    db.delete(comment)
-    db.commit()
-    return {"message": "Comment deleted"}
-
-@router.get("/{report_id}")
-def get_report_details(report_id: int, db: Session = Depends(get_db)):
-    report = db.query(Report).filter(Report.id == report_id).first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    return report
-@router.delete("/{report_id}")
-def delete_report(report_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["lgu_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    report = db.query(Report).filter(Report.id == report_id).first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    # Optionally delete the image file from storage
-    image_path = report.image_url.replace(str(request.base_url) + "uploads/", "uploads/")
-    if os.path.exists(image_path):
-        os.remove(image_path)
-    db.delete(report)
-    db.commit()
-    return {"message": "Report deleted"}
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
+    return nearby

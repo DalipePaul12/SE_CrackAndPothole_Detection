@@ -1,126 +1,140 @@
-
-import random
-from datetime import datetime, timedelta
+"""
+Legacy auth router — kept for backward compatibility only.
+The production auth flow is in app/routers/auth.py.
+This file is NOT registered in main.py.
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from jose import JWTError, jwt
 from pydantic import BaseModel
+
 from app.db.session import get_db
 from app.models.user import User
-from app.models.otp import OTP 
+from app.models.enums import OTPPurpose
+from app.core.config import settings
 from app.core.security import verify_password, create_access_token, get_password_hash
+# FIXED: OTP model no longer has a raw `code` field — it stores only `hashed_code`.
+# All OTP creation/verification must go through auth_service.
+from app.services import auth_service
+
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
-# --- SCHEMAS (Data Validation) ---
+
+
+# --- SCHEMAS ---
 class UserCreate(BaseModel):
     email: str
     password: str
     full_name: str
     contact_number: str | None = None
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
     role: str
-#  NEW SCHEMAS FOR OTP
+
+
 class EmailSchema(BaseModel):
     email: str
+
+
 class ResetPasswordSchema(BaseModel):
     email: str
     otp_code: str
     new_password: str
+
+
 # --- ENDPOINTS ---
 @router.post("/register", response_model=dict)
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    # 1. Check if email exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user:
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # 2. Hash Password & Create User
-    hashed_pw = get_password_hash(user_data.password)
+
     new_user = User(
         email=user_data.email,
-        hashed_password=hashed_pw,
+        hashed_password=get_password_hash(user_data.password),
         full_name=user_data.full_name,
         contact_number=user_data.contact_number,
-        role="citizen", 
-        reputation_score=100
+        role="citizen",
+        reputation_score=100,
     )
-    
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
+    await db.commit()
+    await db.refresh(new_user)
     return {"message": "User registered successfully", "user_id": new_user.id}
+
+
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # 1. Find User
-    user = db.query(User).filter(User.email == form_data.username).first()
-    
-    # 2. Validate Password
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == form_data.username))
+    user = result.scalar_one_or_none()
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # 3. Create Token
-    access_token = create_access_token(data={"sub": user.email, "role": user.role, "id": user.id})
+
+    access_token = create_access_token(
+        data={"sub": user.email, "role": user.role, "id": user.id}
+    )
     return {"access_token": access_token, "token_type": "bearer", "role": user.role}
 
+
 @router.post("/forgot-password")
-def forgot_password(data: EmailSchema, db: Session = Depends(get_db)):
-    """
-    1. Checks if email exists.
-    2. Generates a 6-digit OTP.
-    3. Prints OTP to server logs (Mock Email).
-    """
-    user = db.query(User).filter(User.email == data.email).first()
+async def forgot_password(data: EmailSchema, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    # Generate 6-digit OTP
-    otp_code = str(random.randint(100000, 999999))
-    expiration = datetime.utcnow() + timedelta(minutes=5) 
-    # Save to DB
-    new_otp = OTP(email=data.email, code=otp_code, expires_at=expiration)
-    db.add(new_otp)
-    db.commit()
+
+    # FIXED: auth_service.create_otp hashes the code before saving to DB.
+    # It returns the raw code so we can display it (mock email).
+    otp_code = await auth_service.create_otp(
+        db, data.email, OTPPurpose.password_reset, user.id
+    )
 
     print(f"==========================================")
     print(f" [MOCK EMAIL] OTP for {data.email}: {otp_code}")
     print(f"==========================================")
-    
+
     return {"message": "OTP sent to email (Check server console for code)"}
+
+
 @router.post("/reset-password")
-def reset_password(data: ResetPasswordSchema, db: Session = Depends(get_db)):
-    """
-    Verifies the OTP and updates the user's password.
-    """
-    # 1. Find a Valid OTP
-    otp_record = db.query(OTP).filter(
-        OTP.email == data.email,
-        OTP.code == data.otp_code,
-        OTP.is_used == False,
-        OTP.expires_at > datetime.utcnow() # Must not be expired
-    ).first()
-    if not otp_record:
-        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
-    # 2. Find User
-    user = db.query(User).filter(User.email == data.email).first()
+async def reset_password(data: ResetPasswordSchema, db: AsyncSession = Depends(get_db)):
+    # FIXED: auth_service.verify_otp compares against hashed_code in DB.
+    # Old code used OTP.code == data.otp_code — that field no longer exists.
+    try:
+        await auth_service.verify_otp(
+            db, data.email, data.otp_code, OTPPurpose.password_reset
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    # 3. Change Password
+
     user.hashed_password = get_password_hash(data.new_password)
-    
-    # 4. Mark OTP as used (One-time use only)
-    otp_record.is_used = True
-    
-    db.commit()
+    await db.commit()
     return {"message": "Password updated successfully. You can now login."}
+
+
 # --- DEPENDENCY: Get Current User ---
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -133,9 +147,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-        
-    user = db.query(User).filter(User.email == email).first()
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
     return user
-
