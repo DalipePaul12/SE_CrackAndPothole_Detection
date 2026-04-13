@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
+# FIX: hash_password here now delegates to passlib (core/security.py)
+# via auth_service — so registration and login use the same hashing library.
 from app.services.auth_service import hash_password
 
 
@@ -33,7 +35,7 @@ async def create_user(db: AsyncSession, data: UserCreate) -> User:
 
     user = User(
         email=data.email,
-        hashed_password=hash_password(data.password),
+        hashed_password=hash_password(data.password),  # passlib bcrypt
         full_name=data.full_name,
         contact_number=data.contact_number,
         city=data.city,

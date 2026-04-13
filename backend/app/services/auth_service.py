@@ -1,6 +1,11 @@
 """
 Auth service — handles JWT creation/validation, OTP flow, refresh token rotation.
 All sensitive values (OTP codes, refresh tokens) are hashed before storage.
+
+FIX: Password hashing is now handled exclusively by passlib (via core/security.py).
+     Previously, raw `bcrypt` was used here while `core/security.py` used passlib's
+     CryptContext — these produce incompatible hashes, causing login to fail for any
+     account registered through the legacy route. Standardising on passlib fixes this.
 """
 import hashlib
 import secrets
@@ -15,13 +20,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+# FIX: Import passlib-based helpers from core/security.py.
+# Do NOT use raw bcrypt.hashpw / bcrypt.checkpw for user passwords —
+# passlib wraps bcrypt with a slightly different format that is NOT
+# cross-compatible with raw bcrypt verification.
+from app.core.security import get_password_hash, verify_password as _passlib_verify
 from app.models.otp import OTP
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.models.enums import OTPPurpose
 
-# ── Bcrypt rounds — 10 is faster for dev, use 12 in production ────────────────
-_BCRYPT_ROUNDS = 10
+# OTP-only bcrypt rounds — kept separate from user passwords.
+# OTPs are short-lived (10 min) so rounds=10 is fine here.
+_OTP_BCRYPT_ROUNDS = 10
 
 
 # ── Custom exceptions ──────────────────────────────────────────────────────────
@@ -30,18 +41,27 @@ class TokenReuseError(Exception):
     """
     Raised when a previously-revoked refresh token is presented.
     This is a strong signal of token theft — the router should revoke
-    ALL tokens for the user in response.
+    ALL tokens for the user in response (see routers/auth.py).
     """
 
 
 # ── Password hashing ───────────────────────────────────────────────────────────
+# FIX: Both functions now delegate to core/security.py (passlib CryptContext).
+# This ensures that passwords hashed during registration can always be
+# verified during login, regardless of which route was used to register.
 
 def hash_password(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode()
+    """Hash a plain-text password using passlib (bcrypt under the hood)."""
+    return get_password_hash(plain)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+    """
+    Verify a plain-text password against a stored hash.
+    Works for hashes produced by both get_password_hash() and the old
+    passlib CryptContext, because they are the same library.
+    """
+    return _passlib_verify(plain, hashed)
 
 
 # ── JWT ────────────────────────────────────────────────────────────────────────
@@ -116,6 +136,8 @@ async def rotate_refresh_token(
     if not db_token:
         raise ValueError("Invalid refresh token.")
 
+    # Distinguish reuse (already revoked) from expiry so the router can
+    # apply the nuclear option (revoke all sessions) only on reuse.
     if db_token.is_revoked:
         raise TokenReuseError("Refresh token has already been used or revoked.")
 
@@ -140,6 +162,10 @@ async def revoke_all_refresh_tokens(db: AsyncSession, raw_token: str) -> None:
     """
     Token theft response — revokes ALL active refresh tokens for the user
     associated with the given (possibly already-revoked) token.
+
+    Called by the router when TokenReuseError is raised: a previously-revoked
+    token being presented means either the token was stolen or the client has
+    a bug. Either way, force all sessions to re-authenticate.
     """
     token_hash = _hash_token(raw_token)
     result = await db.execute(
@@ -147,14 +173,15 @@ async def revoke_all_refresh_tokens(db: AsyncSession, raw_token: str) -> None:
     )
     db_token = result.scalar_one_or_none()
     if not db_token:
-        return
+        return  # nothing to do
 
     now = datetime.now(timezone.utc)
 
+    # Fetch all active tokens for this user and revoke them
     all_tokens_result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.user_id == db_token.user_id,
-            RefreshToken.is_revoked == False,
+            RefreshToken.is_revoked == False,  # noqa: E712
         )
     )
     for token in all_tokens_result.scalars().all():
@@ -165,17 +192,22 @@ async def revoke_all_refresh_tokens(db: AsyncSession, raw_token: str) -> None:
 
 
 # ── OTP ────────────────────────────────────────────────────────────────────────
+# NOTE: OTP hashing intentionally uses raw bcrypt (NOT passlib).
+# OTP hashes are internal-only and never cross-checked against user passwords,
+# so there is no compatibility concern here. Raw bcrypt is used to allow
+# explicit round control (_OTP_BCRYPT_ROUNDS) for performance tuning.
 
 def _generate_otp_code(length: int = 6) -> str:
     return "".join(secrets.choice(string.digits) for _ in range(length))
 
 
 def _hash_otp(code: str) -> str:
-    # rounds=10 — OTP hashing is the biggest login/register bottleneck
-    return bcrypt.hashpw(code.encode(), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode()
+    return bcrypt.hashpw(
+        code.encode(), bcrypt.gensalt(rounds=_OTP_BCRYPT_ROUNDS)
+    ).decode()
 
 
-def _verify_otp(code: str, hashed: str) -> bool:
+def _verify_otp_code(code: str, hashed: str) -> bool:
     return bcrypt.checkpw(code.encode(), hashed.encode())
 
 
@@ -186,11 +218,12 @@ async def create_otp(
     user_id: Optional[int] = None,
 ) -> str:
     """Creates and stores a hashed OTP. Returns the raw code (send via email)."""
+    # Invalidate any existing active OTPs for the same email + purpose
     existing = await db.execute(
         select(OTP).where(
             OTP.email == email,
             OTP.purpose == purpose,
-            OTP.is_used == False,
+            OTP.is_used == False,  # noqa: E712
         )
     )
     for old in existing.scalars().all():
@@ -226,7 +259,7 @@ async def verify_otp(
         select(OTP).where(
             OTP.email == email,
             OTP.purpose == purpose,
-            OTP.is_used == False,
+            OTP.is_used == False,  # noqa: E712
         ).order_by(OTP.created_at.desc())
     )
     db_otp = result.scalar_one_or_none()
@@ -240,7 +273,7 @@ async def verify_otp(
     if db_otp.attempt_count >= settings.OTP_MAX_ATTEMPTS:
         raise ValueError("Too many failed attempts. Please request a new OTP.")
 
-    if not _verify_otp(code, db_otp.hashed_code):
+    if not _verify_otp_code(code, db_otp.hashed_code):
         db_otp.attempt_count += 1
         await db.commit()
         remaining = settings.OTP_MAX_ATTEMPTS - db_otp.attempt_count
