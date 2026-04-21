@@ -1,23 +1,46 @@
 """
-Reports router.
-POST   /reports                    — create report (citizen)
-GET    /reports                    — list reports (all authenticated)
-GET    /reports/my-reports         — list own reports (citizen)
-GET    /reports/{id}               — get single report
-PATCH  /reports/{id}               — update status (admin/contractor)
-DELETE /reports/{id}               — delete report (admin)
-POST   /reports/{id}/media         — upload image/video
-POST   /reports/{id}/upvote        — toggle upvote
-PUT    /reports/{id}/validate      — admin: mark verified
-PUT    /reports/{id}/decline       — admin: decline with reason
-GET    /reports/{id}/comments      — list comments on a report
-POST   /reports/{id}/comments      — add comment
-DELETE /reports/comments/{id}      — delete comment (owner or admin)
-GET    /reports/{id}/nearby-cctv   — find CCTV cameras near a report
+Reports router — unified production version
+============================================
+Merges the two conflicting reports.py versions into one authoritative file.
+
+Key fixes vs the two originals:
+  1. POST /reports/{id}/media  → no longer re-runs the full ML pipeline.
+     The frontend already ran /ml/analyze on file select. This endpoint
+     only stores the file + the pre-computed results passed in the form.
+     This eliminates the double-inference cost and the 202/polling confusion.
+
+  2. GET /reports/mine  → renamed from /my-reports to /mine to match
+     the useReports.js hook that calls /reports/mine.
+
+  3. Admin actions (validate, decline, comments, nearby-cctv) preserved
+     from the second version.
+
+  4. _fetch_report_with_relations() helper restored for eager-loading
+     media_attachments and ai_detections in list/get endpoints.
+
+Routes:
+  POST   /reports                      — create report
+  GET    /reports                      — list all (admin/contractor)
+  GET    /reports/mine                 — own reports (citizen)
+  GET    /reports/{id}                 — single report
+  PATCH  /reports/{id}                 — update status (admin/contractor)
+  DELETE /reports/{id}                 — delete (admin)
+  POST   /reports/{id}/media           — attach file + store pre-computed AI results
+  POST   /reports/{id}/upvote          — toggle upvote
+  PUT    /reports/{id}/validate        — admin quick-verify
+  PUT    /reports/{id}/decline         — admin decline with reason
+  GET    /reports/{id}/comments        — list comments
+  POST   /reports/{id}/comments        — add comment
+  DELETE /reports/comments/{id}        — delete comment (owner or admin)
+  GET    /reports/{id}/nearby-cctv     — CCTV cameras within 100 m
 """
+
+import uuid
+from pathlib import Path
+
 from fastapi import (
     APIRouter, BackgroundTasks, Depends, File,
-    HTTPException, Query, Request, UploadFile, Form, status,
+    Form, HTTPException, Query, Request, UploadFile, status,
 )
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -32,22 +55,46 @@ from app.middleware.auth_middleware import (
 from app.middleware.rate_limiter import limiter
 from app.models.cctv import CCTV
 from app.models.comment import Comment
-from app.models.enums import MediaType, NotificationType, ReportStatus, UserRole
-from app.models.notification import Notification
+from app.models.enums import (
+    DamageType, MediaType, NotificationType,
+    ReportStatus, SeverityLevel, UserRole,
+)
 from app.models.report import Report
 from app.models.user import User
 from app.schemas.report import ReportCreate, ReportListResponse, ReportResponse, ReportUpdate
-from app.services import ml_service, report_service, upload_service
+from app.services import report_service
 from app.services.notification_service import notify_background
 from app.utils.geo import calculate_distance
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
-# ── Schemas (inline — small enough not to need a separate file) ────────────────
+# ── Inline schemas ─────────────────────────────────────────────────────────────
 
 class CommentCreate(BaseModel):
     content: str
+
+
+# ── Shared helper ──────────────────────────────────────────────────────────────
+
+async def _fetch_report_or_404(db: AsyncSession, report_id: int) -> Report:
+    """Eagerly load relations so response serialization doesn't trigger lazy loads."""
+    result = await db.execute(
+        select(Report)
+        .options(
+            selectinload(Report.media_attachments),
+            selectinload(Report.ai_detections),
+        )
+        .where(Report.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    return report
 
 
 # ── Core CRUD ──────────────────────────────────────────────────────────────────
@@ -60,8 +107,14 @@ async def create_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new damage report. Upload image separately via /reports/{id}/media."""
+    """
+    Step 1 of the submit flow.
+    Creates the report record with AI classification results embedded
+    (the frontend sends damage_type, severity, is_ai_generated from /ml/analyze).
+    Media is attached separately via POST /reports/{id}/media.
+    """
     report = await report_service.create_report(db, data, current_user.id)
+    report = await _fetch_report_or_404(db, report.id)
     upvote_count = await report_service.get_upvote_count(db, report.id)
     response = ReportResponse.model_validate(report)
     response.upvote_count = upvote_count
@@ -84,31 +137,31 @@ async def list_reports(
     )
     results = []
     for r in reports:
+        r = await _fetch_report_or_404(db, r.id)
         item = ReportResponse.model_validate(r)
         item.upvote_count = await report_service.get_upvote_count(db, r.id)
         results.append(item)
-
-    return ReportListResponse(
-        total=total, page=page, page_size=page_size, results=results
-    )
+    return ReportListResponse(total=total, page=page, page_size=page_size, results=results)
 
 
-# NOTE: /my-reports must be declared BEFORE /{report_id} to avoid routing conflict
-@router.get("/my-reports", response_model=ReportListResponse)
+# NOTE: /mine MUST be declared BEFORE /{report_id} to avoid routing conflict
+@router.get("/mine", response_model=ReportListResponse)
 @limiter.limit("60/minute")
 async def get_my_reports(
     request: Request,
+    status: ReportStatus | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return only reports submitted by the authenticated citizen."""
+    """Returns only reports submitted by the authenticated user."""
     reports, total = await report_service.list_reports(
-        db, owner_id=current_user.id, page=page, page_size=page_size
+        db, owner_id=current_user.id, status=status, page=page, page_size=page_size
     )
     results = []
     for r in reports:
+        r = await _fetch_report_or_404(db, r.id)
         item = ReportResponse.model_validate(r)
         item.upvote_count = await report_service.get_upvote_count(db, r.id)
         results.append(item)
@@ -121,9 +174,7 @@ async def get_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    report = await report_service.get_report(db, report_id)
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    report = await _fetch_report_or_404(db, report_id)
     response = ReportResponse.model_validate(report)
     response.upvote_count = await report_service.get_upvote_count(db, report.id)
     return response
@@ -137,12 +188,8 @@ async def update_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin_or_contractor),
 ):
-    """Admin/contractor only — update report status."""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
-
+    """Admin/contractor only — update status, notes, assigned contractor, etc."""
+    report = await _fetch_report_or_404(db, report_id)
     updated = await report_service.update_report_status(db, report, data, current_user)
 
     if report.owner_id and data.status:
@@ -155,6 +202,7 @@ async def update_report(
             report_id=report_id,
         )
 
+    updated = await _fetch_report_or_404(db, report_id)
     response = ReportResponse.model_validate(updated)
     response.upvote_count = await report_service.get_upvote_count(db, report_id)
     return response
@@ -166,39 +214,46 @@ async def delete_report(
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    report = await _fetch_report_or_404(db, report_id)
     await db.delete(report)
     await db.commit()
 
 
 # ── Media upload ───────────────────────────────────────────────────────────────
 
-@router.post("/{report_id}/media", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{report_id}/media", status_code=status.HTTP_200_OK)
 @limiter.limit("20/minute")
 async def upload_media(
     request: Request,
     report_id: int,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Upload image or video for a report.
-    Returns 202 immediately — AI analysis runs in background.
+    Step 2 of the submit flow — attaches the media file to an existing report.
+
+    FIX: This endpoint NO LONGER re-runs ML analysis.
+    The frontend already ran /ml/analyze on file select and stored the results
+    in state. Those results were embedded into the report record in POST /reports.
+    Re-running inference here would:
+      (a) double the latency
+      (b) create a race condition where results could differ
+      (c) cause 500 errors when the file is a duplicate frame from a video
+
+    The endpoint simply:
+      1. Validates file type + size
+      2. Saves the file to disk
+      3. Creates a MediaAttachment record linked to the report
+      4. Returns the media ID + the AI results already on the report
     """
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    report = await _fetch_report_or_404(db, report_id)
 
     if report.owner_id != current_user.id and current_user.role.value != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
-    content_type = file.content_type or ""
+    content_type = (file.content_type or "").lower()
+
     if content_type in settings.ALLOWED_IMAGE_TYPES:
         media_type = MediaType.image
     elif content_type in settings.ALLOWED_VIDEO_TYPES:
@@ -209,21 +264,69 @@ async def upload_media(
             detail=f"Unsupported file type: {content_type}",
         )
 
-    attachment, raw_bytes = await upload_service.save_upload(db, report, file, media_type)
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file.")
 
-    if settings.AI_FAKE_DETECTION_ENABLED:
-        hive_key = getattr(settings, "HIVE_API_KEY", None)
-        if hive_key:
-            background_tasks.add_task(
-                ml_service.detect_ai_generated, db, attachment, raw_bytes, hive_key
-            )
-
-    if settings.AI_ENABLED and media_type == MediaType.image:
-        background_tasks.add_task(
-            ml_service.run_detection, db, report, attachment, raw_bytes
+    max_bytes = (
+        settings.MAX_IMAGE_SIZE_MB if media_type == MediaType.image
+        else settings.MAX_VIDEO_SIZE_MB
+    ) * 1024 * 1024
+    if len(contents) > max_bytes:
+        mb = settings.MAX_IMAGE_SIZE_MB if media_type == MediaType.image else settings.MAX_VIDEO_SIZE_MB
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds the maximum allowed size of {mb} MB.",
         )
 
-    return {"message": "Media uploaded. AI analysis running in background.", "media_id": attachment.id}
+    # ── Save to disk ──────────────────────────────────────────────────────────
+    safe_name = f"{uuid.uuid4().hex}_{Path(file.filename or 'upload').name}"
+    upload_dir = Path(settings.UPLOAD_DIR)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    file_path = upload_dir / safe_name
+    file_path.write_bytes(contents)
+
+    # ── Persist attachment record ─────────────────────────────────────────────
+    # Import here to avoid circular imports if MediaAttachment references Report
+    from app.models.media_attachment import MediaAttachment  # noqa: PLC0415
+
+    attachment = MediaAttachment(
+        report_id=report_id,
+        file_url=f"/uploads/{safe_name}",
+        file_name=file.filename or safe_name,
+        file_size_bytes=len(contents),
+        media_type=media_type,
+        is_processed=True,
+        # Mirror the AI flags already stored on the report record
+        is_ai_generated=report.is_ai_generated,
+        ai_generated_confidence=None,  # confidence stored on report; not repeated here
+    )
+    db.add(attachment)
+    await db.commit()
+    await db.refresh(attachment)
+
+    logger.info(
+        "Media attached to report %d — media_id=%d  type=%s  size=%d bytes",
+        report_id, attachment.id, media_type.value, len(contents),
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "media_id": attachment.id,
+            "file_url": attachment.file_url,
+            # Return the AI results from the report so the frontend
+            # can confirm what was persisted matches what was displayed.
+            "ai_validation": {
+                "is_ai_generated": report.is_ai_generated,
+                "status": "flagged" if report.is_ai_generated else "approved",
+            },
+            "classification": {
+                "damage_type": report.damage_type.value if report.damage_type else None,
+                "severity": report.severity.value if report.severity else None,
+            },
+        },
+    }
 
 
 # ── Upvote ─────────────────────────────────────────────────────────────────────
@@ -239,7 +342,7 @@ async def toggle_upvote(
     return {"upvoted": added, "upvote_count": count}
 
 
-# ── Admin actions (from legacy — these were missing in production) ─────────────
+# ── Admin actions ──────────────────────────────────────────────────────────────
 
 @router.put("/{report_id}/validate", status_code=status.HTTP_200_OK)
 async def validate_report(
@@ -248,12 +351,8 @@ async def validate_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin: Quickly mark a report as VERIFIED."""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
-
+    """Admin: quick-mark a flagged or pending report as VERIFIED."""
+    report = await _fetch_report_or_404(db, report_id)
     report.status = ReportStatus.VERIFIED
     await db.commit()
 
@@ -262,11 +361,10 @@ async def validate_report(
             notify_background,
             user_id=report.owner_id,
             title="Report Verified",
-            message=f"Your report #{report_id} has been verified.",
+            message=f"Your report #{report_id} has been verified by an administrator.",
             type=NotificationType.success,
             report_id=report_id,
         )
-
     return {"message": "Report verified successfully."}
 
 
@@ -274,16 +372,12 @@ async def validate_report(
 async def decline_report(
     report_id: int,
     background_tasks: BackgroundTasks,
-    reason: str = Form(...),
+    reason: str = Form(..., min_length=5, max_length=500),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin: Decline a report with a reason."""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
-
+    """Admin: decline a report and record the reason."""
+    report = await _fetch_report_or_404(db, report_id)
     report.status = ReportStatus.DECLINED
     report.decline_reason = reason
     await db.commit()
@@ -297,13 +391,12 @@ async def decline_report(
             type=NotificationType.warning,
             report_id=report_id,
         )
-
     return {"message": "Report declined."}
 
 
-# ── Comments (from legacy — missing in production) ─────────────────────────────
+# ── Comments ───────────────────────────────────────────────────────────────────
+# NOTE: /comments/{id} MUST come before /{report_id} to prevent routing conflict
 
-# NOTE: /comments/{id} must come BEFORE /{report_id} to avoid routing conflict
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(
     comment_id: int,
@@ -326,6 +419,7 @@ async def get_comments(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await _fetch_report_or_404(db, report_id)  # ensures 404 if report missing
     result = await db.execute(
         select(Comment)
         .options(selectinload(Comment.user))
@@ -342,14 +436,11 @@ async def add_comment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
-
+    await _fetch_report_or_404(db, report_id)
     comment = Comment(
         report_id=report_id,
         user_id=current_user.id,
-        content=data.content,
+        content=data.content.strip(),
     )
     db.add(comment)
     await db.commit()
@@ -357,27 +448,28 @@ async def add_comment(
     return comment
 
 
-# ── Nearby CCTV (from legacy — missing in production) ─────────────────────────
+# ── Nearby CCTV ────────────────────────────────────────────────────────────────
 
 @router.get("/{report_id}/nearby-cctv")
 async def get_nearby_cctv(
     report_id: int,
+    radius_meters: float = Query(100.0, ge=10, le=1000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return active CCTV cameras within 100m of the report location."""
-    result = await db.execute(select(Report).where(Report.id == report_id))
-    report = result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    """Return active CCTV cameras within `radius_meters` of the report location."""
+    report = await _fetch_report_or_404(db, report_id)
 
-    cam_result = await db.execute(select(CCTV).where(CCTV.is_active == True))
+    cam_result = await db.execute(select(CCTV).where(CCTV.is_active == True))  # noqa: E712
     cameras = cam_result.scalars().all()
 
     nearby = []
     for cam in cameras:
-        dist = calculate_distance(report.latitude, report.longitude, cam.latitude, cam.longitude)
-        if dist <= 100:
+        dist = calculate_distance(
+            report.latitude, report.longitude,
+            cam.latitude, cam.longitude,
+        )
+        if dist <= radius_meters:
             nearby.append({
                 "id": cam.id,
                 "name": cam.location_name,
@@ -386,4 +478,6 @@ async def get_nearby_cctv(
                 "distance_meters": round(dist, 2),
                 "stream_url": cam.stream_url,
             })
+
+    nearby.sort(key=lambda c: c["distance_meters"])
     return nearby

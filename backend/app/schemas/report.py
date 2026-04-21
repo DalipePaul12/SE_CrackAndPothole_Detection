@@ -1,17 +1,18 @@
 from datetime import datetime
 from typing import List, Optional
-from uuid import UUID
 
 from pydantic import Field, field_validator
 
 from app.models.enums import DamageType, ReportStatus, SeverityLevel
 from app.schemas.base import AppBaseModel
-from app.schemas.ai_detection_result import AIDetectionResultResponse
 from app.schemas.media_attachment import MediaAttachmentResponse
 from app.schemas.user import UserPublic
 
+# AIDetectionResultResponse import removed — ai_detections is excluded from
+# ReportResponse until selectinload(Report.ai_detections) is restored in the
+# router. Accessing the unloaded relationship via Pydantic triggers a
+# MissingGreenlet crash in async SQLAlchemy.
 
-# ── Request schemas ────────────────────────────────────────────────────────────
 
 class ReportCreate(AppBaseModel):
     latitude: float = Field(..., ge=-90.0, le=90.0)
@@ -20,10 +21,15 @@ class ReportCreate(AppBaseModel):
     street_name: Optional[str] = Field(None, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
 
+    ai_damage_type: Optional[DamageType] = None
+    ai_severity: Optional[SeverityLevel] = None
+    ai_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    is_flagged_fake: bool = False
+    fake_confidence: Optional[float] = Field(0.0, ge=0.0, le=1.0)
+
     @field_validator("latitude")
     @classmethod
     def valid_ph_latitude(cls, v: float) -> float:
-        # Philippines bounding box: lat 4.5 – 21.5
         if not (4.5 <= v <= 21.5):
             raise ValueError("Latitude must be within the Philippines (4.5 – 21.5).")
         return v
@@ -31,21 +37,17 @@ class ReportCreate(AppBaseModel):
     @field_validator("longitude")
     @classmethod
     def valid_ph_longitude(cls, v: float) -> float:
-        # Philippines bounding box: lon 116.0 – 127.0
         if not (116.0 <= v <= 127.0):
             raise ValueError("Longitude must be within the Philippines (116.0 – 127.0).")
         return v
 
 
 class ReportUpdate(AppBaseModel):
-    """Admin/contractor only — citizens cannot change status directly."""
     status: Optional[ReportStatus] = None
     decline_reason: Optional[str] = Field(None, max_length=500)
     barangay: Optional[str] = Field(None, max_length=100)
     street_name: Optional[str] = Field(None, max_length=200)
 
-
-# ── Response schemas ───────────────────────────────────────────────────────────
 
 class ReportResponse(AppBaseModel):
     id: int
@@ -58,12 +60,10 @@ class ReportResponse(AppBaseModel):
     description: Optional[str] = None
     image_url: Optional[str] = None
 
-    # AI results
     ai_damage_type: Optional[DamageType] = None
     ai_severity: Optional[SeverityLevel] = None
     ai_confidence: Optional[float] = None
 
-    # Flags
     is_flagged_fake: bool
     fake_confidence: float
     is_potential_duplicate: bool
@@ -71,18 +71,18 @@ class ReportResponse(AppBaseModel):
     status: ReportStatus
     decline_reason: Optional[str] = None
 
-    upvote_count: int = 0          # computed in service layer, not a DB column
+    upvote_count: int = 0
     view_count: int
 
     created_at: datetime
     updated_at: datetime
 
     media_attachments: List[MediaAttachmentResponse] = []
-    ai_detections: List[AIDetectionResultResponse] = []
+    # ai_detections intentionally excluded — restore after adding
+    # selectinload(Report.ai_detections) back to _fetch_report_or_404
 
 
 class ReportListResponse(AppBaseModel):
-    """Paginated list wrapper."""
     total: int
     page: int
     page_size: int

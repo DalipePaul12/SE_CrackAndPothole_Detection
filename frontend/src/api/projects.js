@@ -1,50 +1,68 @@
-const BASE = "http://127.0.0.1:8000/api/v1";
-const getToken = () => localStorage.getItem("access_token");
-const authHeader = () => ({
-  Authorization: `Bearer ${getToken()}`,
-  "Content-Type": "application/json",
-});
+import { api } from "./client";
 
-export async function getProjects() {
-  const res = await fetch(`${BASE}/projects/`, { headers: authHeader() });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
+export const getProjects = async () => {
+  const res = await api.get("/projects/");
 
-export async function getProjectById(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}`, {
-    headers: authHeader(),
+  return {
+    success: res?.success ?? false,
+    data: Array.isArray(res?.data) ? res.data : [],
+    error: res?.error ?? null,
+  };
+};
+
+export const getProjectById = async (projectId) => {
+  const res = await api.get(`/projects/${projectId}`);
+
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};
+
+export const createProject = async (payload) => {
+  const res = await api.post("/projects/", payload);
+
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};
+
+export const updateProject = async (projectId, payload) => {
+  const res = await api.put(`/projects/${projectId}`, payload);
+
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};
+
+export const updateProjectStatus = async (
+  projectId,
+  status,
+  completion_percentage
+) => {
+  const res = await api.put(`/projects/${projectId}`, {
+    status,
+    completion_percentage,
   });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
 
-export async function createProject(data) {
-  // data: { report_id, priority, contractor, estimated_cost, start_date }
-  const res = await fetch(`${BASE}/projects/`, {
-    method: "POST",
-    headers: authHeader(),
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};
 
-export async function updateProject(projectId, data) {
-  const res = await fetch(`${BASE}/projects/${projectId}`, {
-    method: "PATCH",
-    headers: authHeader(),
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
+export const deleteProject = async (projectId) => {
+  const res = await api.delete(`/projects/${projectId}`);
 
-export async function deleteProject(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}`, {
-    method: "DELETE",
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};

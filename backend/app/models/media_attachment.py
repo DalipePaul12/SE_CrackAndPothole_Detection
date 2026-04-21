@@ -1,12 +1,21 @@
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, DateTime,
-    Enum as SQLEnum, Float, ForeignKey, Integer, String,
+    Enum as SQLEnum, Float, ForeignKey, Integer, String, Index
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from enum import Enum
 
 from app.db.base import Base
 from app.models.enums import MediaType
+
+
+class ProcessingStatus(str, Enum):
+    UPLOADED = "uploaded"
+    VALIDATING_AI = "validating_ai"
+    AI_CHECKED = "ai_checked"
+    CLASSIFIED = "classified"
+    FAILED = "failed"
 
 
 class MediaAttachment(Base):
@@ -18,12 +27,16 @@ class MediaAttachment(Base):
             name="ck_media_file_size_positive",
         ),
         CheckConstraint(
-            "ai_generated_confidence >= 0.0 AND ai_generated_confidence <= 1.0",
+            "ai_generated_confidence IS NULL OR (ai_generated_confidence >= 0.0 AND ai_generated_confidence <= 1.0)",
             name="ck_media_ai_confidence_range",
         ),
+        Index("idx_media_report_id", "report_id"),
+        Index("idx_media_ai_generated", "is_ai_generated"),
+        Index("idx_media_processing_status", "processing_status"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
+
     report_id = Column(
         Integer,
         ForeignKey("reports.id", ondelete="CASCADE"),
@@ -31,7 +44,6 @@ class MediaAttachment(Base):
         index=True,
     )
 
-    # File info
     file_url = Column(String, nullable=False)
     file_name = Column(String, nullable=True)
     file_size_bytes = Column(Integer, nullable=True)
@@ -41,19 +53,32 @@ class MediaAttachment(Base):
         nullable=False,
     )
 
-    # AI-generated media detection results
-    is_ai_generated = Column(Boolean, default=False)
-    ai_generated_confidence = Column(Float, default=0.0)
-    # Which open-source model was used — e.g. "hive-moderation"
+    is_ai_generated = Column(Boolean, nullable=True)
+    ai_generated_confidence = Column(Float, nullable=True)
     ai_generated_model_used = Column(String, nullable=True)
 
-    # True once YOLO inference has run on this file
-    is_processed = Column(Boolean, default=False)
+    processing_status = Column(
+        SQLEnum(ProcessingStatus, name="processing_status_enum"),
+        default=ProcessingStatus.UPLOADED,
+        nullable=False
+    )
+
+    is_processed = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships
-    report = relationship("Report", back_populates="media_attachments")
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+    report = relationship(
+        "Report",
+        back_populates="media_attachments",
+        lazy="joined"
+    )
+
     ai_detections = relationship(
         "AIDetectionResult",
         back_populates="media",

@@ -1,42 +1,69 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+
+const WS_BASE =
+  import.meta.env.VITE_WS_URL || "ws://127.0.0.1:8000/ws";
 
 export function useWebSocket(onMessage) {
-  const ws = useRef(null);
-  const token = localStorage.getItem("access_token");
+  const wsRef = useRef(null);
+  const reconnectRef = useRef(null);
+  const mountedRef = useRef(false);
+
+  const [connected, setConnected] = useState(false);
 
   const connect = useCallback(() => {
+    const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    ws.current = new WebSocket(
-      `ws://127.0.0.1:8000/ws?token=${token}`
-    );
+    const ws = new WebSocket(`${WS_BASE}?token=${token}`);
+    wsRef.current = ws;
 
-    ws.current.onopen = () => {
-      console.log("WebSocket connected");
+    ws.onopen = () => {
+      setConnected(true);
     };
 
-    ws.current.onmessage = (event) => {
+    ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        onMessage(data); // pass to component: { event, title, message, ... }
+
+        if (data && typeof data === "object") {
+          onMessage?.(data);
+        }
       } catch {}
     };
 
-    ws.current.onclose = () => {
-      // Auto-reconnect after 3 seconds
-      setTimeout(connect, 3000);
+    ws.onclose = () => {
+      setConnected(false);
+
+      if (!mountedRef.current) return;
+
+      reconnectRef.current = setTimeout(() => {
+        connect();
+      }, 3000);
     };
 
-    ws.current.onerror = (err) => {
-      console.error("WebSocket error:", err);
-      ws.current.close();
+    ws.onerror = () => {
+      ws.close();
     };
-  }, [token]);
+  }, [onMessage]);
 
   useEffect(() => {
+    mountedRef.current = true;
     connect();
+
     return () => {
-      if (ws.current) ws.current.close();
+      mountedRef.current = false;
+
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current);
+      }
+
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
   }, [connect]);
+
+  return {
+    connected,
+  };
 }

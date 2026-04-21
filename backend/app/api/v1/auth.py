@@ -1,8 +1,3 @@
-"""
-Legacy auth router — kept for backward compatibility only.
-The production auth flow is in app/routers/auth.py.
-This file is NOT registered in main.py.
-"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,15 +10,12 @@ from app.models.user import User
 from app.models.enums import OTPPurpose
 from app.core.config import settings
 from app.core.security import verify_password, create_access_token, get_password_hash
-# FIXED: OTP model no longer has a raw `code` field — it stores only `hashed_code`.
-# All OTP creation/verification must go through auth_service.
 from app.services import auth_service
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
-# --- SCHEMAS ---
 class UserCreate(BaseModel):
     email: str
     password: str
@@ -47,7 +39,6 @@ class ResetPasswordSchema(BaseModel):
     new_password: str
 
 
-# --- ENDPOINTS ---
 @router.post("/register", response_model=dict)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -62,9 +53,11 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         role="citizen",
         reputation_score=100,
     )
+
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+
     return {"message": "User registered successfully", "user_id": new_user.id}
 
 
@@ -86,33 +79,34 @@ async def login(
     access_token = create_access_token(
         data={"sub": user.email, "role": user.role, "id": user.id}
     )
-    return {"access_token": access_token, "token_type": "bearer", "role": user.role}
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": user.role,
+    }
 
 
 @router.post("/forgot-password")
 async def forgot_password(data: EmailSchema, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # FIXED: auth_service.create_otp hashes the code before saving to DB.
-    # It returns the raw code so we can display it (mock email).
+    # OTP is hashed internally, raw code returned for delivery
     otp_code = await auth_service.create_otp(
         db, data.email, OTPPurpose.password_reset, user.id
     )
 
-    print(f"==========================================")
-    print(f" [MOCK EMAIL] OTP for {data.email}: {otp_code}")
-    print(f"==========================================")
+    print(f"OTP for {data.email}: {otp_code}")
 
-    return {"message": "OTP sent to email (Check server console for code)"}
+    return {"message": "OTP sent"}
 
 
 @router.post("/reset-password")
 async def reset_password(data: ResetPasswordSchema, db: AsyncSession = Depends(get_db)):
-    # FIXED: auth_service.verify_otp compares against hashed_code in DB.
-    # Old code used OTP.code == data.otp_code — that field no longer exists.
     try:
         await auth_service.verify_otp(
             db, data.email, data.otp_code, OTPPurpose.password_reset
@@ -122,15 +116,17 @@ async def reset_password(data: ResetPasswordSchema, db: AsyncSession = Depends(g
 
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     user.hashed_password = get_password_hash(data.new_password)
     await db.commit()
-    return {"message": "Password updated successfully. You can now login."}
+
+    return {"message": "Password updated successfully"}
 
 
-# --- DEPENDENCY: Get Current User ---
+# decodes JWT and returns authenticated user
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
@@ -140,16 +136,25 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
         email: str = payload.get("sub")
+
         if email is None:
             raise credentials_exception
+
     except JWTError:
         raise credentials_exception
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
+
     if user is None:
         raise credentials_exception
+
     return user

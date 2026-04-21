@@ -1,77 +1,56 @@
-import React, { useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import "./AdminManageReports.css";
 
 import AdminSidebar from "../../components/AdminSidebar.jsx";
 import AdminHeader from "../../components/AdminHeader.jsx";
 
+import { getReports, updateReport } from "../../api/reports";
+
 function AdminManageReports() {
-  const [selectedReport, setSelectedReport] = useState(null); // NEW
-  const [isModalOpen, setIsModalOpen] = useState(false); // NEW
-
-  const handleRowClick = (report) => {
-    setSelectedReport(report);
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedReport(null);
-  };
-
-  const [reports, setReports] = useState([
-    {
-      id: "Report#001",
-      reporterName: "Juan Dela Cruz",
-      contact: "09171234567",
-      location: "EDSA, Quezon City",
-      type: "Pothole",
-      severity: "Critical",
-      status: "In Progress",
-      date: "2026-03-02",
-      fileUrl: "/snap.jpg",
-      fileType: "image",
-      additionalInfo: "Large pothole near the bus stop.",
-    },
-    {
-      id: 2,
-      title: "Road crack near school",
-      location: "España Blvd",
-      severity: "Non-Critical",
-      type: "Crack",
-      status: "In Progress",
-    },
-        {
-      id: 4,
-      title: "Pothole in EDSA",
-      location: "EDSA, Quezon City",
-      severity: "Critical",
-      type: "Pothole",
-      status: "In Progress",
-    },
-  ]);
-
-  const [filterType, setFilterType] = useState("All");
+  const [filterType, setFilterType]         = useState("All");
   const [filterSeverity, setFilterSeverity] = useState("All");
+  const [reports, setReports]               = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState(null);
+  const [selectedReport, setSelected]       = useState(null);
+  const [completing, setCompleting]         = useState(null);
 
-  // Only IN PROGRESS reports
-  const inProgressReports = reports.filter(
-    (report) => report.status === "In Progress"
-  );
+  const fetchInProgress = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    // Fetch all then filter client-side — avoids enum casing mismatch on status query param
+    const res = await getReports({ page_size: 100 });
+    if (!res.success) { setError(res.error); setLoading(false); return; }
+    const all = res.data?.results ?? [];
+    setReports(all.filter((r) => r.status?.toLowerCase() === "in_progress"));
+    setLoading(false);
+  }, []);
 
-  // Apply both filters
-  const filteredReports = inProgressReports.filter((report) => {
-    const typeMatch = filterType === "All" || report.type === filterType;
-    const severityMatch = filterSeverity === "All" || report.severity === filterSeverity;
-    return typeMatch && severityMatch;
+  useEffect(() => { fetchInProgress(); }, [fetchInProgress]);
+
+  const damageType = (r) => r.ai_damage_type ?? r.damage_type ?? "—";
+  const severity   = (r) => r.ai_severity    ?? r.severity    ?? "—";
+  const location   = (r) => r.location_address ?? r.barangay  ?? "—";
+
+  const filtered = reports.filter((r) => {
+    const dt  = damageType(r).toLowerCase();
+    const sev = severity(r).toLowerCase().replace(/[\s_]/g, "-");
+    return (
+      (filterType === "All" || dt === filterType.toLowerCase()) &&
+      (filterSeverity === "All" || sev === filterSeverity.toLowerCase())
+    );
   });
 
-  const handleComplete = (id) => {
-    const updatedReports = reports.map((report) =>
-      report.id === id
-        ? { ...report, status: "COMPLETED" }
-        : report
-    );
-    setReports(updatedReports);
+  const handleComplete = async (id) => {
+    setCompleting(id);
+    const res = await updateReport(id, { status: "resolved" });
+    if (res.success) {
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      if (selectedReport?.id === id) setSelected(null);
+    } else {
+      alert(res.error || "Failed to update report.");
+    }
+    setCompleting(null);
   };
 
   return (
@@ -80,58 +59,32 @@ function AdminManageReports() {
       <AdminSidebar />
 
       <div className="manage-container">
-
-        {/* FILTERS */}
         <div className="manage-filters">
-            <h2 className="manage-title">Manage Reports</h2>
+          <h2 className="manage-title">Manage Reports</h2>
           <div className="filters-row">
-
-            {/* Damage Type Buttons */}
             <div className="filter-group">
-            <label> Damage Type</label>
-            
-            <div className="filter-buttons">
-              <button
-                className={filterType === "All" ? "active" : ""}
-                onClick={() => setFilterType("All")}
-              >
-                All
-              </button>
-              <button
-                className={filterType === "Crack" ? "active" : ""}
-                onClick={() => setFilterType("Crack")}
-              >
-                Crack
-              </button>
-                
-                <button
-                className={filterType === "Pothole" ? "active" : ""}
-                onClick={() => setFilterType("Pothole")}
-              >
-                Pothole
-              </button>
+              <label>Damage Type</label>
+              <div className="filter-buttons">
+                {["All", "Crack", "Pothole"].map((t) => (
+                  <button key={t} className={filterType === t ? "active" : ""} onClick={() => setFilterType(t)}>{t}</button>
+                ))}
+              </div>
             </div>
-            </div>
-
-            {/* Severity Dropdown */}
             <div className="filter-group">
               <label>Severity</label>
               <div className="custom-select">
-                <select
-                  value={filterSeverity}
-                  onChange={(e) => setFilterSeverity(e.target.value)}
-                >
+                <select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
                   <option value="All">All Severity</option>
                   <option value="Critical">Critical</option>
                   <option value="Non-Critical">Non-Critical</option>
                 </select>
               </div>
             </div>
-
           </div>
         </div>
 
-        {/* TABLE */}
+        {error && <div className="admin-error-banner">{error}</div>}
+
         <div className="manage-table-container">
           <table className="manage-table">
             <thead>
@@ -143,101 +96,104 @@ function AdminManageReports() {
                 <th>Action</th>
               </tr>
             </thead>
-
             <tbody>
-              {filteredReports.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="no-data">
-                    No In Progress Reports
-                  </td>
-                </tr>
+              {loading ? (
+                <tr><td colSpan="5" className="no-data">Loading…</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan="5" className="no-data">No In Progress Reports</td></tr>
               ) : (
-                filteredReports.map((report) => (
-                  <tr key={report.id}
-                    onClick={() => handleRowClick(report)}
-                    className="clickable-row">
-                   <td className="report-cell">
-                    <div className="report-number">
-                        Report #{String(report.id).padStart(4, "0")}
-                    </div>
-                    <div className="report-location" title={report.location}>
-                        {report.location}
-                    </div>
+                filtered.map((r) => (
+                  <tr key={r.id} className="clickable-row" onClick={() => setSelected(r)}>
+                    <td className="report-cell">
+                      <div className="report-number">Report#{String(r.id).padStart(3, "0")}</div>
+                      <div className="report-location" title={location(r)}>{location(r)}</div>
                     </td>
-                    <td>{report.type}</td>
-                    <td className={`severity ${report.severity.toLowerCase().replace(" ", "-")}`}>
-                      {report.severity}
+                    <td>{damageType(r)}</td>
+                    <td className={`severity ${severity(r).toLowerCase().replace(/[\s_]/g, "-")}`}>
+                      {severity(r)}
                     </td>
-                    <td className="status in-progress">{report.status}</td>
+                    <td className="status in-progress">In Progress</td>
                     <td>
                       <button
                         className="complete-btn"
-                        onClick={(e) => {
-                        e.stopPropagation(); 
-                        handleComplete(report.id); 
-                      }}
+                        disabled={completing === r.id}
+                        onClick={(e) => { e.stopPropagation(); handleComplete(r.id); }}
                       >
-                        Mark as Completed
+                        {completing === r.id ? "Saving…" : "Mark as Completed"}
                       </button>
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
-
           </table>
         </div>
 
-        {/* MODAL */}
-        {isModalOpen && selectedReport && (
-          <div className="modal-overlay" onClick={closeModal}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <button className="modal-close-btn" onClick={closeModal}>×</button>
-              <h3 className="modal-title">Report Details</h3>
-
-              <div className="modal-body">
-                {/* LEFT SIDE */}
-                <div className="modal-left">
-                  <div className="reporter-info">
-                    <div className="info-row">
-                      <strong>Report:</strong> {selectedReport.id}
-                    </div>
-                    <div className="info-row">
-                      <strong>Reporter Name:</strong> {selectedReport.reporterName}
-                    </div>
-                    <div className="info-row">
-                      <strong>Contact:</strong> {selectedReport.contact}
-                    </div>
-                  </div>
-
-                  <div className="info-card">
-                    <p><strong>Damage Type:</strong> {selectedReport.type}</p>
-                    <p><strong>Severity:</strong> {selectedReport.severity}</p>
-                    <p><strong>Additional Info:</strong></p>
-                    <p className="additional-info">{selectedReport.additionalInfo}</p>
-                  </div>
-
-                  <div className="location-info">
-                    <p><strong>Location:</strong> {selectedReport.location}</p>
-                  </div>
-                </div>
-
-                {/* RIGHT SIDE */}
-                <div className="modal-right">
-                  <div className="modal-media">
-                    {selectedReport.fileUrl && selectedReport.fileType === "video" ? (
-                      <video src={selectedReport.fileUrl} controls />
-                    ) : (
-                      <img src={selectedReport.fileUrl} alt="Report File" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+        {selectedReport && (
+          <ManageModal
+            report={selectedReport}
+            onClose={() => setSelected(null)}
+            onComplete={handleComplete}
+            completing={completing}
+          />
         )}
       </div>
     </>
+  );
+}
+
+function ManageModal({ report: r, onClose, onComplete, completing }) {
+  const location   = r.location_address ?? r.barangay ?? "—";
+  const damageType = r.ai_damage_type   ?? r.damage_type ?? "—";
+  const severity   = r.ai_severity      ?? r.severity    ?? "—";
+  const mediaUrl   = r.media_attachments?.[0]?.file_url;
+  const mediaType  = r.media_attachments?.[0]?.media_type;
+  const fullUrl    = mediaUrl ? `${import.meta.env.VITE_API_URL || ""}${mediaUrl}` : null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose}>×</button>
+        <h3 className="modal-title">Report Details</h3>
+        <div className="modal-body">
+          <div className="modal-left">
+            <div className="reporter-info">
+              <div className="info-row"><strong>Report:</strong> Report#{String(r.id).padStart(3, "0")}</div>
+              <div className="info-row"><strong>Reporter:</strong> {r.owner?.full_name ?? "Anonymous"}</div>
+              <div className="info-row"><strong>Contact:</strong> {r.owner?.phone ?? "—"}</div>
+            </div>
+            <div className="info-card">
+              <p><strong>Damage Type:</strong> {damageType}</p>
+              <p><strong>Severity:</strong> {severity}</p>
+              <p><strong>Additional Info:</strong></p>
+              <p className="additional-info">{r.description ?? "—"}</p>
+            </div>
+            <div className="location-info">
+              <p><strong>Location:</strong> {location}</p>
+            </div>
+            <button
+              className="complete-btn"
+              style={{ marginTop: 16, width: "100%" }}
+              disabled={completing === r.id}
+              onClick={() => onComplete(r.id)}
+            >
+              {completing === r.id ? "Saving…" : "Mark as Completed"}
+            </button>
+          </div>
+          <div className="modal-right">
+            <div className="modal-media">
+              {fullUrl ? (
+                mediaType === "video"
+                  ? <video src={fullUrl} controls style={{ width: "100%", borderRadius: 8 }} />
+                  : <img src={fullUrl} alt="Report" style={{ width: "100%", borderRadius: 8, objectFit: "cover" }} />
+              ) : (
+                <div className="modal-no-media">No media attached</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

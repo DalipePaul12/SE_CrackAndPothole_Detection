@@ -1,40 +1,34 @@
-import { useState, useEffect } from "react";
-import { getMyProfile, updateMyProfile, changePassword } from "../api/users";
+import api from "./client";
 
-export function useUser() {
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
+export const getMyProfile = async () => {
+  const res = await api.get("/users/me");
 
-  useEffect(() => {
-    const fetch = async () => {
-      try {
-        const data = await getMyProfile();
-        setProfile(data);
-      } catch (err) {
-        setError(err.detail || "Failed to load profile.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
-
-  const update = async (data) => {
-    setSaving(true);
-    try {
-      const updated = await updateMyProfile(data);
-      setProfile(updated);
-      return updated;
-    } finally {
-      setSaving(false);
-    }
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
   };
+};
 
-  const updatePassword = async (current_password, new_password) => {
-    await changePassword(current_password, new_password);
+export const updateMyProfile = async (payload) => {
+  const res = await api.put("/users/me", payload);
+
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
   };
+};
 
-  return { profile, loading, error, saving, update, updatePassword };
-}
+export const changePassword = async (current_password, new_password) => {
+  const res = await api.post("/users/change-password", {
+    current_password,
+    new_password,
+  });
+
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};

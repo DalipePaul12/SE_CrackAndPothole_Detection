@@ -1,0 +1,250 @@
+/**
+ * client.js
+ * =========
+ *
+ * ROOT CAUSE FIX — BASE_URL is now "" (relative) in development.
+ *
+ * BEFORE (broken):
+ *   BASE_URL = "http://127.0.0.1:8000"
+ *   Browser sent: localhost:5173 → 127.0.0.1:8000  (cross-origin)
+ *   Chrome treats "localhost" ≠ "127.0.0.1" as different origins.
+ *   Result: CORS preflight blocked → ERR_FAILED on every API call.
+ *
+ * AFTER (fixed):
+ *   BASE_URL = "" (relative path)
+ *   Browser sends: localhost:5173/api/v1/reports  (same origin — no CORS)
+ *   Vite proxy in vite.config.js forwards to 127.0.0.1:8000 server-side.
+ *   Server↔server has no CORS. Browser never sees a cross-origin request.
+ *
+ * FOR PRODUCTION:
+ *   Set VITE_API_URL=https://api.yourdomain.com in your hosting env vars.
+ *   FastAPI CORS must allow that domain via BACKEND_CORS_ORIGINS in .env.
+ */
+
+const BASE_URL   = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const API_PREFIX = "/api/v1";
+
+// ── Token storage — single source of truth shared with useAuth.js ─────────────
+const TOKEN_KEY   = "access_token";
+const REFRESH_KEY = "refresh_token";
+
+export const tokenStorage = {
+  getAccess:  ()      => localStorage.getItem(TOKEN_KEY),
+  getRefresh: ()      => localStorage.getItem(REFRESH_KEY),
+  setAccess:  (token) => localStorage.setItem(TOKEN_KEY, token),
+  setRefresh: (token) => localStorage.setItem(REFRESH_KEY, token),
+  clear: () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+  },
+};
+
+// ── Redirect on session expiry ─────────────────────────────────────────────────
+// NOTE: redirects to "/" not "/login" — App.jsx has no /login route.
+function redirectToLogin() {
+  tokenStorage.clear();
+  localStorage.removeItem("user");
+  if (!window.location.pathname.startsWith("/dashboard") &&
+      !window.location.pathname.startsWith("/adminpanel")) return;
+  window.location.href = "/";
+}
+
+// ── Token refresh queue (prevents concurrent refresh storms) ──────────────────
+let isRefreshing       = false;
+let refreshSubscribers = [];
+
+function subscribeRefresh(cb) { refreshSubscribers.push(cb); }
+function notifyRefreshDone(token) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+async function attemptTokenRefresh() {
+  if (isRefreshing) return new Promise((res) => subscribeRefresh(res));
+  isRefreshing = true;
+  try {
+    const rt = tokenStorage.getRefresh();
+    if (!rt) return null;
+
+    const res = await fetch(`${BASE_URL}${API_PREFIX}/auth/refresh`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ refresh_token: rt }),
+    });
+
+    if (!res.ok) { redirectToLogin(); return null; }
+
+    const data     = await res.json();
+    const newToken = data?.data?.access_token ?? data?.access_token;
+    if (!newToken) { redirectToLogin(); return null; }
+
+    tokenStorage.setAccess(newToken);
+    notifyRefreshDone(newToken);
+    return newToken;
+  } catch {
+    redirectToLogin();
+    return null;
+  } finally {
+    isRefreshing = false;
+  }
+}
+
+function authHeaders(token) {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// ── Core request ──────────────────────────────────────────────────────────────
+async function request(endpoint, options = {}, _isRetry = false) {
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const token = tokenStorage.getAccess();
+
+    const response = await fetch(`${BASE_URL}${API_PREFIX}${endpoint}`, {
+      credentials: "include",
+      ...options,
+      signal:  controller.signal,
+      headers: { ...authHeaders(token), ...options.headers },
+    });
+
+    let data = null;
+    try { data = await response.json(); } catch { data = null; }
+
+    if (response.status === 401 && !_isRetry) {
+      clearTimeout(timeout);
+      const newToken = await attemptTokenRefresh();
+      if (newToken) return request(endpoint, options, true);
+      return { success: false, data: null, error: "Session expired. Please log in again." };
+    }
+
+    if (response.status === 403) {
+      return {
+        success: false,
+        data:    null,
+        error:   data?.detail || "You don't have permission to access this resource.",
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        data:    null,
+        error:   data?.error || data?.detail || `Request failed (${response.status})`,
+      };
+    }
+
+    return {
+      success: data?.success ?? true,
+      data:    data?.data ?? data,
+      error:   data?.error ?? null,
+    };
+  } catch (err) {
+    if (err.name === "AbortError") {
+      return { success: false, data: null, error: "Request timed out. Please try again." };
+    }
+    return { success: false, data: null, error: "Network error. Check that the backend is running." };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ── Raw request — for 202 polling (usePipeline) ───────────────────────────────
+export async function requestRaw(endpoint, options = {}, _isRetry = false) {
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const token = tokenStorage.getAccess();
+
+    const response = await fetch(`${BASE_URL}${API_PREFIX}${endpoint}`, {
+      credentials: "include",
+      ...options,
+      signal:  controller.signal,
+      headers: { ...authHeaders(token), ...options.headers },
+    });
+
+    let data = null;
+    try { data = await response.json(); } catch { data = null; }
+
+    const s = response.status;
+
+    if (s === 401 && !_isRetry) {
+      clearTimeout(timeout);
+      const nt = await attemptTokenRefresh();
+      if (nt) return requestRaw(endpoint, options, true);
+      return { success: false, data: null, error: "Session expired.", status: 401, retryable: false };
+    }
+
+    if (s === 202) {
+      return { success: false, data: data?.data ?? null, error: data?.detail || "Processing…", status: s, retryable: true };
+    }
+
+    if (!response.ok) {
+      return { success: false, data: null, error: data?.error || data?.detail || `Request failed (${s})`, status: s, retryable: false };
+    }
+
+    return { success: data?.success ?? true, data: data?.data ?? data, error: null, status: s, retryable: false };
+  } catch (err) {
+    return { success: false, data: null, error: err.name === "AbortError" ? "Request timed out." : "Network error", status: 0, retryable: false };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ── Public api object ─────────────────────────────────────────────────────────
+export const api = {
+  get:    (url)               => request(url, { method: "GET" }),
+  post:   (url, body, h = {}) => request(url, { method: "POST",  headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify(body) }),
+  put:    (url, body)         => request(url, { method: "PUT",   headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  patch:  (url, body)         => request(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  delete: (url)               => request(url, { method: "DELETE" }),
+
+  /**
+   * upload() — multipart/form-data
+   * 120s timeout: ML inference on CPU can take 30-90s on large images.
+   * ⚠️ Never set Content-Type manually — browser sets it with the boundary.
+   */
+  upload: async (url, formData, _isRetry = false) => {
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 120000);
+
+    try {
+      const token = tokenStorage.getAccess();
+
+      const response = await fetch(`${BASE_URL}${API_PREFIX}${url}`, {
+        method:      "POST",
+        credentials: "include",
+        signal:      controller.signal,
+        headers:     { ...authHeaders(token) },
+        body:        formData,
+      });
+
+      let data = null;
+      try { data = await response.json(); } catch { data = null; }
+
+      if (response.status === 401 && !_isRetry) {
+        clearTimeout(timeout);
+        const nt = await attemptTokenRefresh();
+        if (nt) return api.upload(url, formData, true);
+        return { success: false, data: null, error: "Session expired. Please log in again." };
+      }
+
+      if (!response.ok) {
+        return { success: false, data: null, error: data?.error || data?.detail || `Upload failed (${response.status})` };
+      }
+
+      return { success: true, data: data?.data ?? data, error: null };
+    } catch (err) {
+      return {
+        success: false,
+        data:    null,
+        error:   err.name === "AbortError"
+          ? "Upload timed out. The file may be too large or ML inference is slow."
+          : "Network error during upload. Check backend connection.",
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+};

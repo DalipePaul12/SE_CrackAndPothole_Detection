@@ -1,6 +1,6 @@
 from sqlalchemy import (
     CheckConstraint, Column, DateTime, Enum as SQLEnum,
-    Float, ForeignKey, Integer, JSON, String,
+    Float, ForeignKey, Integer, JSON, String, Index, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -21,25 +21,33 @@ class AIDetectionResult(Base):
             "inference_time_ms IS NULL OR inference_time_ms >= 0",
             name="ck_ai_inference_time_positive",
         ),
+        # prevents duplicate detection entries for same media + class
+        UniqueConstraint(
+            "media_attachment_id",
+            "detected_class",
+            name="uq_media_class_detection",
+        ),
+        Index("idx_ai_media_id", "media_attachment_id"),
+        Index("idx_ai_class", "detected_class"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
+
     report_id = Column(
         Integer,
         ForeignKey("reports.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+
+    # links detection to specific media (required for pipeline integrity)
     media_attachment_id = Column(
         Integer,
         ForeignKey("media_attachments.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
 
-    # FIX: create_type=False — report.py already creates "damagetype" and "severitylevel".
-    # Having two models both set create_type=True for the same DB type name causes
-    # "type already exists" errors during table creation / Alembic migrations.
     detected_class = Column(
         SQLEnum(DamageType, name="damagetype", create_type=False),
         nullable=False,
@@ -61,6 +69,5 @@ class AIDetectionResult(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships
     report = relationship("Report", back_populates="ai_detections")
     media = relationship("MediaAttachment", back_populates="ai_detections")

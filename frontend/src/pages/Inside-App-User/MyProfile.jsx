@@ -9,15 +9,17 @@ import { ImLocation } from "react-icons/im";
 import { FaPaperPlane, FaSearch, FaTools, FaCheckCircle } from "react-icons/fa";
 import { FaCamera } from "react-icons/fa6";
 import { IoPersonSharp } from "react-icons/io5";
-import { FaUserEdit } from "react-icons/fa";
 
 import { useUser } from "../../hooks/useUser";
 import { useReports } from "../../hooks/useReports";
 
+const BASE_URL = import.meta.env.VITE_API_URL || "";
+
 function MyProfile() {
   const { profile, loading: profileLoading, update, saving } = useUser();
-  const { reports, loading: reportsLoading } = useReports(true);
+  const { reports, loading: reportsLoading } = useReports({ mine: true });
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState("feed");
   const [reportFilter, setReportFilter] = useState("all");
@@ -28,39 +30,42 @@ function MyProfile() {
 
   const getStageIcon = (stage) => {
     switch (stage) {
-      case "Submitted": return <FaPaperPlane />;
-      case "Reviewing": return <FaSearch />;
+      case "Submitted":   return <FaPaperPlane />;
+      case "Reviewing":   return <FaSearch />;
       case "In Progress": return <FaTools />;
-      case "Resolved": return <FaCheckCircle />;
-      default: return null;
+      case "Resolved":    return <FaCheckCircle />;
+      default:            return null;
     }
   };
 
   const statusToStage = (status) => {
     switch (status) {
-      case "PENDING": return "Submitted";
-      case "VERIFIED": return "Reviewing";
+      case "PENDING":     return "Submitted";
+      case "VERIFIED":    return "Reviewing";
       case "IN_PROGRESS": return "In Progress";
-      case "RESOLVED": return "Resolved";
-      case "DECLINED": return "Declined";
-      default: return "Submitted";
+      case "RESOLVED":    return "Resolved";
+      case "DECLINED":    return "Declined";
+      default:            return "Submitted";
     }
+  };
+
+  const getImageUrl = (report) => {
+    const url = report?.media_attachments?.[0]?.file_url;
+    return url ? `${BASE_URL}${url}` : null;
   };
 
   const filteredReports = reportFilter === "resolved"
     ? reports.filter((r) => r.status === "RESOLVED")
     : reports;
 
-  const totalPosts = reports.length;
-  const resolved = reports.filter((r) => r.status === "RESOLVED").length;
-  const inProgress = reports.filter((r) => r.status === "IN_PROGRESS").length;
+  const totalPosts  = reports.length;
+  const resolved    = reports.filter((r) => r.status === "RESOLVED").length;
+  const inProgress  = reports.filter((r) => r.status === "IN_PROGRESS").length;
 
   const handleSaveProfile = async () => {
     try {
       setSaveError("");
-      await update({
-        full_name: formData.full_name,
-      });
+      await update({ full_name: formData.full_name });
       setShowConfirm(false);
     } catch {
       setSaveError("Failed to save. Try again.");
@@ -70,26 +75,27 @@ function MyProfile() {
 
   if (profileLoading) return (
     <>
-      <Sidebar />
-      <AppHeader />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <AppHeader onMenuClick={() => setSidebarOpen(true)} />
       <div className="myprofile-container"><p>Loading profile...</p></div>
     </>
   );
 
   return (
     <>
-      <Sidebar />
-      <AppHeader />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <AppHeader onMenuClick={() => setSidebarOpen(true)} />
 
-      <div
-        className="sidebar-overlay"
-        onClick={() => {
-          document.querySelector(".app-sidebar")?.classList.remove("active");
-          document.querySelector(".sidebar-overlay")?.classList.remove("active");
-        }}
-      />
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay active"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       <div className="myprofile-container">
+
         <div className="profile-header">
           <img
             src={profile?.profile_picture_url || "/snap.jpg"}
@@ -99,20 +105,29 @@ function MyProfile() {
 
           <div className="profile-info">
             <h2>{profile?.full_name || "—"}</h2>
-            <p className="profile-bio">{profile?.barangay ? `${profile.barangay}, ${profile.city}` : "No location set"}</p>
+            <p className="profile-bio">
+              {profile?.barangay
+                ? `${profile.barangay}, ${profile.city}`
+                : "No location set"}
+            </p>
           </div>
 
           <div className="profile-stats">
             <div className="stat-card"><span>{totalPosts}</span><p>Total Posts</p></div>
             <div className="stat-card"><span>{resolved}</span><p>Resolved</p></div>
             <div className="stat-card"><span>{inProgress}</span><p>In Progress</p></div>
-            <div className="stat-card"><span>{Math.floor(profile?.reputation_score ?? 0)}</span><p>Rep Score</p></div>
+            <div className="stat-card">
+              <span>{Math.floor(profile?.reputation_score ?? 0)}</span>
+              <p>Rep Score</p>
+            </div>
           </div>
         </div>
 
-        {/* TABS */}
         <div className="profile-tabs">
-          <button className={activeTab === "feed" ? "active" : ""} onClick={() => setActiveTab("feed")}>
+          <button
+            className={activeTab === "feed" ? "active" : ""}
+            onClick={() => setActiveTab("feed")}
+          >
             Reports Feed
           </button>
           <button
@@ -126,14 +141,23 @@ function MyProfile() {
           </button>
         </div>
 
-        {/* REPORTS FEED */}
         {activeTab === "feed" && (
           <div className="profile-content">
             <div className="profile-content-header">
               <div className="profile-content-title"><h2>Personal Activity Feed</h2></div>
               <div className="feed-filters">
-                <button className={reportFilter === "all" ? "active" : ""} onClick={() => setReportFilter("all")}>All</button>
-                <button className={reportFilter === "resolved" ? "active" : ""} onClick={() => setReportFilter("resolved")}>Resolved</button>
+                <button
+                  className={reportFilter === "all" ? "active" : ""}
+                  onClick={() => setReportFilter("all")}
+                >
+                  All
+                </button>
+                <button
+                  className={reportFilter === "resolved" ? "active" : ""}
+                  onClick={() => setReportFilter("resolved")}
+                >
+                  Resolved
+                </button>
               </div>
             </div>
 
@@ -142,31 +166,59 @@ function MyProfile() {
             ) : filteredReports.length === 0 ? (
               <div className="no-reports">
                 <h3>No Reports Found</h3>
-                <p>{reportFilter === "resolved" ? "You don't have any resolved reports yet." : "You haven't submitted any reports yet."}</p>
+                <p>
+                  {reportFilter === "resolved"
+                    ? "You don't have any resolved reports yet."
+                    : "You haven't submitted any reports yet."}
+                </p>
               </div>
             ) : (
               filteredReports.map((report) => {
                 const currentStage = statusToStage(report.status);
+                const imageUrl = getImageUrl(report);
+
                 return (
                   <div key={report.id} className="report-card">
                     <div className="report-header">
                       <div>
                         <strong>Report #{report.id}</strong>
-                        <p>{report.created_at ? new Date(report.created_at).toLocaleDateString() : "—"}</p>
+                        <p>
+                          {report.created_at
+                            ? new Date(report.created_at).toLocaleString()
+                            : "—"}
+                        </p>
                       </div>
                     </div>
 
                     <div className="report-main">
-                      {report.image_url && <img src={report.image_url} alt="Report" />}
+                      {imageUrl && (
+                        <img
+                          src={imageUrl}
+                          alt={`Report #${report.id}`}
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
+                      )}
                       <div className="ai-result">
                         <h4>AI CLASSIFICATION</h4>
                         <h5>RESULT</h5>
-                        <p><strong>Damage: </strong>
-                          <span className={`damage ${report.ai_damage_type || ""}`}>{report.ai_damage_type || "Pending"}</span>
+                        <p>
+                          <strong>Damage: </strong>
+                          <span className={`damage ${(report.ai_damage_type || "").toLowerCase()}`}>
+                            {report.ai_damage_type || "Pending"}
+                          </span>
                         </p>
-                        <p><strong>Severity: </strong>
-                          <span className={`severity ${report.ai_severity || ""}`}>{report.ai_severity || "Pending"}</span>
+                        <p>
+                          <strong>Severity: </strong>
+                          <span className={`severity ${(report.ai_severity || "").toLowerCase()}`}>
+                            {report.ai_severity || "Pending"}
+                          </span>
                         </p>
+                        {report.ai_confidence != null && (
+                          <p>
+                            <strong>Confidence: </strong>
+                            {(report.ai_confidence * 100).toFixed(1)}%
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -182,15 +234,20 @@ function MyProfile() {
                         const stopIndex = report.status === "DECLINED"
                           ? stages.indexOf("Reviewing")
                           : stages.indexOf(currentStage);
-                        const isStepActive = index <= stopIndex;
-                        const isLineActive = index < stopIndex;
-                        const isDeclined = report.status === "DECLINED" && stage === "Reviewing";
+                        const isStepActive  = index <= stopIndex;
+                        const isLineActive  = index < stopIndex;
+                        const isDeclined    = report.status === "DECLINED" && stage === "Reviewing";
 
                         return (
-                          <div key={stage} className={`timeline-step ${isStepActive ? "active" : ""} ${isDeclined ? "declined" : ""}`}>
+                          <div
+                            key={stage}
+                            className={`timeline-step ${isStepActive ? "active" : ""} ${isDeclined ? "declined" : ""}`}
+                          >
                             <div className="timeline-icon">{getStageIcon(stage)}</div>
                             {index !== stages.length - 1 && (
-                              <div className={`timeline-line ${isLineActive ? "active" : ""} ${isDeclined ? "declined" : ""}`} />
+                              <div
+                                className={`timeline-line ${isLineActive ? "active" : ""} ${isDeclined ? "declined" : ""}`}
+                              />
                             )}
                             <p>{stage}</p>
                           </div>
@@ -204,7 +261,6 @@ function MyProfile() {
           </div>
         )}
 
-        {/* PROFILE SETTINGS */}
         {activeTab === "settings" && formData && (
           <div className="profile-settings">
             <h3>Profile Settings</h3>
@@ -237,7 +293,11 @@ function MyProfile() {
 
             <div className="settings-actions">
               <button className="discard" onClick={() => setActiveTab("feed")}>Discard</button>
-              <button className="save" onClick={() => setShowConfirm(true)} disabled={saving}>
+              <button
+                className="save"
+                onClick={() => setShowConfirm(true)}
+                disabled={saving}
+              >
                 {saving ? "Saving..." : "Save Changes"}
               </button>
             </div>

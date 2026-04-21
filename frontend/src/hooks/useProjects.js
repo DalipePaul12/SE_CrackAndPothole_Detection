@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   getProjects,
   createProject as createApi,
@@ -11,36 +11,106 @@ export function useProjects() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const abortRef = useRef(false);
+
   const fetch = async () => {
     setLoading(true);
+    setError(null);
+    abortRef.current = false;
+
     try {
-      const data = await getProjects();
-      setProjects(data);
+      const res = await getProjects();
+
+      if (!res?.success) {
+        throw new Error(res?.error || "Failed to load projects");
+      }
+
+      const data = Array.isArray(res.data) ? res.data : [];
+
+      if (!abortRef.current) {
+        setProjects(data);
+      }
     } catch (err) {
-      setError(err.detail || "Failed to load projects.");
+      if (!abortRef.current) {
+        setError(err.message || "Failed to load projects");
+        setProjects([]);
+      }
     } finally {
-      setLoading(false);
+      if (!abortRef.current) {
+        setLoading(false);
+      }
     }
   };
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => {
+    fetch();
 
-  const create = async (data) => {
-    const result = await createApi(data);
-    await fetch();
-    return result;
+    return () => {
+      abortRef.current = true;
+    };
+  }, []);
+
+  const create = async (payload) => {
+    try {
+      setError(null);
+
+      const res = await createApi(payload);
+
+      if (!res?.success) {
+        throw new Error(res?.error || "Create failed");
+      }
+
+      await fetch();
+      return res.data;
+    } catch (err) {
+      setError(err.message || "Create failed");
+      return null;
+    }
   };
 
   const updateStatus = async (id, status, completion_percentage) => {
-    const result = await updateApi(id, status, completion_percentage);
-    await fetch();
-    return result;
+    try {
+      setError(null);
+
+      const res = await updateApi(id, status, completion_percentage);
+
+      if (!res?.success) {
+        throw new Error(res?.error || "Update failed");
+      }
+
+      await fetch();
+      return res.data;
+    } catch (err) {
+      setError(err.message || "Update failed");
+      return null;
+    }
   };
 
   const remove = async (id) => {
-    await deleteApi(id);
-    setProjects((prev) => prev.filter((p) => p.id !== id));
+    try {
+      setError(null);
+
+      const res = await deleteApi(id);
+
+      if (!res?.success) {
+        throw new Error(res?.error || "Delete failed");
+      }
+
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      return true;
+    } catch (err) {
+      setError(err.message || "Delete failed");
+      return false;
+    }
   };
 
-  return { projects, loading, error, create, updateStatus, remove, refetch: fetch };
+  return {
+    projects,
+    loading,
+    error,
+    create,
+    updateStatus,
+    remove,
+    refetch: fetch,
+  };
 }

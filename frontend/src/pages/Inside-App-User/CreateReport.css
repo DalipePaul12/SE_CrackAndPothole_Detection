@@ -1,563 +1,826 @@
-.report-overlay {
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+:root {
+  --bg-left: #F2EFE9;
+  --bg-right: #FFFFFF;
+  --bg-input: #F2EFE9;
+  
+  --primary-green: #6C836E; /* Dark sage green for buttons */
+  --primary-green-hover: #556B57; /* Darker green for hover */
+  --text-dark: #333333;
+  --text-muted: #8E9E90; /* Greenish gray for labels */
+  
+  --active-red: #D32F2F; /* Critical / Discard */
+  --active-red-hover: #B71C1C;
+
+  --border-radius-main: 32px;
+  --border-radius-btn: 12px;
+  --border-radius-input: 16px;
+}
+
+/* Base Form Overlay */
+.snap-overlay {
   position: fixed;
   inset: 0;
-  backdrop-filter: blur(8px);
-  background: rgba(0,0,0,0.4);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 9999999;
+  z-index: 1000;
+  font-family: 'Inter', sans-serif;
 }
 
-
-.report-modal {
-  width: 60%;
-  /*max-width: 1200px;*/
-  height: 80vh;
-  background: white;
-  border-radius: 30px;
+.snap-modal {
+  width: 960px;
+  max-width: 95vw;
+  height: 650px;
+  background: var(--bg-right);
+  border-radius: var(--border-radius-main);
   display: flex;
+  position: relative;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
   overflow: hidden;
-  position: relative;
-  z-index: 10000;
 }
 
-.report-left, .report-right {
-  flex: 1;
-  padding: 30px;
-  overflow-y: auto;
-}
-
-/*LEFT PART*/
-.report-left {
-    background-color: rgba(250, 238, 228, 0.722);
-}
-
-.report-left h2{
-    letter-spacing: 0.6px;
-}
-
-/*BUTTONS FOR LEFT SIDE*/
-.report-buttons-container {
-    background-color: #fff;
-    border-radius: 15px;
-    display: flex;
-    flex-direction: column;     /* stack items vertically */
-    justify-content: center;    /* vertical center */
-    align-items: center;        /* horizontal center */
-    text-align: center;         /* center text */
-    margin-bottom: 15px;
-    margin-top: 15px;
-}
-
-
-.file-type-buttons {
-  display: flex;
-  justify-content: center;   /* center horizontally */
-  align-items: center;
-  gap: 40px;                 /* space between buttons */
-}
-
-.file-type-buttons button {
-  display: flex;
-  align-items: center;
-  justify-content: center;   /* center icon + text */
-  gap: 12px;
-  padding: 8px 55px;
-  border-radius: 10px;
-  color: black;
+/* Close X Icon */
+.snap-close-icon {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  background: #FFFFFF;
   border: none;
+  font-size: 20px;
+  color: #aaa;
   cursor: pointer;
-  font-size: 0.8rem;
-  background: white;
-  margin-top: 6px;
-  margin-bottom: 6px;
-}
-
-.file-type-buttons button.active {
-  background: linear-gradient(180deg, #206220, #43a343);
-  color: white;
-  border: 1px solid #000;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
-}
-
-/*UPLOAD*/
-.upload-box {
-  border: 3px dashed #ccc;
-  border-radius: 15px;
-  position: relative;
-  margin-bottom: 10px;
-  height: 285px;
-  overflow: hidden;     
+  z-index: 50;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
+}
+.snap-close-icon:hover {
+  color: var(--text-dark);
+  background: #F0F0F0;
+  transform: scale(1.1);
 }
 
-/*
-.upload-box input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
+/* ---- LEFT PANE ---- */
+.snap-left {
+  width: 45%;
+  background-color: var(--bg-left);
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+}
+
+.snap-left h2 {
+  font-size: 28px;
+  color: var(--text-dark);
+  margin: 0 0 24px 0;
+  font-weight: 700;
+}
+
+/* Tabs */
+.snap-tabs {
+  display: flex;
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 6px;
+  margin-bottom: 30px;
+}
+
+.snap-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 0;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
+  background: transparent;
+  color: var(--primary-green);
+  transition: all 0.3s ease;
 }
-*/
 
-.preview-media {
+.snap-tab:hover:not(.active) {
+  background: rgba(108, 131, 110, 0.1);
+}
+
+.snap-tab.active {
+  background: var(--primary-green);
+  color: #FFFFFF;
+}
+
+/* Upload Area */
+.snap-upload-box {
+  flex: 1;
+  border: 4px dotted #D6D2C4;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  margin-bottom: 30px;
+  min-height: 250px;
+  transition: all 0.3s ease;
+}
+
+.snap-upload-box:hover {
+  border-color: var(--primary-green);
+  background-color: rgba(108, 131, 110, 0.05);
+}
+
+.upload-placeholder {
+  text-align: center;
+  color: var(--primary-green);
+  transition: transform 0.3s ease;
+}
+
+.snap-upload-box:hover .upload-placeholder {
+  transform: translateY(-5px);
+}
+
+.class-btn.active-hf-error {
+  background-color: #f59e0b;   /* amber-500 */
+  color: #ffffff;
+  border-color: #f59e0b;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #fde68a; /* amber-200 */
+}
+ 
+/* ── Blocking red error: no pothole/crack detected ──────────────────────────── */
+.analyze-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b91c1c;            /* red-700 */
+  background-color: #fee2e2; /* red-100 */
+  border: 1px solid #fca5a5; /* red-300 */
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+ 
+/* ── Non-blocking amber warning (keep existing, confirm here) ───────────────── */
+.analyze-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b45309;            /* amber-700 */
+  background-color: #fef3c7; /* amber-100 */
+  border: 1px solid #fcd34d; /* amber-300 */
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+ 
+/* ── Upload box disabled cursor while analyzing ───────────────────────────── */
+.snap-upload-box.analyzing {
+  cursor: wait;
+  pointer-events: none;
+  opacity: 0.85;
+}
+ 
+/* ── Aria-busy spinner on submit button ───────────────────────────────────── */
+.btn-submit[aria-busy="true"] {
+  cursor: wait;
+}
+
+.icon-circle {
+  width: 64px;
+  height: 64px;
+  background: #FFFFFF;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+  font-size: 24px;
+  color: var(--primary-green);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+}
+
+.snap-upload-box:hover .icon-circle {
+  box-shadow: 0 6px 14px rgba(0,0,0,0.1);
+  transform: scale(1.05);
+}
+
+.upload-placeholder h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.upload-placeholder p {
+  margin: 0;
+  font-size: 13px;
+  color: #8C998D;
+}
+
+/* Image Preview */
+.preview-container {
   position: absolute;
-  inset: 0;              /* fills entire box */
+  inset: 10px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.preview-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;     /* fills without distortion */
-  border-radius: 15px;
+  object-fit: cover;
 }
 
-.upload-content {
-  z-index: 2;
+.trash-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--active-red);
+  color: white;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  transition: all 0.2s ease;
+}
+
+.trash-btn:hover {
+  background: var(--active-red-hover);
+  transform: scale(1.15);
+}
+
+/* Bottom AI Classification (Left) */
+.ai-classification-bottom {
   text-align: center;
 }
 
-.upload-camera-button {
+.ai-classification-bottom label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary-green);
+  margin-bottom: 12px;
+}
+
+/* ---- RIGHT PANE ---- */
+.snap-right {
+  width: 55%;
+  padding: 40px;
   display: flex;
+  flex-direction: column;
+  background: var(--bg-right);
+}
+
+.top-classifications {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.class-group {
+  flex: 1;
+}
+
+.class-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+/* ---- AI CLASSIFICATION COLORS ---- */
+.classification-buttons {
+  display: flex;
+  gap: 12px;
   justify-content: center;
-  align-items: center;
-  gap: 15px;
-  flex-wrap: wrap; /* keeps it responsive */
 }
 
-.camera-button,
-.upload-btn {
-  min-width: 160px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: none;
-  cursor: pointer;
-  font-weight: 500;
+.class-btn {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: 20px;
+  border: 1.5px solid #E0E0E0;
+  background: #FFFFFF;
+  color: #A0AAB2; 
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  pointer-events: none; /* Hover disabled on purpose since AI controls this */
+}
+
+/* REAL / FAKE */
+.class-btn.active-real {
+  border-color: #4CAF50; 
+  color: #4CAF50;
+  background-color: #F0F8F1;
+}
+.class-btn.active-ai {
+  border-color: #9E9E9E; 
+  color: #9E9E9E;
+  background-color: #F5F5F5;
+}
+
+/* POTHOLE / CRACK */
+.class-btn.active-pothole {
+  border-color: #E67E22; 
+  color: #E67E22;
+  background-color: #FEF5E6;
+}
+.class-btn.active-crack {
+  border-color: #34495E; 
+  color: #34495E;
+  background-color: #F0F3F5;
+}
+
+/* SEVERITY */
+.class-btn.active-critical {
+  border-color: #D32F2F; 
+  color: #D32F2F;
+  background-color: #FDEDED;
+}
+.class-btn.active-non-critical {
+  border-color: #F39C12; 
+  color: #F39C12;
+  background-color: #FEF8E7;
+}
+
+/* Forms */
+.snap-form-row {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-  background: linear-gradient(180deg, #134413, #459745);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
-  border: 1px solid #000;
-  color: white;
+  gap: 16px;
 }
 
-.camera-button:hover,
-.upload-btn:hover {
-  transform: translateY(-2px);
-  opacity: 0.95;
-}
-
-
-.report-left h3 {
-    text-align: center;
-    letter-spacing: 0.6px;
-    color: #206220;
-    font-size: 0.85rem;
-    opacity: 0.8;
-    margin-bottom: 5px;
-    margin-top: 25px;
-}
-
-/*RESULT BOX*/
-.classification-box {
-  display: flex;
-  gap: 10px;
+.snap-form-group {
   margin-bottom: 20px;
 }
 
-.result-box {
+.snap-form-group.half {
   flex: 1;
-  padding: 10px 12px;
-  text-align: center;
-  border-radius: 12px;
-  background: #FFF;
-  font-weight: bold;
-  border: 1px solid #777;
-  margin-top: 10px;
-  font-size: 0.7rem;
-  color: #333;
 }
 
-.result-box.green {
-  background: #1f9644;
-  color: white;
+.snap-form-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 8px;
 }
 
-.result-box.red {
-  background: #b00020;
-  color: white;
-}
-
-/*RIGHT PART*/
-.classification-section h3{
-    margin-top: 20px;
-    color: #206220;
-    font-size: 0.8rem;
-    opacity: 0.8;
-    letter-spacing: 0.6px;
-}
-
-.reporter-infoo {
-  display: flex;
-  gap: 15px;
-}
-
-.location-input {
-  position: relative;
+.snap-form-group input,
+.snap-form-group select,
+.snap-form-group textarea {
   width: 100%;
-}
-
-.location-section label {
-    font-size: 0.9rem;
-    opacity: 0.7;
-    letter-spacing: 0.6px;
-    color: #206220;
-    font-weight: 600;
-}
-
-.location-section .location-input input {
-     padding: 15px 50px 15px 20px;
-    width: 100%;
-    border-radius: 15px;
-    margin-top: 6px;
-    border: 1px solid #ddd;
-    background-color: rgba(250, 238, 228, 0.722);
-    margin-bottom: 20px;
-}
-
-.location-icon {
-  position: absolute;
-  right: 18px;
-  top: 40%;
-  transform: translateY(-50%);
-  cursor: pointer;
-  color: #206220;
-  font-size: 18px;
-}
-
-.location-icon:hover {
-  color: #0e7a31;
-}
-
-.map-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 999999;
-}
-
-.map-modal {
-   background-color: rgb(250, 238, 228);
-  width: 800px;
-  height: 480px;
-  border-radius: 20px;
-  padding: 20px 40px;
-}
-
-.map-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.map-modal h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  color: #000;
-}
-
-.map-modal .current-loc {
-  padding: 8px 15px;
-  border-radius: 10px;
+  background: var(--bg-input);
   border: none;
-  background: linear-gradient(180deg, #206220, #43a343);
-  color: white;
-  cursor: pointer;
-  font-size: 0.8rem;
-  box-shadow: 0 2px 3px rgba(0,0,0,0.4);
-}
-
-.map-modal .current-loc:hover {
-  background: linear-gradient(180deg, #154115, #52c552);
-}
-
-.map-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 15px;
-}
-
-.map-modal .cancel-button-map {
-  background: #fff;
-  padding: 5px 25px;
-  border-radius: 10px;
-  border: 1px solid #000;
-  color: #0e7a31;
-  font-size: 0.9rem;
-  box-shadow: 0 2px 2px rgba(0,0,0,0.4);
-}
-
-.map-modal .cancel-button-map:hover {
-  background: #206220;
-  color: white;
-}
-
-
-.reporter-infoo label {
-    font-size: 0.9rem;
-    opacity: 0.7;
-    letter-spacing: 0.6px;
-    color: #206220;
-    font-weight: 600;
-}
-
-.reporter-infoo input {
-    padding: 10px 20px;
-    width: 100%;
-    border-radius: 15px;
-    margin-top: 6px;
-    border: 1px solid #ddd;
-    background-color: rgba(250, 238, 228, 0.722);
-    margin-bottom: 20px;
-}
-
-.additional-infoo {
-  display: flex;
-  flex-direction: column;
-  margin-top: 0;
-}
-
-.additional-infoo label {
-    font-size: 0.9rem;
-    opacity: 0.7;
-    letter-spacing: 0.6px;
-    color: #206220;
-    font-weight: 600;
-}
-
-.additional-infoo textarea {
-  resize: none;
-  padding: 15px 15px;
-  border-radius: 15px;
-  border: 1px solid #ddd;
-  font-size: 0.8rem;
+  border-radius: var(--border-radius-input);
+  padding: 16px 20px;
+  font-size: 13px;
+  color: var(--text-dark);
   outline: none;
+  box-sizing: border-box;
+  transition: box-shadow 0.2s ease;
+}
+
+.snap-form-group input:focus,
+.snap-form-group select:focus,
+.snap-form-group textarea:focus {
+  box-shadow: 0 0 0 2px rgba(108, 131, 110, 0.3);
+}
+
+.snap-form-group input::placeholder,
+.snap-form-group textarea::placeholder {
+  color: #B5C0B6;
+}
+
+.snap-form-group select {
+  appearance: none;
+  cursor: pointer;
+}
+.placeholder-select {
+  color: #B5C0B6 !important;
+}
+.black-text {
+  color: var(--text-dark);
+}
+
+.snap-form-group textarea {
+  resize: none;
+}
+
+/* Input with Icons (Location) */
+.input-with-icons {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-icons input {
+  padding-left: 44px;
+  padding-right: 44px;
+}
+
+.input-icon-left {
+  position: absolute;
+  left: 16px;
+  font-size: 18px;
+  color: #B5C0B6;
+}
+
+.input-icon-right {
+  position: absolute;
+  right: 12px;
+  background: #FFFFFF;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-green);
+  font-size: 12px;
+  cursor: pointer;
   transition: all 0.2s ease;
-  background-color: rgba(250, 238, 228, 0.722);
-  margin-top: 7px;
 }
 
-.additional-infoo textarea:focus {
-  border: 1px solid #0e7a31;
-  background: white;
+.input-icon-right:hover {
+  background: var(--primary-green);
+  color: #FFFFFF;
 }
 
-.char-count {
-  align-self: flex-end;
-  font-size: 0.8rem;
-  margin-top: 5px;
-  color: #777;
+/* Error Message */
+.error-message {
+  color: #D32F2F;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  margin-top: -10px;
   margin-bottom: 10px;
 }
 
-
-.report-actions {
+/* Action Buttons Bottom Right */
+.snap-actions {
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 20px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px; /* Space between buttons */
+  margin-top: auto;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 24px;
 }
 
-.submit-btn {
-  background: linear-gradient(180deg, #143e14, #54cf54);
-  color: white;
-  padding: 10px 80px;
-  border-radius: 15px;
-  font-size: 0.9rem;
-  border: 1px solid #000;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+/* DISCARD AND SUBMIT BUTTONS - SAME HEIGHT & PADDING */
+.btn-discard {
+  background: #F0F0F0; /* Soft gray to act as a secondary button */
+  color: var(--primary-green);
+  border: none;
+  padding: 16px 40px; /* EXACT match to submit button */
+  border-radius: var(--border-radius-btn);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 140px; /* Ensures it has a good width even with short text */
+  text-align: center;
 }
 
-.submit-btn:hover {
-   background: linear-gradient(180deg, #247f24, #5fe55f);
+.btn-discard:hover:not(:disabled) {
+  background: #E4E4E4;
+  color: var(--primary-green-hover);
+  transform: translateY(-2px); /* Matches the submit hover pop */
 }
 
-.discard-btn {
-  background: #fff;
-  padding: 10px 40px;
-  border-radius: 15px;
-  border: 1px solid #aaa;
-  color: #0e7a31;
-  font-size: 0.9rem;
-  box-shadow: 0 2px 2px rgba(0,0,0,0.4);
+.btn-submit {
+  background: var(--primary-green);
+  color: #FFFFFF;
+  border: none;
+  padding: 16px 40px; /* EXACT match to discard button */
+  border-radius: var(--border-radius-btn);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 140px;
+  text-align: center;
 }
 
-.discard-btn:hover {
-  background-color: rgba(250, 238, 228, 0.722);
+.btn-submit:hover:not(:disabled) {
+  background: var(--primary-green-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(108, 131, 110, 0.3);
+}
+
+.btn-submit:active:not(:disabled), .btn-discard:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-submit:disabled, .btn-discard:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- POPUP MODALS (Discard / Submit) ---- */
+.popup-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(242, 239, 233, 0.7);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.popup-modal {
+  width: 400px;
+  background: #FFFFFF;
+  border-radius: 32px;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.popup-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 32px auto 16px auto;
+  font-size: 20px;
+}
+
+.red-icon {
+  background: #FFF0F0;
+  color: var(--active-red);
+}
+
+.green-icon {
+  background: #F0F6F1;
+  color: var(--primary-green);
+}
+
+.popup-modal h3 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.popup-modal p {
+  margin: 0 40px 32px 40px;
+  font-size: 13px;
+  color: #8C998D;
+  line-height: 1.5;
+}
+
+/* Popup Split Buttons */
+.popup-buttons {
+  display: flex;
+  height: 60px;
+  border-top: 1px solid #F0F0F0;
+}
+
+.popup-buttons button {
+  flex: 1;
+  border: none;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-popup-cancel {
+  background: #FFFFFF;
+  color: var(--primary-green);
+}
+.btn-popup-cancel:hover {
+  background: #F7F7F7;
+  color: var(--primary-green-hover);
+}
+
+.btn-popup-red {
+  background: var(--active-red);
+  color: #FFFFFF;
+}
+.btn-popup-red:hover {
+  background: var(--active-red-hover);
+}
+
+.btn-popup-green {
+  background: var(--primary-green);
+  color: #FFFFFF;
+}
+.btn-popup-green:hover {
+  background: var(--primary-green-hover);
+}
+
+/* ── Analyzing row (replaces label while HF + YOLO run) ───────────────────── */
+.analyzing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.analyzing-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+/* ── Spinner ────────────────────────────────────────────────────────────────── */
+.spin-icon {
+  animation: cr-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes cr-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Button active states ───────────────────────────────────────────────────── */
+
+/* REAL → green */
+.class-btn.active-real {
+  background-color: #22c55e;
+  color: #ffffff;
+  border-color: #22c55e;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #bbf7d0;
+}
+
+/* AI-GENERATED → red */
+.class-btn.active-ai {
+  background-color: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #fecaca;
+}
+
+/* POTHOLE → orange */
+.class-btn.active-pothole {
+  background-color: #f97316;
+  color: #ffffff;
+  border-color: #f97316;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #fed7aa;
+}
+
+/* CRACK → blue */
+.class-btn.active-crack {
+  background-color: #3b82f6;
+  color: #ffffff;
+  border-color: #3b82f6;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #bfdbfe;
+}
+
+/* CRITICAL → red */
+.class-btn.active-critical {
+  background-color: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #fecaca;
+}
+
+/* NON-CRITICAL → green */
+.class-btn.active-non-critical {
+  background-color: #22c55e;
+  color: #ffffff;
+  border-color: #22c55e;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #bbf7d0;
+}
+
+/* ── Flagged note ────────────────────────────────────────────────────────────── */
+.flagged-note {
+  font-size: 11px;
+  color: #ef4444;
+  font-weight: 600;
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+/* ── Success message ─────────────────────────────────────────────────────────── */
+.success-message {
+  display: flex;
+  align-items: center;
+  color: #22c55e;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
 /* ================= MOBILE RESPONSIVENESS ================= */
-@media (max-width: 768px) {
-  .report-modal {
-    width: 92%;
-    height: 88vh;
-    flex-direction: column;  /* stack left on top of right */
-    overflow-y: auto;        /* single continuous scroll for the whole modal */
+@media (max-width: 900px) {
+  .snap-modal {
+    flex-direction: column;
+    height: 90vh; 
+    overflow-y: auto; 
     overflow-x: hidden;
-    border-radius: 20px;
   }
 
-  /* both panels flow naturally — no fixed height, no individual scroll */
-  .report-left,
-  .report-right {
-    flex: none;
+  /* Make the Close Button Sticky on Mobile */
+  .snap-close-icon {
+    position: sticky;
+    top: 16px;
+    align-self: flex-end;
+    margin-right: 16px;
+    margin-top: 16px;
+    margin-bottom: -52px;
+    z-index: 999;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  }
+
+  .snap-left, 
+  .snap-right {
     width: 100%;
-    height: auto;
-    overflow-y: visible;
-    padding: 20px;
+    padding: 30px;
   }
 
-  .report-left {
-    border-bottom: 2px solid rgba(0, 0, 0, 0.08);
-  }
-
-  .file-type-buttons {
-    gap: 15px;
-  }
-
-  .file-type-buttons button {
-    padding: 8px 58px;
-    font-size: 0.75rem;
-  }
-
-  .upload-box {
-    height: 210px;
-  }
-
-  .camera-button,
-  .upload-btn {
-    min-width: 130px;
-    font-size: 0.8rem;
-    padding: 8px;
-  }
-
-  .classification-box {
-    gap: 8px;
-  }
-
-  .reporter-infoo {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .report-actions {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .submit-btn {
-    padding: 12px;
-    width: 100%;
-    text-align: center;
-  }
-
-  .discard-btn {
-    padding: 12px;
-    width: 100%;
-    text-align: center;
-  }
-
-  .map-modal {
-    width: 90%;
-    height: auto;
-    max-height: 85vh;
-    padding: 15px 20px;
-    overflow-y: auto;
+  .snap-left {
+    border-bottom: 2px solid #E0E0E0;
+    padding-top: 48px;
   }
 }
 
-@media (max-width: 480px) {
-  .report-modal {
-    width: 96%;
-    height: 92vh;
-    border-radius: 15px;
+/* For Mobile Phones */
+@media (max-width: 600px) {
+  .snap-left, 
+  .snap-right {
+    padding: 20px;
   }
 
-  .report-left,
-  .report-right {
-    padding: 15px;
+  .snap-left {
+    padding-top: 48px; 
   }
 
-  .report-left h2 {
-    font-size: 1rem;
+  .snap-left h2 {
+    font-size: 24px;
   }
 
-  .file-type-buttons {
-    gap: 10px;
+  .top-classifications {
+    flex-direction: column;
+    gap: 16px;
   }
 
-  .file-type-buttons button {
-    padding: 7px 18px;
-    font-size: 0.7rem;
-    gap: 6px;
+  .snap-form-row {
+    flex-direction: column;
+    gap: 16px;
   }
 
-  .upload-box {
-    height: 170px;
+  .snap-actions {
+    flex-direction: column-reverse; 
+    gap: 16px;
+    align-items: stretch; 
   }
 
-  .camera-button,
-  .upload-btn {
-    min-width: 110px;
-    font-size: 0.75rem;
-    padding: 7px 6px;
+  /* Match width and padding perfectly on mobile too */
+  .btn-submit, .btn-discard {
+    width: 100%;
+    padding: 16px;
   }
 
-  .result-box {
-    font-size: 0.65rem;
-    padding: 8px;
+  .btn-discard {
+    border: 1px solid var(--primary-green);
+    background: transparent;
+  }
+  
+  .btn-discard:hover:not(:disabled) {
+    background: rgba(108, 131, 110, 0.1);
   }
 
-  .location-section .location-input input,
-  .reporter-infoo input,
-  .additional-infoo textarea {
-    font-size: 0.8rem;
-    padding: 10px 15px;
-  }
-
-  .location-section .location-input input {
-    padding-right: 40px;
-  }
-
-  .location-icon {
-    font-size: 15px;
-    right: 12px;
-  }
-
-  .submit-btn,
-  .discard-btn {
-    font-size: 0.85rem;
-    border-radius: 12px;
-  }
-
-  .map-modal {
-    width: 95%;
-    padding: 12px 15px;
-  }
-
-  .map-modal h3 {
-    font-size: 0.95rem;
-  }
-
-  .map-modal .current-loc {
-    font-size: 0.75rem;
-    padding: 6px 10px;
+  .snap-upload-box {
+    min-height: 200px;
   }
 }

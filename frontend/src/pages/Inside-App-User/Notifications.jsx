@@ -1,13 +1,10 @@
-// frontend/src/pages/Inside-App-User/Notifications.jsx
-
-import React from "react";
+import React, { useState } from "react";
 import "./Notifications.css";
 
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
 import { FaBell, FaExclamationCircle, FaTrash } from "react-icons/fa";
 
-// Uses context (fed by NotificationProvider in App.jsx/main.jsx)
 import { useNotificationContext } from "../Contexts/NotificationContext.jsx";
 
 function Notifications() {
@@ -21,27 +18,28 @@ function Notifications() {
     remove,
   } = useNotificationContext();
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <>
-      <Sidebar />
-      <AppHeader />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <AppHeader onMenuClick={() => setSidebarOpen(true)} />
 
-      <div
-        className="sidebar-overlay"
-        onClick={() => {
-          document.querySelector(".app-sidebar")?.classList.remove("active");
-          document.querySelector(".sidebar-overlay")?.classList.remove("active");
-        }}
-      />
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay active"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       <div className="notifications-container">
         <div className="notifications-panel">
 
-          {/* HEADER */}
           <div className="notifications-header">
             <div className="notifications-header-left">
               <h1>Notifications</h1>
-              <FaBell />
+              <FaBell className="fabell-icon" />
               {unreadCount > 0 && (
                 <span className="notif-badge">{unreadCount}</span>
               )}
@@ -53,7 +51,6 @@ function Notifications() {
             )}
           </div>
 
-          {/* STATES */}
           {loading && (
             <p className="notif-status">Loading notifications...</p>
           )}
@@ -66,7 +63,6 @@ function Notifications() {
             <p className="notif-status">You have no notifications yet.</p>
           )}
 
-          {/* LIST — is_read is the backend field */}
           <div className="notifications-list">
             {notifications.map((notif) => (
               <div
@@ -88,7 +84,6 @@ function Notifications() {
                   </span>
                 </div>
 
-                {/* Delete button */}
                 <button
                   className="notif-delete-btn"
                   title="Remove"

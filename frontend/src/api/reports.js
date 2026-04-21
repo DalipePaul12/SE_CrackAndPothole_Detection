@@ -1,122 +1,96 @@
-// frontend/src/api/reports.js
+import { api } from "./client";
 
-const BASE = "http://127.0.0.1:8000/api/v1";
-const getToken = () => localStorage.getItem("access_token");
-const authHeader = () => ({ Authorization: `Bearer ${getToken()}` });
-
-// POST /reports — JSON body (step 1 of 2-step flow)
-export async function createReport(data) {
-  const res = await fetch(`${BASE}/reports`, {
-    method: "POST",
-    headers: { ...authHeader(), "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
+// ── Shared safe-call wrapper ───────────────────────────────────────────────────
+// FIX: api.get() already returns { success, data, error } from client.js.
+// Old version wrapped the entire result as `data`, causing double-nesting:
+//   res.data → { success, data: { total, results }, error }   ← wrong
+//   res.data → { total, results }                              ← correct
+async function safeGet(path, fallback = null) {
+  const result = await api.get(path);
+  if (!result.success) {
+    return { success: false, data: fallback, error: result.error || "Request failed" };
+  }
+  return { success: true, data: result.data ?? fallback, error: null };
 }
 
-// POST /reports/{id}/media — FormData file upload (step 2)
-export async function uploadReportMedia(reportId, file) {
+async function safePost(path, payload) {
+  const result = await api.post(path, payload);
+  if (!result.success) {
+    return { success: false, data: null, error: result.error || "Request failed" };
+  }
+  return { success: true, data: result.data ?? null, error: null };
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function buildQuery(params = {}) {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") q.set(k, v);
+  });
+  return q.toString() ? `?${q.toString()}` : "";
+}
+
+// ── API functions ──────────────────────────────────────────────────────────────
+
+export const getReports = (params = {}) =>
+  safeGet(`/reports${buildQuery(params)}`, { total: 0, results: [] });
+
+export const getMyReports = (params = {}) =>
+  safeGet(`/reports/mine${buildQuery(params)}`, { total: 0, results: [] });
+
+export const getReportById = (reportId) =>
+  safeGet(`/reports/${reportId}`, null);
+
+export const createReport = (payload) =>
+  safePost("/reports", payload);
+
+export const submitReport = createReport;
+
+export const uploadReportMedia = async (reportId, file) => {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${BASE}/reports/${reportId}/media`, {
-    method: "POST",
-    headers: authHeader(),
-    body: formData,
+  const result = await api.upload(`/reports/${reportId}/media`, formData);
+  if (!result.success) {
+    return { success: false, data: null, error: result.error || "Upload failed" };
+  }
+  return { success: true, data: result.data ?? null, error: null };
+};
+
+export const updateReport = async (reportId, payload) => {
+  const result = await api.patch(`/reports/${reportId}`, payload);
+  if (!result.success) {
+    return { success: false, data: null, error: result.error || "Update failed" };
+  }
+  return { success: true, data: result.data ?? null, error: null };
+};
+
+export const deleteReport = async (reportId) => {
+  const result = await api.delete(`/reports/${reportId}`);
+  if (!result.success) {
+    return { success: false, data: null, error: result.error || "Delete failed" };
+  }
+  return { success: true, data: null, error: null };
+};
+
+export const toggleUpvote = (reportId) =>
+  safePost(`/reports/${reportId}/upvote`, {});
+
+export const addComment = async (reportId, content, parentCommentId = null) => {
+  const result = await api.post(`/reports/${reportId}/comments`, {
+    content,
+    ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
   });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
+  if (!result.success) {
+    return { success: false, data: null, error: result.error || "Comment failed" };
+  }
+  return { success: true, data: result.data ?? null, error: null };
+};
 
-// GET /reports — all reports (admin/public view)
-export async function getReports(params = {}) {
-  const query = new URLSearchParams();
-  if (params.status)   query.set("status",   params.status);
-  if (params.barangay) query.set("barangay", params.barangay);
-  if (params.page)     query.set("page",     params.page);
-  const res = await fetch(`${BASE}/reports?${query}`, { headers: authHeader() });
-  if (!res.ok) throw await res.json();
-  const data = await res.json();
-  // Handle both { results: [...] } and plain array responses
-  return Array.isArray(data) ? data : (data.results ?? []);
-}
-
-// GET /reports/mine — current user's own reports
-export async function getMyReports() {
-  const res = await fetch(`${BASE}/reports/mine`, { headers: authHeader() });
-  if (!res.ok) throw await res.json();
-  const data = await res.json();
-  return Array.isArray(data) ? data : (data.results ?? []);
-}
-
-// GET /reports/{id}
-export async function getReportById(reportId) {
-  const res = await fetch(`${BASE}/reports/${reportId}`, { headers: authHeader() });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
-
-// PATCH /reports/{id} — admin/contractor status update
-export async function updateReport(reportId, data) {
-  const res = await fetch(`${BASE}/reports/${reportId}`, {
-    method: "PATCH",
-    headers: { ...authHeader(), "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
-
-// POST /reports — FormData (used by CreateReport.jsx for single-step upload)
-export async function submitReport(formData) {
-  const res = await fetch(`${BASE}/reports`, {
-    method: "POST",
-    headers: authHeader(), // NO Content-Type — browser sets multipart boundary
-    body: formData,
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
-
-// DELETE /reports/{id}
-export async function deleteReport(reportId) {
-  const res = await fetch(`${BASE}/reports/${reportId}`, {
-    method: "DELETE",
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-}
-
-// POST /reports/{id}/upvote
-export async function toggleUpvote(reportId) {
-  const res = await fetch(`${BASE}/reports/${reportId}/upvote`, {
-    method: "POST",
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
-
-// POST /comments
-export async function addComment(reportId, content, parentCommentId = null) {
-  const res = await fetch(`${BASE}/comments`, {
-    method: "POST",
-    headers: { ...authHeader(), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      report_id: reportId,
-      content,
-      parent_comment_id: parentCommentId,
-    }),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
-
-// DELETE /comments/{id}
-export async function deleteComment(commentId) {
-  const res = await fetch(`${BASE}/comments/${commentId}`, {
-    method: "DELETE",
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-}
+export const deleteComment = async (commentId) => {
+  const result = await api.delete(`/reports/comments/${commentId}`);
+  if (!result.success) {
+    return { success: false, data: null, error: result.error || "Delete failed" };
+  }
+  return { success: true, data: null, error: null };
+};

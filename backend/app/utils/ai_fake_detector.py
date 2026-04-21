@@ -1,29 +1,19 @@
 import os
+import requests
+import time
 from ultralytics import YOLO
-# from transformers import pipeline  # <--- I-comment muna para iwas download
+from app.core.config import settings
 
-# --- 1. LOAD POTHOLE MODEL (YOLO) ---
 try:
-    # Sa ngayon, gagamit muna ng default yolov8n.pt. 
-    # Kapag may best.pt ka na, palitan mo ito.
-    damage_model = YOLO("yolov8n.pt") 
-    print("✅ YOLO Damage Model Loaded")
+    pothole_model = YOLO(settings.POTHOLE_MODEL_PATH)
+    crack_model = YOLO(settings.CRACK_MODEL_PATH)
+    print("YOLOv11 Models Loaded")
 except Exception as e:
-    print(f"❌ YOLO Error: {e}")
-    damage_model = None
+    print(f"YOLO Error: {e}")
+    pothole_model = None
+    crack_model = None
 
-# --- 2. LOAD FAKE IMAGE DETECTOR (Hugging Face) ---
-# Naka-comment muna para hindi mag-download ang 347MB na file.
-fake_detector = None 
-"""
-try:
-    print("⏳ Loading AI Fake Detector...")
-    fake_detector = pipeline("image-classification", model="umm-maybe/AI-image-detector")
-    print("✅ AI Fake Detector Loaded")
-except Exception as e:
-    print(f"❌ Fake Detector Error: {e}")
-    fake_detector = None
-"""
+HF_API_URL = "https://api-inference.huggingface.co/models/dima806/deepfake_vs_real_image_detection"
 
 def analyze_image(image_path: str):
     result = {
@@ -36,49 +26,78 @@ def analyze_image(image_path: str):
         "reason": ""
     }
 
-    # --- STEP A: Check if AI Generated (SKIPPED FOR NOW) ---
-    # Naka-skip muna ito dahil naka-comment ang fake_detector sa itaas.
-    if fake_detector:
+    if settings.AI_FAKE_DETECTION_ENABLED and settings.HF_API_TOKEN:
         try:
-            fake_analysis = fake_detector(image_path)
-            artificial_score = 0.0
-            for item in fake_analysis:
-                if item['label'] == 'artificial':
-                    artificial_score = item['score']
-                    break
+            print("Sending image to Hugging Face...")
+            headers = {"Authorization": f"Bearer {settings.HF_API_TOKEN}"}
             
-            if artificial_score > 0.70:
-                result["valid"] = False
-                result["is_ai_generated"] = True
-                result["ai_generated_confidence"] = round(artificial_score, 2)
-                result["reason"] = f"Warning: AI-generated image ({round(artificial_score*100)}%)."
+            with open(image_path, "rb") as f:
+                image_data = f.read()
+
+            response = requests.post(HF_API_URL, headers=headers, data=image_data)
+            
+            if response.status_code == 503:
+                print("Hugging Face model is asleep. Waiting 15 seconds to wake it up...")
+                time.sleep(15)
+                print("Retrying Hugging Face...")
+                response = requests.post(HF_API_URL, headers=headers, data=image_data)
+
+            if response.status_code == 200:
+                fake_analysis = response.json()
+                print(f"HF AI Check Success: {fake_analysis}")
+                artificial_score = 0.0
+                
+                for item in fake_analysis:
+                    label = item.get('label', '').lower()
+                    if label in ['artificial', 'fake', 'ai', 'ai-generated']:
+                        artificial_score = item.get('score', 0.0)
+                        break
+                
+                if artificial_score > 0.70:
+                    result["valid"] = False
+                    result["is_ai_generated"] = True
+                    result["ai_generated_confidence"] = round(artificial_score, 2)
+                    result["reason"] = f"Warning: AI-generated image ({round(artificial_score*100)}%)."
+            else:
+                print(f"HF Error ({response.status_code}): {response.text}")
+                
         except Exception as e:
-            print(f"Fake Detection Failed: {e}")
+            print(f"HF Request Failed: {e}")
 
-    # --- STEP B: Detect Potholes (YOLO) ---
-    if damage_model:
+    if result["valid"]:
         try:
-            results = damage_model(image_path)
-            yolo_result = results[0]
-            detected_objects = []
             highest_conf = 0.0
-            
-            for box in yolo_result.boxes:
-                class_id = int(box.cls[0])
-                conf = float(box.conf[0])
-                class_name = damage_model.names[class_id]
-                detected_objects.append(class_name)
-                if conf > highest_conf:
-                    highest_conf = conf
+            damage_detected = None
+            detected_types = []
 
-            if detected_objects:
-                result["damage_type"] = detected_objects[0]
+            if pothole_model:
+                p_results = pothole_model(image_path)
+                for box in p_results[0].boxes:
+                    conf = float(box.conf[0])
+                    if conf > highest_conf:
+                        highest_conf = conf
+                        damage_detected = "POTHOLE"
+                    detected_types.append("POTHOLE")
+
+            if crack_model:
+                c_results = crack_model(image_path)
+                for box in c_results[0].boxes:
+                    conf = float(box.conf[0])
+                    if conf > highest_conf:
+                        highest_conf = conf
+                        damage_detected = "CRACK"
+                    detected_types.append("CRACK")
+
+            if damage_detected:
+                result["damage_type"] = damage_detected
                 result["confidence"] = round(highest_conf, 2)
                 result["severity"] = "High" if highest_conf > 0.8 else "Moderate"
-                result["reason"] = f"Detected: {', '.join(detected_objects)}"
+                unique_types = list(set(detected_types))
+                result["reason"] = f"Detected: {', '.join(unique_types)}"
             else:
                 result["reason"] = "No road damage detected."
+                
         except Exception as e:
-            print(f"YOLO Analysis Failed: {e}")
+            print(f"YOLO Processing Failed: {e}")
 
     return result

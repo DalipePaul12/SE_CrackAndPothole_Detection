@@ -4,7 +4,6 @@ import "./LoginPage.css";
 
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 
-// Icons
 import { MdEmail } from "react-icons/md";
 import { RiLockPasswordFill } from "react-icons/ri";
 import { GrFormNextLink } from "react-icons/gr";
@@ -34,19 +33,31 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
     setErrorMsg("");
 
     try {
-      const data = await login(formData.email, formData.password);
-      // data = { access_token, refresh_token, user }
-      saveLogin(data.access_token, data.refresh_token, data.user);
+      const res = await login(formData.email, formData.password);
+
+      if (!res.success) {
+        throw new Error(res.error || "Login failed");
+      }
+
+      const data = res.data;
+
+      saveLogin(
+        data.access_token,
+        data.refresh_token,
+        data.user
+      );
+
       onClose();
       setFormData({ email: "", password: "" });
 
-      if (data.user.role === "admin") {
+      if (data.user?.role === "admin") {
         navigate("/adminpanel");
       } else {
         navigate("/dashboard");
       }
+
     } catch (err) {
-      setErrorMsg(err.detail || "Invalid email or password.");
+      setErrorMsg(err.message || "Invalid email or password.");
       setShowErrorModal(true);
     } finally {
       setLoading(false);
@@ -56,7 +67,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   return (
     <div className="login-overlay" onClick={onClose}>
       <div className="login-content" onClick={(e) => e.stopPropagation()}>
-        {/* LEFT COLUMN */}
+        
         <div className="login-left">
           <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />
           <h1 className="login-title">Snap2Fix</h1>
@@ -65,7 +76,6 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
           </p>
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="login-right">
           <h2>Welcome Back!</h2>
           <p className="login-instruction">
@@ -129,6 +139,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
             onConfirm={() => setShowErrorModal(false)}
           />
         )}
+
       </div>
     </div>
   );

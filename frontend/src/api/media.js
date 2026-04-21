@@ -1,31 +1,30 @@
-const BASE = "http://127.0.0.1:8000/api/v1";
-const getToken = () => localStorage.getItem("access_token");
-const authHeader = () => ({ Authorization: `Bearer ${getToken()}` });
+import { api } from "./client";
 
-export async function uploadMedia(reportId, file) {
+export const uploadMedia = async (reportId, file) => {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${BASE}/media/upload/${reportId}`, {
-    method: "POST",
-    headers: authHeader(), // no Content-Type — let browser set multipart boundary
-    body: formData,
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
+  const res = await api.upload(`/media/upload?report_id=${reportId}`, formData);
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};
 
-export async function getMediaByReport(reportId) {
-  const res = await fetch(`${BASE}/media/report/${reportId}`, {
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
+export const getMediaByReport = async (reportId) => {
+  const res = await api.get(`/media/report/${reportId}`);
+  return {
+    success: res?.success ?? false,
+    data: Array.isArray(res?.data) ? res.data : [],
+    error: res?.error ?? null,
+  };
+};
 
-export async function deleteMedia(mediaId) {
-  const res = await fetch(`${BASE}/media/${mediaId}`, {
-    method: "DELETE",
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-}
+export const deleteMedia = async (mediaId) => {
+  const res = await api.delete(`/media/${mediaId}`);
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};

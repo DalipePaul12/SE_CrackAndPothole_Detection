@@ -1,250 +1,224 @@
-"""
-ML Service — two responsibilities:
-  1. YOLOv8/v11 crack & pothole detection on uploaded images
-  2. AI-generated media detection via Hive Moderation API (open-source free tier)
+from __future__ import annotations
 
-Both run as FastAPI BackgroundTasks so the upload endpoint returns immediately
-and results are written asynchronously.
-
-Install: pip install ultralytics pillow httpx
-"""
+import asyncio
 import io
 import logging
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import httpx
+import numpy as np
 from PIL import Image
-from sqlalchemy.ext.asyncio import AsyncSession
-from ultralytics import YOLO
 
 from app.core.config import settings
-from app.models.ai_detection_result import AIDetectionResult
-from app.models.enums import DamageType, SeverityLevel
-from app.models.media_attachment import MediaAttachment
-from app.models.report import Report
 
 logger = logging.getLogger(__name__)
 
-# ── Model singleton — loaded once at startup ───────────────────────────────────
-
-_yolo_model: Optional[YOLO] = None
-
-
-def load_model() -> YOLO:
-    global _yolo_model
-    if _yolo_model is None:
-        if not settings.AI_ENABLED:
-            raise RuntimeError("AI is disabled in config.")
-        if not Path(settings.YOLO_MODEL_PATH).exists():
-            raise FileNotFoundError(
-                f"YOLO model not found at '{settings.YOLO_MODEL_PATH}'. "
-                "Download your trained model or set AI_ENABLED=False."
-            )
-        logger.info(f"Loading YOLO model from {settings.YOLO_MODEL_PATH}")
-        _yolo_model = YOLO(settings.YOLO_MODEL_PATH)
-        logger.info("YOLO model loaded successfully.")
-    return _yolo_model
+_pothole_model = None
+_crack_model = None
 
 
-# ── Class / severity mapping ───────────────────────────────────────────────────
+def load_models() -> None:
+    global _pothole_model, _crack_model
 
-# Maps YOLO class names (from your custom crack/pothole dataset) to DamageType enum.
-# Update these keys to match your dataset's class names exactly.
-YOLO_CLASS_MAP: dict[str, DamageType] = {
-    "pothole": DamageType.pothole,
-    "crack": DamageType.crack,
-    "background": DamageType.none,
-}
-
-
-def _confidence_to_severity(confidence: float) -> SeverityLevel:
-    """
-    Map detection confidence to a 4-level severity.
-    Calibrate these thresholds against your validation dataset.
-    """
-    return SeverityLevel.critical if confidence >= 0.70 else SeverityLevel.low
-
-
-# ── YOLOv8/v11 inference ───────────────────────────────────────────────────────
-
-async def run_detection(
-    db: AsyncSession,
-    report: Report,
-    media: MediaAttachment,
-    image_bytes: bytes,
-) -> None:
-    """
-    Runs YOLO inference on image bytes.
-    Writes AIDetectionResult and updates Report summary fields.
-    Designed to run as a BackgroundTask — never raises to the caller.
-    """
-    if not settings.AI_ENABLED:
-        logger.warning("AI disabled — skipping detection.")
+    if _pothole_model is not None and _crack_model is not None:
         return
 
     try:
-        model = load_model()
-        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        from ultralytics import YOLO
+    except ImportError as exc:
+        raise RuntimeError("ultralytics package not installed.") from exc
 
-        start = time.perf_counter()
-        results = model(img, verbose=False)
-        elapsed_ms = (time.perf_counter() - start) * 1000
+    pothole_path = Path(settings.POTHOLE_MODEL_PATH)
+    crack_path   = Path(settings.CRACK_MODEL_PATH)
 
-        # ── No detections ──────────────────────────────────────────────────────
-        if not results or not results[0].boxes or len(results[0].boxes) == 0:
-            detection = AIDetectionResult(
-                report_id=report.id,
-                media_attachment_id=media.id,
-                detected_class=DamageType.none,
-                severity=None,
-                confidence=0.0,
-                raw_output={"num_detections": 0},
-                model_version=settings.YOLO_MODEL_PATH,
-                inference_time_ms=elapsed_ms,
-            )
-            db.add(detection)
-            await db.commit()
-            logger.info(f"No damage detected — report={report.id}")
-            return
+    if not pothole_path.exists():
+        raise FileNotFoundError(f"Pothole model not found at '{pothole_path.resolve()}'.")
+    if not crack_path.exists():
+        raise FileNotFoundError(f"Crack model not found at '{crack_path.resolve()}'.")
 
-        # ── Take highest-confidence detection ─────────────────────────────────
-        boxes = results[0].boxes
-        best_idx = int(boxes.conf.argmax())
-        confidence = float(boxes.conf[best_idx])
-        class_id = int(boxes.cls[best_idx])
-        class_name = model.names[class_id].lower()
-
-        # Reject if below threshold
-        if confidence < settings.AI_CONFIDENCE_THRESHOLD:
-            detected_class = DamageType.uncertain
-            severity = None
-        else:
-            detected_class = YOLO_CLASS_MAP.get(class_name, DamageType.uncertain)
-            severity = (
-                _confidence_to_severity(confidence)
-                if detected_class not in (DamageType.none, DamageType.uncertain)
-                else None
-            )
-
-        # Build full bounding box list for the response
-        bounding_boxes = []
-        for i, box in enumerate(boxes.xyxy):
-            bounding_boxes.append({
-                "x1": float(box[0]), "y1": float(box[1]),
-                "x2": float(box[2]), "y2": float(box[3]),
-                "confidence": float(boxes.conf[i]),
-                "class": model.names[int(boxes.cls[i])],
-            })
-
-        detection = AIDetectionResult(
-            report_id=report.id,
-            media_attachment_id=media.id,
-            detected_class=detected_class,
-            severity=severity,
-            confidence=confidence,
-            bounding_boxes=bounding_boxes,
-            raw_output={"num_detections": len(boxes)},
-            model_version=settings.YOLO_MODEL_PATH,
-            inference_time_ms=elapsed_ms,
-        )
-        db.add(detection)
-
-        # Update report summary (denormalized for fast list queries)
-        if confidence > (report.ai_confidence or 0.0):
-            report.ai_damage_type = detected_class
-            report.ai_severity = severity
-            report.ai_confidence = confidence
-
-        media.is_processed = True
-        await db.commit()
-
-        logger.info(
-            f"Detection complete — report={report.id} "
-            f"class={detected_class.value} confidence={confidence:.3f} "
-            f"severity={severity.value if severity else 'none'} "
-            f"time={elapsed_ms:.1f}ms"
-        )
-
-    except Exception as e:
-        logger.error(f"Detection failed for report {report.id}: {e}", exc_info=True)
-        media.is_processed = True  # Prevent infinite retry loop
-        try:
-            await db.commit()
-        except Exception:
-            pass
+    _pothole_model = YOLO(str(pothole_path))
+    _crack_model   = YOLO(str(crack_path))
 
 
-# ── AI-generated / fake media detection (Hive Moderation) ─────────────────────
+_HF_MODEL   = "dima806/deepfake_vs_real_image_detection"
+_HF_TIMEOUT = 30
 
-HIVE_API_URL = "https://api.thehive.ai/api/v2/task/sync"
 
-
-async def detect_ai_generated(
-    db: AsyncSession,
-    media: MediaAttachment,
-    image_bytes: bytes,
-) -> None:
-    """
-    Calls Hive Moderation API (free-tier open-source) to detect AI-generated images.
-    Updates MediaAttachment.is_ai_generated and flags the report if detected.
-
-    Docs: https://docs.thehive.ai/docs/visual-moderation
-    Set AI_FAKE_DETECTION_ENABLED=true and HIVE_API_KEY in your .env to activate.
-    """
+async def _check_ai_generated(image_bytes: bytes) -> dict[str, Any]:
     if not settings.AI_FAKE_DETECTION_ENABLED:
-        return
+        return {"is_ai_generated": False, "confidence": 0.0, "status": "skipped", "raw_scores": {}}
 
-    hive_key = settings.HIVE_API_KEY
-    if not hive_key:
-        logger.warning("HIVE_API_KEY not set — skipping fake detection.")
-        return
+    token = (settings.HF_API_TOKEN or "").strip()
+    if not token or len(token) < 20:
+        return {"is_ai_generated": False, "confidence": 0.0, "status": "error", "raw_scores": {}}
+
+    url = f"https://router.huggingface.co/hf-inference/models/{_HF_MODEL}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/octet-stream",
+    }
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                HIVE_API_URL,
-                headers={"Authorization": f"Token {hive_key}"},
-                files={"media": ("image.jpg", image_bytes, "image/jpeg")},
-            )
-            response.raise_for_status()
-            data = response.json()
+        async with httpx.AsyncClient(timeout=_HF_TIMEOUT) as client:
+            resp = await client.post(url, headers=headers, content=image_bytes)
 
-        # Parse Hive response structure
-        classes = (
-            data.get("status", [{}])[0]
-            .get("response", {})
-            .get("output", [{}])[0]
-            .get("classes", [])
+            if resp.status_code == 503:
+                await asyncio.sleep(15)
+                resp = await client.post(url, headers=headers, content=image_bytes)
+
+            if resp.status_code != 200:
+                logger.error("HF Error (%s): %s", resp.status_code, resp.text)
+                return {"is_ai_generated": False, "confidence": 0.0, "status": "error", "raw_scores": {}}
+
+        data = resp.json()
+
+        if not isinstance(data, list) or not data:
+            return {"is_ai_generated": False, "confidence": 0.0, "status": "error", "raw_scores": {}}
+
+        scores: dict[str, float] = {item["label"].lower(): item["score"] for item in data}
+
+        artificial_score = (
+            scores.get("artificial", 0.0)
+            or scores.get("ai-generated", 0.0)
+            or scores.get("fake", 0.0)
+            or scores.get("label_0", 0.0)
         )
-        ai_score = next(
-            (c["score"] for c in classes if c["class"] == "ai_generated"),
-            0.0,
-        )
-
-        media.is_ai_generated = ai_score >= 0.5
-        media.ai_generated_confidence = round(ai_score, 4)
-        media.ai_generated_model_used = "hive-moderation"
-
-        if media.is_ai_generated:
-            report = await db.get(Report, media.report_id)
-            if report:
-                report.is_flagged_fake = True
-                report.fake_confidence = round(ai_score, 4)
-                logger.warning(
-                    f"AI-generated media flagged — report={report.id} score={ai_score:.3f}"
-                )
-
-        await db.commit()
-        logger.info(
-            f"Fake detection complete — media={media.id} "
-            f"ai_score={ai_score:.3f} flagged={media.is_ai_generated}"
+        real_score = (
+            scores.get("real", 0.0)
+            or scores.get("human", 0.0)
+            or scores.get("label_1", 0.0)
         )
 
-    except httpx.HTTPStatusError as e:
-        logger.error(
-            f"Hive API HTTP error: {e.response.status_code} — {e.response.text[:200]}"
-        )
+        THRESHOLD = 0.40
+        is_ai = artificial_score >= THRESHOLD
+        confidence = artificial_score if is_ai else real_score
+
+        return {
+            "is_ai_generated": is_ai,
+            "confidence": round(confidence, 4),
+            "status": "rejected" if is_ai else "approved_for_classification",
+            "raw_scores": scores,
+        }
+
     except Exception as e:
-        logger.error(f"Fake detection failed for media {media.id}: {e}", exc_info=True)
+        logger.error("HF Request Failed: %s", e)
+        return {"is_ai_generated": False, "confidence": 0.0, "status": "error", "raw_scores": {}}
+
+
+def _compute_severity(boxes: list[dict], image_w: int, image_h: int) -> str:
+    if not boxes:
+        return "low"
+    image_area = image_w * image_h
+    if image_area == 0:
+        return "low"
+    max_ratio = max((b.get("width", 0) * b.get("height", 0)) / image_area for b in boxes)
+    return "critical" if max_ratio >= 0.10 else "low"
+
+
+def _run_yolo_sync(model, image_bytes: bytes, label: str) -> dict[str, Any] | None:
+    CONF_THRESHOLD = 0.40
+
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img_w, img_h = img.size
+        img_np = np.array(img)
+
+        t0 = time.perf_counter()
+        results = model(img_np, verbose=False)
+        inference_ms = (time.perf_counter() - t0) * 1000
+
+        if not results or len(results) == 0:
+            return None
+
+        boxes_raw = results[0].boxes
+        if boxes_raw is None or len(boxes_raw) == 0:
+            return None
+
+        best_conf = 0.0
+        all_boxes = []
+
+        for box in boxes_raw:
+            conf = float(box.conf[0])
+            if conf < CONF_THRESHOLD:
+                continue
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            box_dict = {
+                "x": round(x1, 2),
+                "y": round(y1, 2),
+                "width":  round(x2 - x1, 2),
+                "height": round(y2 - y1, 2),
+                "confidence": round(conf, 4),
+            }
+            all_boxes.append(box_dict)
+            if conf > best_conf:
+                best_conf = conf
+
+        if not all_boxes:
+            return None
+
+        return {
+            "label":             label,
+            "confidence":        round(best_conf, 4),
+            "severity":          _compute_severity(all_boxes, img_w, img_h),
+            "boxes":             all_boxes,
+            "inference_time_ms": round(inference_ms, 2),
+        }
+
+    except Exception:
+        logger.exception("_run_yolo_sync failed for label=%s", label)
+        return None
+
+
+def run_yolo(file_path: str) -> dict[str, Any] | None:
+    """
+    Public synchronous wrapper used by ml_task_service.
+    Reads file from disk, runs both models, returns highest-confidence result.
+    """
+    try:
+        with open(file_path, "rb") as f:
+            image_bytes = f.read()
+    except OSError:
+        logger.error("run_yolo: cannot read file at %s", file_path)
+        return None
+
+    if _pothole_model is None or _crack_model is None:
+        load_models()
+
+    pothole = _run_yolo_sync(_pothole_model, image_bytes, "pothole")
+    crack   = _run_yolo_sync(_crack_model,   image_bytes, "crack")
+
+    candidates = [r for r in (pothole, crack) if r is not None]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda r: r["confidence"])
+
+
+async def process_media_pipeline(image_bytes: bytes) -> dict[str, Any]:
+    if not settings.AI_ENABLED:
+        raise RuntimeError("AI_ENABLED=False in settings")
+
+    ai_validation = await _check_ai_generated(image_bytes)
+
+    if ai_validation["is_ai_generated"] and ai_validation["status"] == "rejected":
+        return {"ai_validation": ai_validation, "prediction": None}
+
+    if _pothole_model is None or _crack_model is None:
+        load_models()
+
+    loop = asyncio.get_event_loop()
+
+    pothole_result, crack_result = await asyncio.gather(
+        loop.run_in_executor(None, _run_yolo_sync, _pothole_model, image_bytes, "pothole"),
+        loop.run_in_executor(None, _run_yolo_sync, _crack_model,   image_bytes, "crack"),
+    )
+
+    candidates = [r for r in (pothole_result, crack_result) if r is not None]
+
+    if not candidates:
+        prediction = {"label": "none", "confidence": 0.0, "severity": None, "boxes": [], "inference_time_ms": 0.0}
+    else:
+        prediction = max(candidates, key=lambda r: r["confidence"])
+
+    return {"ai_validation": ai_validation, "prediction": prediction}

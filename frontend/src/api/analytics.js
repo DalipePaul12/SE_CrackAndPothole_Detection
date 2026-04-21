@@ -1,55 +1,30 @@
-const BASE = "http://127.0.0.1:8000/api/v1";
-const getToken = () => localStorage.getItem("access_token");
-const authHeader = () => ({ Authorization: `Bearer ${getToken()}` });
+import { api } from "./client";
 
-export async function getDashboardSummary() {
-  const res = await fetch(`${BASE}/analytics/dashboard-summary`, {
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-  // returns: { total_reports, pending, validated, completed, active_users }
+async function safeGet(path, fallback) {
+  try {
+    const body = await api.get(path);
+
+    if (body && typeof body.success === "boolean") {
+      return {
+        success: body.success,
+        data:    body.success ? (body.data ?? fallback) : fallback,
+        error:   body.success ? null : (body.detail ?? "Server error"),
+      };
+    }
+
+    return { success: true, data: body ?? fallback, error: null };
+  } catch (err) {
+    const msg =
+      err?.response?.data?.detail ||
+      err?.message ||
+      "Network error";
+    return { success: false, data: fallback, error: msg };
+  }
 }
 
-export async function getSeverityStats() {
-  const res = await fetch(`${BASE}/analytics/severity-stats`, {
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
-
-export async function getDamageTypeStats() {
-  const res = await fetch(`${BASE}/analytics/damage-type-stats`, {
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-  // returns: { pothole: N, crack: N }
-}
-
-export async function getReportStatusStats() {
-  const res = await fetch(`${BASE}/analytics/report-status-stats`, {
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
-
-export async function getMonthlyReports() {
-  const res = await fetch(`${BASE}/analytics/monthly-reports`, {
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-  // returns: [{ month: "2026-03", count: N }, ...]
-}
-
-export async function getBarangayRanking() {
-  const res = await fetch(`${BASE}/analytics/barangay-ranking`, {
-    headers: authHeader(),
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-  // returns: [{ barangay: "...", count: N }, ...]
-}
+export const getDashboardSummary  = () => safeGet("/analytics/dashboard-summary", null);
+export const getDamageTypeStats   = () => safeGet("/analytics/damage-type-stats", {});
+export const getReportStatusStats = () => safeGet("/analytics/report-status-stats", {});
+export const getMonthlyReports    = () => safeGet("/analytics/monthly-reports", []);
+export const getBarangayRanking   = () => safeGet("/analytics/barangay-ranking", []);
+export const getSeverityStats     = () => safeGet("/analytics/severity-stats", {});

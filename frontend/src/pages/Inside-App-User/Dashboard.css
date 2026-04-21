@@ -260,4 +260,384 @@
     padding-bottom: 10px;
   }
 
+}/* ============================================================
+   Dashboard.css  —  Complete, production-ready stylesheet
+   ============================================================
+   Fixes:
+   [C1]  height:101vh → min-height:100vh + overflow-y:auto
+   [C2]  5-card grid layout (2+2+1) for summary cards
+   [C3]  .summary-card.users integrated directly here
+   [C4]  .dashboard-panel-damagecategories: min-height instead of fixed
+   [C5]  :focus-visible rings on all interactive elements
+   [C6]  Duplicate @media (max-width:1024px) removed — single block
+   [C7]  Responsive margin-top on .dashboard-summary
+   [C8]  overflow-y:auto on container so content scrolls properly
+   [C10] .sidebar-overlay defined
+   ============================================================ */
+
+/* ── Layout root ─────────────────────────────────────────────────────────────── */
+.dashboard-container {
+  padding: 1.5rem 2rem 2rem;
+  background-color: rgba(250, 238, 228, 0.722);
+  min-height: 100vh;                    /* [C1] was 101vh — caused scroll bleed */
+  overflow-y: auto;                     /* [C8] content scrolls, doesn't clip   */
+  width: calc(100% - 255px);
+  margin-left: 255px;
+  box-sizing: border-box;
+}
+
+/* ── Sidebar overlay (mobile) ────────────────────────────────────────────────── */
+/* [C10] Was missing from original — overlay was invisible but still blocking */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 200;
+}
+.sidebar-overlay.active {
+  display: block;
+}
+
+/* ── Error banner ────────────────────────────────────────────────────────────── */
+.dashboard-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.88rem;
+  margin-top: 64px;                     /* clear fixed header */
+}
+.dashboard-error-banner .error-icon {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+}
+.retry-btn {
+  margin-left: auto;
+  padding: 0.3rem 0.85rem;
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.retry-btn:hover  { background: #991b1b; }
+.retry-btn:focus-visible {
+  outline: 2px solid #b91c1c;
+  outline-offset: 2px;
+}
+
+/* ── Summary cards grid ──────────────────────────────────────────────────────── */
+/* [C2] 5 cards: row-1 has 4 cols, row-2 (users) spans all 4 */
+.dashboard-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+  margin-top: 64px;                     /* [C7] was 60px — matches header height */
+}
+
+/* ── Base card ───────────────────────────────────────────────────────────────── */
+.summary-card {
+  background: #fff;
+  padding: 6px 10px 10px;
+  border-radius: 18px;
+  text-align: left;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.summary-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+}
+.summary-card:focus-visible {
+  outline: 2px solid #12691c;
+  outline-offset: 2px;
+}
+
+.summary-card h3 {
+  font-size: 0.7rem;
+  color: #888;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 5px 0 2px;
+  padding: 0 4px;
+}
+.summary-card p {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #12691c;
+  margin: 2px 0 4px 4px;
+  line-height: 1.1;
+}
+.summary-card .icon {
+  color: #12691c;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+/* Colour variants */
+.summary-card.total     { border-bottom-color: #12691c; }
+.summary-card.completed { border-bottom-color: #2ba81d; }
+.summary-card.progress  { border-bottom-color: #f59e0b; }
+.summary-card.pending   { border-bottom-color: #ef4444; }
+
+/* [C3] 5th card — Active Users spans full row */
+.summary-card.users {
+  grid-column: 1 / -1;                 /* stretch across all 4 columns */
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-bottom-color: transparent;
+}
+.summary-card.users h3 {
+  color: rgba(255,255,255,0.8);
+  font-size: 0.72rem;
+  flex: 1;
+}
+.summary-card.users p {
+  color: #fff;
+  font-size: 1.75rem;
+  margin: 0 0 0 12px;
+}
+.summary-card.users .icon {
+  color: rgba(255,255,255,0.9);
+  font-size: 1.4rem;
+}
+
+/* ── Skeleton loading ────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+.skeleton { pointer-events: none; }
+.skeleton-line,
+.skeleton-block {
+  border-radius: 6px;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+.skeleton-line         { height: 13px; margin-bottom: 8px; width: 55%; }
+.skeleton-line.short   { width: 40%; }
+.skeleton-line.tall    { height: 34px; width: 30%; }
+.skeleton-block        { height: 160px; width: 100%; border-radius: 10px; }
+
+/* ── Grid panels ─────────────────────────────────────────────────────────────── */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 22px;
+}
+
+/* Shared panel base */
+.dashboard-panel,
+.dashboard-panel-damagecategories,
+.dashboard-panel-submissiontrends {
+  background: #fff;
+  border-radius: 28px;
+  padding: 0 20px 18px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+  border-bottom: 2px solid #068a20;
+  box-sizing: border-box;
+}
+
+.dashboard-panel h3,
+.dashboard-panel-damagecategories h3,
+.dashboard-panel-submissiontrends h3 {
+  margin: 18px 0 14px;
+  color: #555;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-transform: uppercase;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-panel .icon,
+.dashboard-panel-damagecategories .icon,
+.dashboard-panel-submissiontrends .icon {
+  color: #12691c;
+  font-size: 1.35rem;
+  flex-shrink: 0;
+}
+
+/* [C4] Damage panel: min-height instead of fixed height */
+.dashboard-panel-damagecategories {
+  min-height: 240px;
+}
+
+/* Trend panel */
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.dashboard-panel-submissiontrends select {
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff, #d1fae5);
+  border: 1px solid #ccc;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.dashboard-panel-submissiontrends select:focus-visible {
+  outline: 2px solid #12691c;
+  outline-offset: 1px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────────── */
+.empty-state {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+/* ── Activity list ───────────────────────────────────────────────────────────── */
+.activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.activity-card {
+  background: #c9e7ce;
+  border-radius: 18px;
+  padding: 13px 20px;
+  font-size: 0.88rem;
+  color: #111;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.12);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.activity-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+.activity-icon {
+  color: #12691c;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+/* ── Focus-visible rings [C5] ────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid #12691c;
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   [C6] Removed duplicate @media (max-width:1024px) block
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Large tablet (≤ 1200px) — 4-col summary starts to feel tight */
+@media (max-width: 1200px) {
+  .dashboard-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .summary-card.users {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ── Tablet (≤ 1024px) — collapse sidebar layout */
+@media (max-width: 1024px) {
+  .dashboard-container {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 0;
+    padding: 1rem 1.25rem 2rem;
+  }
+
+  .dashboard-summary {
+    margin-top: 70px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-panel,
+  .dashboard-panel-damagecategories,
+  .dashboard-panel-submissiontrends {
+    border-radius: 22px;
+    padding: 0 16px 16px;
+  }
+
+  .dashboard-panel-submissiontrends {
+    margin-bottom: 16px;
+  }
+}
+
+/* ── Small tablet / large phone (≤ 768px) */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 0.75rem 1rem 2rem;
+  }
+
+  .dashboard-summary {
+    grid-template-columns: 1fr 1fr;
+    margin-top: 64px;
+    gap: 12px;
+  }
+
+  .dashboard-grid {
+    gap: 16px;
+  }
+
+  .dashboard-panel-damagecategories {
+    min-height: 260px;
+  }
+
+  .activity-card {
+    padding: 11px 14px;
+    font-size: 0.84rem;
+  }
+
+  .summary-card p {
+    font-size: 1.5rem;
+  }
+}
+
+/* ── Phone (≤ 480px) */
+@media (max-width: 480px) {
+  .dashboard-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-card.users {
+    grid-column: unset;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .dashboard-error-banner {
+    flex-wrap: wrap;
+    margin-top: 56px;
+  }
 }

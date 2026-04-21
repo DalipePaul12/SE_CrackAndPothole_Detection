@@ -1,44 +1,63 @@
-// frontend/src/hooks/useReports.js
+import { useState, useEffect, useRef, useCallback } from "react";
+import { getReports, getMyReports } from "../api/reports";
 
-import { useState, useEffect, useCallback } from "react";
-import { getReports, getMyReports, submitReport } from "../api/reports";
+const PAGE_SIZE = 15;
 
-/**
- * useReports(onlyMine)
- *   onlyMine = true  → GET /reports/mine  (MyProfile, MySubmissions)
- *   onlyMine = false → GET /reports       (AllReports, Dashboard)
- */
-export function useReports(onlyMine = false) {
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+export function useReports({ mine = false, status = null, barangay = null } = {}) {
+  // Hooks must always be declared in the same order — never conditionally
+  const [reports, setReports] = useState([]);   // hook 1
+  const [loading, setLoading] = useState(true); // hook 2
+  const [error,   setError]   = useState(null); // hook 3
+  const [page,    setPage]    = useState(1);    // hook 4
+  const [total,   setTotal]   = useState(0);    // hook 5
 
+  // hook 6 — must come after all useState calls, never move this up
+  const abortRef = useRef(false);
+
+  // hook 7
   const fetchReports = useCallback(async () => {
+    abortRef.current = false;
     setLoading(true);
     setError(null);
-    try {
-      const data = onlyMine ? await getMyReports() : await getReports();
-      // Guarantee reports is always an array — never undefined/null
-      setReports(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("[useReports] fetch error:", err);
-      setError(err?.detail || "Failed to load reports.");
-      setReports([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [onlyMine]);
 
+    try {
+      const params = { page, page_size: PAGE_SIZE };
+      if (status)   params.status   = status;
+      if (barangay) params.barangay = barangay;
+
+      const res = mine
+        ? await getMyReports(params)
+        : await getReports(params);
+
+      if (abortRef.current) return;
+
+      if (!res.success) {
+        setError(res.error || "Failed to load reports.");
+        setReports([]);
+        setTotal(0);
+      } else {
+        const body = res.data;
+        setReports(Array.isArray(body?.results) ? body.results : []);
+        setTotal(typeof body?.total === "number" ? body.total : 0);
+      }
+    } catch (err) {
+      if (!abortRef.current) {
+        setError(err?.message || "Unexpected error loading reports.");
+        setReports([]);
+        setTotal(0);
+      }
+    } finally {
+      if (!abortRef.current) setLoading(false);
+    }
+  }, [mine, page, status, barangay]);
+
+  // hook 8
   useEffect(() => {
     fetchReports();
+    return () => {
+      abortRef.current = true;
+    };
   }, [fetchReports]);
 
-  // Used by CreateReport.jsx after a successful submission
-  const submit = async (formData) => {
-    const result = await submitReport(formData);
-    await fetchReports(); // refresh list after submit
-    return result;
-  };
-
-  return { reports, loading, error, refetch: fetchReports, submit };
+  return { reports, loading, error, page, setPage, total, refetch: fetchReports };
 }

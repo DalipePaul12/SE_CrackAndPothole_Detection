@@ -10,9 +10,10 @@ import { useUser } from "../../hooks/useUser";
 function Settings() {
   const { updatePassword } = useUser();
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState(""); // "success" | "error"
+  const [messageType, setMessageType] = useState("");
 
   const [settings, setSettings] = useState({
     pushNotifications: false,
@@ -69,16 +70,16 @@ function Settings() {
 
   return (
     <>
-      <Sidebar />
-      <AppHeader />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <AppHeader onMenuClick={() => setSidebarOpen(true)} />
 
-      <div
-        className="sidebar-overlay"
-        onClick={() => {
-          document.querySelector(".app-sidebar")?.classList.remove("active");
-          document.querySelector(".sidebar-overlay")?.classList.remove("active");
-        }}
-      />
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay active"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       <div className="settings-container">
         <div className="settings-header">
@@ -86,47 +87,67 @@ function Settings() {
           <p>Customize your Snap2Fix experience.</p>
         </div>
 
-        {/* NOTIFICATIONS */}
         <div className="settings-card">
           <h2>Notifications</h2>
           <p>How do you want to be notified?</p>
 
           {[
-            { key: "pushNotifications", label: "Push Notifications", desc: "Receive instant updates directly on your device." },
-            { key: "emailSummaries", label: "Email Summaries", desc: "Get daily or weekly activity summaries via email." },
-            { key: "systemAlerts", label: "System Alerts", desc: "Important alerts about account and system changes." },
+            { key: "pushNotifications", label: "Push Notifications",  desc: "Receive instant updates directly on your device." },
+            { key: "emailSummaries",    label: "Email Summaries",     desc: "Get daily or weekly activity summaries via email." },
+            { key: "systemAlerts",      label: "System Alerts",       desc: "Important alerts about account and system changes." },
           ].map(({ key, label, desc }) => (
             <div key={key} className="setting-item">
               <div><h4>{label}</h4><p>{desc}</p></div>
               <label className="switch">
-                <input type="checkbox" checked={settings[key]} onChange={() => toggleSetting(key)} />
+                <input
+                  type="checkbox"
+                  checked={settings[key]}
+                  onChange={() => toggleSetting(key)}
+                />
                 <span className="slider"></span>
               </label>
             </div>
           ))}
         </div>
 
-        {/* PASSWORD */}
         <div className="settings-card">
           <h2>Privacy & Security</h2>
           <p>Change Password</p>
 
           <div className="password-section">
             <label>Current Password</label>
-            <input type="password" name="currentPassword" placeholder="Current Password"
-              value={passwordData.currentPassword} onChange={handlePasswordChange} />
+            <input
+              type="password"
+              name="currentPassword"
+              placeholder="Current Password"
+              value={passwordData.currentPassword}
+              onChange={handlePasswordChange}
+            />
 
             <label>New Password</label>
-            <input type="password" name="newPassword" placeholder="New Password"
-              value={passwordData.newPassword} onChange={handlePasswordChange} />
+            <input
+              type="password"
+              name="newPassword"
+              placeholder="New Password"
+              value={passwordData.newPassword}
+              onChange={handlePasswordChange}
+            />
 
             <label>Confirm New Password</label>
-            <input type="password" name="confirmPassword" placeholder="Confirm New Password"
-              value={passwordData.confirmPassword} onChange={handlePasswordChange} />
+            <input
+              type="password"
+              name="confirmPassword"
+              placeholder="Confirm New Password"
+              value={passwordData.confirmPassword}
+              onChange={handlePasswordChange}
+            />
           </div>
 
           {message && (
-            <p className="settings-message" style={{ color: messageType === "error" ? "red" : "green" }}>
+            <p
+              className="settings-message"
+              style={{ color: messageType === "error" ? "red" : "green" }}
+            >
               {message}
             </p>
           )}
@@ -135,14 +156,17 @@ function Settings() {
             <button
               className="save-btn"
               onClick={() => { if (validatePassword()) setShowConfirm(true); }}
-              disabled={!passwordData.currentPassword && !passwordData.newPassword && !passwordData.confirmPassword}
+              disabled={
+                !passwordData.currentPassword &&
+                !passwordData.newPassword &&
+                !passwordData.confirmPassword
+              }
             >
               Update Password
             </button>
           </div>
         </div>
 
-        {/* APP INFO */}
         <div className="settings-card app-info-card">
           <div className="app-info-content">
             <img src="/snap.jpg" alt="App Logo" className="app-logo" />

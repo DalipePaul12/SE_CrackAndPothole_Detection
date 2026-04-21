@@ -1,72 +1,107 @@
-// frontend/src/hooks/useNotifications.js
-
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   getNotifications,
-  markAsRead      as markAsReadApi,
-  markAllAsRead   as markAllAsReadApi,
+  markAsRead as markAsReadApi,
+  markAllAsRead as markAllAsReadApi,
   deleteNotification as deleteApi,
 } from "../api/notifications";
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
+  const [error, setError] = useState(null);
+
+  const abortRef = useRef(false);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const fetchNotifications = useCallback(async () => {
-    // Don't fetch if user is not logged in — avoids 401 on landing page
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
     setLoading(true);
     setError(null);
+    abortRef.current = false;
+
     try {
-      const data = await getNotifications();
-      setNotifications(Array.isArray(data) ? data : []);
+      const res = await getNotifications();
+
+      if (!res?.success) {
+        throw new Error(res?.error || "Failed to load notifications");
+      }
+
+      const data = Array.isArray(res.data) ? res.data : [];
+
+      if (!abortRef.current) {
+        setNotifications(data);
+      }
     } catch (err) {
-      console.error("[useNotifications] fetch error:", err);
-      setError(err?.detail || "Failed to load notifications.");
-      setNotifications([]);
+      if (!abortRef.current) {
+        setError(err.message || "Failed to load notifications");
+        setNotifications([]);
+      }
     } finally {
-      setLoading(false);
+      if (!abortRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     fetchNotifications();
+
+    return () => {
+      abortRef.current = true;
+    };
   }, [fetchNotifications]);
 
-  // Optimistic update — mark one as read locally, sync with backend
   const markAsRead = async (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+    const prev = notifications;
+
+    setNotifications((curr) =>
+      curr.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
+
     try {
-      await markAsReadApi(id);
+      const res = await markAsReadApi(id);
+
+      if (!res?.success) {
+        throw new Error(res?.error || "Failed to update");
+      }
     } catch {
-      fetchNotifications(); // roll back on failure
+      setNotifications(prev);
     }
   };
 
-  // Optimistic update — mark all as read
   const markAllAsRead = async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    const prev = notifications;
+
+    setNotifications((curr) => curr.map((n) => ({ ...n, is_read: true })));
+
     try {
-      await markAllAsReadApi();
+      const res = await markAllAsReadApi();
+
+      if (!res?.success) {
+        throw new Error(res?.error || "Failed to update");
+      }
     } catch {
-      fetchNotifications();
+      setNotifications(prev);
     }
   };
 
-  // Remove immediately, then delete on backend
   const remove = async (id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    const prev = notifications;
+
+    setNotifications((curr) => curr.filter((n) => n.id !== id));
+
     try {
-      await deleteApi(id);
+      const res = await deleteApi(id);
+
+      if (!res?.success) {
+        throw new Error(res?.error || "Delete failed");
+      }
     } catch {
-      fetchNotifications();
+      setNotifications(prev);
     }
   };
 

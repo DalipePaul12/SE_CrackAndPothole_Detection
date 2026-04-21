@@ -1,96 +1,81 @@
-import React, { useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import "./AdminStreetReports.css";
 
 import AdminSidebar from "../../components/AdminSidebar.jsx";
 import AdminHeader from "../../components/AdminHeader.jsx";
 
-// ── Sample data ────────────────────────────────────────────────────────────────
-const allReports = [
-  { id: "Report#001", street: "EDSA, Quezon City",      type: "Pothole", severity: "Critical",     status: "In Progress", date: "2026-03-02", reporterName: "Juan Dela Cruz",   contact: "09171234567", additionalInfo: "Large pothole near flyover." },
-  { id: "Report#002", street: "EDSA, Quezon City",      type: "Crack",   severity: "Non-Critical", status: "Completed",   date: "2026-03-01", reporterName: "Maria Santos",     contact: "09181234567", additionalInfo: "Surface crack along sidewalk." },
-  { id: "Report#003", street: "EDSA, Quezon City",      type: "Pothole", severity: "Critical",     status: "Pending",     date: "2026-03-05", reporterName: "Pedro Reyes",      contact: "09191234567", additionalInfo: "Deep pothole causing traffic." },
-  { id: "Report#004", street: "España Blvd, Manila",    type: "Crack",   severity: "Non-Critical", status: "Completed",   date: "2026-03-01", reporterName: "Ana Gomez",        contact: "09201234567", additionalInfo: "Hairline cracks on road surface." },
-  { id: "Report#005", street: "España Blvd, Manila",    type: "Pothole", severity: "Critical",     status: "In Progress", date: "2026-03-04", reporterName: "Carlos Mendoza",   contact: "09211234567", additionalInfo: "Dangerous pothole near bus stop." },
-  { id: "Report#006", street: "Katipunan Ave, QC",      type: "Crack",   severity: "Critical",     status: "Pending",     date: "2026-03-06", reporterName: "Liza Cruz",        contact: "09221234567", additionalInfo: "Multiple cracks, needs urgent repair." },
-  { id: "Report#007", street: "Katipunan Ave, QC",      type: "Pothole", severity: "Non-Critical", status: "Completed",   date: "2026-02-28", reporterName: "Ramon Bautista",   contact: "09231234567", additionalInfo: "Small pothole, filled temporarily." },
-  { id: "Report#008", street: "Commonwealth Ave, QC",   type: "Pothole", severity: "Critical",     status: "In Progress", date: "2026-03-03", reporterName: "Sofia Reyes",      contact: "09241234567", additionalInfo: "Multiple potholes on center lane." },
-  { id: "Report#009", street: "Commonwealth Ave, QC",   type: "Crack",   severity: "Non-Critical", status: "In Progress", date: "2026-03-07", reporterName: "Miguel Torres",    contact: "09251234567", additionalInfo: "Longitudinal cracking visible." },
-  { id: "Report#010", street: "Taft Ave, Manila",       type: "Pothole", severity: "Non-Critical", status: "Pending",     date: "2026-03-08", reporterName: "Elena Villanueva", contact: "09261234567", additionalInfo: "Shallow pothole near LRT station." },
-];
+import { getReports } from "../../api/reports";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function groupByStreet(reports) {
   const map = {};
   reports.forEach((r) => {
-    if (!map[r.street]) map[r.street] = [];
-    map[r.street].push(r);
+    const key = r.location_address ?? r.barangay ?? "Unknown";
+    if (!map[key]) map[key] = [];
+    map[key].push(r);
   });
   return map;
 }
 
-function latestDate(reports) {
-  return reports
-    .map((r) => r.date)
-    .sort()
-    .reverse()[0];
-}
-
 function dominantStatus(reports) {
-  const order = ["Pending", "In Progress", "Completed"];
+  const order = ["pending", "verified", "in_progress", "resolved"];
   for (const s of order) {
     if (reports.some((r) => r.status === s)) return s;
   }
-  return reports[0].status;
+  return reports[0]?.status ?? "—";
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+const STATUS_LABEL = { pending: "Pending", verified: "Verified", in_progress: "In Progress", resolved: "Resolved", declined: "Declined" };
+
 function AdminStreetReports() {
-  const [expandedStreet, setExpandedStreet] = useState(null);
-  const [selectedReport, setSelectedReport] = useState(null);
-  const [filters, setFilters] = useState({ type: "All", severity: "All", status: "All" });
+  const [allReports, setAllReports]   = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
+  const [expandedStreet, setExpanded] = useState(null);
+  const [selectedReport, setSelected] = useState(null);
+  const [filters, setFilters]         = useState({ type: "All", severity: "All", status: "All" });
 
-  const streetMap = groupByStreet(allReports);
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const res = await getReports({ page_size: 100 });
+    if (!res.success) { setError(res.error); setLoading(false); return; }
+    setAllReports(res.data?.results ?? []);
+    setLoading(false);
+  }, []);
 
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const damageType = (r) => r.ai_damage_type ?? r.damage_type ?? "—";
+  const severity   = (r) => r.ai_severity    ?? r.severity    ?? "—";
+  const dateStr    = (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : "—";
+
+  const streetMap  = groupByStreet(allReports);
   const streetRows = Object.entries(streetMap).map(([street, reports]) => ({
     street,
     reports,
-    total: reports.length,
-    potholes: reports.filter((r) => r.type === "Pothole").length,
-    cracks: reports.filter((r) => r.type === "Crack").length,
-    critical: reports.filter((r) => r.severity === "Critical").length,
-    nonCritical: reports.filter((r) => r.severity === "Non-Critical").length,
+    total:      reports.length,
+    potholes:   reports.filter((r) => damageType(r).toLowerCase() === "pothole").length,
+    cracks:     reports.filter((r) => damageType(r).toLowerCase() === "crack").length,
+    critical:   reports.filter((r) => severity(r).toLowerCase().includes("critical") && !severity(r).toLowerCase().includes("non")).length,
+    nonCritical: reports.filter((r) => severity(r).toLowerCase().includes("non")).length,
     dominantStatus: dominantStatus(reports),
-    latestDate: latestDate(reports),
+    latestDate: reports.map((r) => r.created_at).sort().reverse()[0],
   }));
 
-  // apply street-level filters
-  const filteredStreetRows = streetRows.filter((row) => {
-    const matchType =
-      filters.type === "All" ||
-      (filters.type === "Pothole" && row.potholes > 0) ||
-      (filters.type === "Crack" && row.cracks > 0);
-    const matchSeverity =
-      filters.severity === "All" ||
-      (filters.severity === "Critical" && row.critical > 0) ||
-      (filters.severity === "Non-Critical" && row.nonCritical > 0);
-    const matchStatus =
-      filters.status === "All" ||
-      row.reports.some((r) => r.status === filters.status);
-    return matchType && matchSeverity && matchStatus;
+  const filteredRows = streetRows.filter((row) => {
+    const mt = filters.type === "All" || (filters.type === "Pothole" && row.potholes > 0) || (filters.type === "Crack" && row.cracks > 0);
+    const ms = filters.severity === "All" || (filters.severity === "Critical" && row.critical > 0) || (filters.severity === "Non-Critical" && row.nonCritical > 0);
+    const mst = filters.status === "All" || row.reports.some((r) => r.status === filters.status);
+    return mt && ms && mst;
   });
 
-  const toggleStreet = (street) =>
-    setExpandedStreet((prev) => (prev === street ? null : street));
-
-  // ── NEW: filter child reports using the same active filters ───────────────
-  const filterChildReports = (reports) =>
+  const filterChildren = (reports) =>
     reports.filter((r) => {
-      const matchType = filters.type === "All" || r.type === filters.type;
-      const matchSeverity = filters.severity === "All" || r.severity === filters.severity;
-      const matchStatus = filters.status === "All" || r.status === filters.status;
-      return matchType && matchSeverity && matchStatus;
+      const mt  = filters.type === "All" || damageType(r).toLowerCase() === filters.type.toLowerCase();
+      const ms  = filters.severity === "All" || severity(r).toLowerCase().replace(/[\s_]/g, "-") === filters.severity.toLowerCase().replace(" ", "-");
+      const mst = filters.status === "All" || r.status === filters.status;
+      return mt && ms && mst;
     });
-  // ──────────────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -98,29 +83,20 @@ function AdminStreetReports() {
       <AdminHeader />
 
       <div className="asr-container">
-        {/* ── FILTERS ── */}
         <div className="asr-filters-card">
           <div className="asr-header">
             <h2>Street Reports Overview</h2>
             <span className="asr-total-badge">{allReports.length} total reports</span>
           </div>
-
           <div className="asr-filters-row">
             <div className="admin-filter-group">
               <label>Damage Type</label>
               <div className="admin-filter-buttons">
                 {["All", "Crack", "Pothole"].map((t) => (
-                  <button
-                    key={t}
-                    className={filters.type === t ? "active" : ""}
-                    onClick={() => setFilters({ ...filters, type: t })}
-                  >
-                    {t}
-                  </button>
+                  <button key={t} className={filters.type === t ? "active" : ""} onClick={() => setFilters({ ...filters, type: t })}>{t}</button>
                 ))}
               </div>
             </div>
-
             <div className="admin-filter-group">
               <label>Severity</label>
               <div className="admin-custom-select">
@@ -131,22 +107,22 @@ function AdminStreetReports() {
                 </select>
               </div>
             </div>
-
             <div className="admin-filter-group">
               <label>Status</label>
               <div className="admin-custom-select">
                 <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
                   <option value="All">All Status</option>
-                  <option value="Pending">Pending</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Resolved</option>
                 </select>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── TABLE ── */}
+        {error && <div className="admin-error-banner">{error}</div>}
+
         <div className="asr-table-card">
           <table className="asr-table">
             <thead>
@@ -161,160 +137,131 @@ function AdminStreetReports() {
               </tr>
             </thead>
             <tbody>
-              {filteredStreetRows.length > 0 ? (
-                filteredStreetRows.map((row) => {
-                  // ── NEW: filtered child reports for this street ────────────
-                  const filteredChildren = filterChildReports(row.reports);
-                  // ──────────────────────────────────────────────────────────
+              {loading ? (
+                <tr><td colSpan="7" className="admin-no-data">Loading…</td></tr>
+              ) : filteredRows.length > 0 ? (
+                filteredRows.map((row) => {
+                  const children = filterChildren(row.reports);
                   return (
-                  <React.Fragment key={row.street}>
-                    {/* ── STREET ROW ── */}
-                    <tr
-                      className={`asr-street-row ${expandedStreet === row.street ? "expanded" : ""}`}
-                      onClick={() => toggleStreet(row.street)}
-                    >
-                      <td className="col-expand">
-                        <span className={`chevron ${expandedStreet === row.street ? "open" : ""}`}>›</span>
-                      </td>
-                      <td className="asr-street-name">{row.street}</td>
-                      <td>
-                        <span className="asr-total-pill">{row.total}</span>
-                      </td>
-                      <td>
-                        <div className="asr-type-badges">
-                          {row.potholes > 0 && (
-                            <span className="type-badge pothole">{row.potholes} Pothole{row.potholes > 1 ? "s" : ""}</span>
-                          )}
-                          {row.cracks > 0 && (
-                            <span className="type-badge crack">{row.cracks} Crack{row.cracks > 1 ? "s" : ""}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="asr-sev-badges">
-                          {row.critical > 0 && (
-                            <span className="sev-badge critical">{row.critical} Critical</span>
-                          )}
-                          {row.nonCritical > 0 && (
-                            <span className="sev-badge non-critical">{row.nonCritical} Non-Critical</span>
-                          )}
-                        </div>
-                      </td>
-                      {/* STATUS — dash at street level, values only in expanded child rows */}
-                      <td>
-                        <span className="asr-empty-status">—</span>
-                      </td>
-                      <td>{row.latestDate}</td>
-                    </tr>
+                    <React.Fragment key={row.street}>
+                      <tr
+                        className={`asr-street-row${expandedStreet === row.street ? " expanded" : ""}`}
+                        onClick={() => setExpanded((p) => p === row.street ? null : row.street)}
+                      >
+                        <td className="col-expand">
+                          <span className={`chevron${expandedStreet === row.street ? " open" : ""}`}>›</span>
+                        </td>
+                        <td className="asr-street-name">{row.street}</td>
+                        <td><span className="asr-total-pill">{row.total}</span></td>
+                        <td>
+                          <div className="asr-type-badges">
+                            {row.potholes > 0 && <span className="type-badge pothole">{row.potholes} Pothole{row.potholes > 1 ? "s" : ""}</span>}
+                            {row.cracks   > 0 && <span className="type-badge crack">{row.cracks} Crack{row.cracks > 1 ? "s" : ""}</span>}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="asr-sev-badges">
+                            {row.critical    > 0 && <span className="sev-badge critical">{row.critical} Critical</span>}
+                            {row.nonCritical > 0 && <span className="sev-badge non-critical">{row.nonCritical} Non-Critical</span>}
+                          </div>
+                        </td>
+                        <td><span className="asr-empty-status">—</span></td>
+                        <td>{row.latestDate ? new Date(row.latestDate).toLocaleDateString() : "—"}</td>
+                      </tr>
 
-                    {/* ── EXPANDED CHILD ROWS ── */}
-                    {expandedStreet === row.street && (
-                      <>
-                        <tr className="asr-child-header-row">
-                          <td></td>
-                          <td colSpan={6}>
-                            <div className="asr-child-header">
-                              <span>Reports for <strong>{row.street}</strong></span>
-                              {/* ── NEW: show filtered count vs total ───────── */}
-                              <span className="asr-child-count">
-                                {filteredChildren.length} of {row.reports.length} report{row.reports.length > 1 ? "s" : ""}
-                              </span>
-                              {/* ──────────────────────────────────────────── */}
-                            </div>
-                          </td>
-                        </tr>
-                        {/* ── NEW: render filteredChildren instead of row.reports ── */}
-                        {filteredChildren.length > 0 ? (
-                          filteredChildren.map((report) => (
-                            <tr
-                              key={report.id}
-                              className="asr-child-row clickable-row"
-                              onClick={(e) => { e.stopPropagation(); setSelectedReport(report); }}
-                            >
-                              <td></td>
-                              <td>
-                                <strong className="asr-report-id">{report.id}</strong>
-                              </td>
-                              <td>—</td>
-                              <td>
-                                <span className={`type-badge ${report.type.toLowerCase()}`}>{report.type}</span>
-                              </td>
-                              <td>
-                                <span className={`admin-severity ${report.severity.toLowerCase().replace(" ", "-")}`}>
-                                  {report.severity}
-                                </span>
-                              </td>
-                              {/* STATUS — shown per individual report */}
-                              <td>
-                                <span className={`admin-status ${report.status.toLowerCase().replace(" ", "-")}`}>
-                                  {report.status}
-                                </span>
-                              </td>
-                              <td>{report.date}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="asr-child-row">
+                      {expandedStreet === row.street && (
+                        <>
+                          <tr className="asr-child-header-row">
                             <td></td>
-                            <td colSpan={6} className="admin-no-data">No reports match the current filters</td>
+                            <td colSpan={6}>
+                              <div className="asr-child-header">
+                                <span>Reports for <strong>{row.street}</strong></span>
+                                <span className="asr-child-count">{children.length} of {row.reports.length} report{row.reports.length > 1 ? "s" : ""}</span>
+                              </div>
+                            </td>
                           </tr>
-                        )}
-                        {/* ──────────────────────────────────────────────────── */}
-                        {/* Spacer after expanded section */}
-                        <tr className="asr-spacer-row"><td colSpan={7}></td></tr>
-                      </>
-                    )}
-                  </React.Fragment>
+                          {children.length > 0 ? children.map((r) => (
+                            <tr key={r.id} className="asr-child-row clickable-row" onClick={(e) => { e.stopPropagation(); setSelected(r); }}>
+                              <td></td>
+                              <td><strong className="asr-report-id">Report#{String(r.id).padStart(3, "0")}</strong></td>
+                              <td>—</td>
+                              <td><span className={`type-badge ${damageType(r).toLowerCase()}`}>{damageType(r)}</span></td>
+                              <td><span className={`admin-severity ${severity(r).toLowerCase().replace(/[\s_]/g, "-")}`}>{severity(r)}</span></td>
+                              <td><span className={`admin-status ${r.status?.toLowerCase().replace(/[\s_]/g, "-")}`}>{STATUS_LABEL[r.status] ?? r.status}</span></td>
+                              <td>{dateStr(r)}</td>
+                            </tr>
+                          )) : (
+                            <tr className="asr-child-row">
+                              <td></td>
+                              <td colSpan={6} className="admin-no-data">No reports match the current filters</td>
+                            </tr>
+                          )}
+                          <tr className="asr-spacer-row"><td colSpan={7}></td></tr>
+                        </>
+                      )}
+                    </React.Fragment>
                   );
                 })
               ) : (
-                <tr>
-                  <td colSpan="7" className="admin-no-data">No streets match the current filters</td>
-                </tr>
+                <tr><td colSpan="7" className="admin-no-data">No streets match the current filters</td></tr>
               )}
             </tbody>
           </table>
         </div>
 
-        {/* ── MODAL ── */}
         {selectedReport && (
-          <div className="modal-overlay" onClick={() => setSelectedReport(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <button className="modal-close-btn" onClick={() => setSelectedReport(null)}>×</button>
-              <h3 className="modal-title">Report Details</h3>
-
-              <div className="modal-body">
-                <div className="modal-left">
-                  <div className="reporter-info">
-                    <div className="info-row"><strong>Report:</strong> {selectedReport.id}</div>
-                    <div className="info-row"><strong>Reporter:</strong> {selectedReport.reporterName}</div>
-                    <div className="info-row"><strong>Contact:</strong> {selectedReport.contact}</div>
-                  </div>
-
-                  <div className="info-card">
-                    <p><strong>Damage Type:</strong> {selectedReport.type}</p>
-                    <p><strong>Severity:</strong> {selectedReport.severity}</p>
-                    <p><strong>Status:</strong> {selectedReport.status}</p>
-                    <p><strong>Additional Info:</strong></p>
-                    <p className="additional-info">{selectedReport.additionalInfo}</p>
-                  </div>
-
-                  <div className="location-info">
-                    <p><strong>Location:</strong> {selectedReport.street}</p>
-                  </div>
-                </div>
-
-                <div className="modal-right">
-                  <div className="modal-media">
-                    <div className="modal-no-media">No media attached</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <StreetReportModal report={selectedReport} onClose={() => setSelected(null)} />
         )}
       </div>
     </>
+  );
+}
+
+function StreetReportModal({ report: r, onClose }) {
+  const location   = r.location_address ?? r.barangay ?? "—";
+  const damageType = r.ai_damage_type   ?? r.damage_type ?? "—";
+  const severity   = r.ai_severity      ?? r.severity    ?? "—";
+  const mediaUrl   = r.media_attachments?.[0]?.file_url;
+  const mediaType  = r.media_attachments?.[0]?.media_type;
+  const fullUrl    = mediaUrl ? `${import.meta.env.VITE_API_URL || ""}${mediaUrl}` : null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose}>×</button>
+        <h3 className="modal-title">Report Details</h3>
+        <div className="modal-body">
+          <div className="modal-left">
+            <div className="reporter-info">
+              <div className="info-row"><strong>Report:</strong> Report#{String(r.id).padStart(3, "0")}</div>
+              <div className="info-row"><strong>Reporter:</strong> {r.owner?.full_name ?? "Anonymous"}</div>
+              <div className="info-row"><strong>Contact:</strong> {r.owner?.phone ?? "—"}</div>
+            </div>
+            <div className="info-card">
+              <p><strong>Damage Type:</strong> {damageType}</p>
+              <p><strong>Severity:</strong> {severity}</p>
+              <p><strong>Status:</strong> {STATUS_LABEL[r.status] ?? r.status}</p>
+              <p><strong>Additional Info:</strong></p>
+              <p className="additional-info">{r.description ?? "—"}</p>
+            </div>
+            <div className="location-info">
+              <p><strong>Location:</strong> {location}</p>
+            </div>
+          </div>
+          <div className="modal-right">
+            <div className="modal-media">
+              {fullUrl ? (
+                mediaType === "video"
+                  ? <video src={fullUrl} controls style={{ width: "100%", borderRadius: 8 }} />
+                  : <img src={fullUrl} alt="Report" style={{ width: "100%", borderRadius: 8, objectFit: "cover" }} />
+              ) : (
+                <div className="modal-no-media">No media attached</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

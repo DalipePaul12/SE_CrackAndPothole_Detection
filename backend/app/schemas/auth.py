@@ -2,7 +2,7 @@ from pydantic import EmailStr, Field, field_validator
 
 from app.models.enums import OTPPurpose
 from app.schemas.base import AppBaseModel
-from app.schemas.user import UserResponse, validate_password  # FIX: top-level imports
+from app.schemas.user import UserResponse, validate_password
 
 
 class LoginRequest(AppBaseModel):
@@ -37,7 +37,7 @@ class PasswordResetRequest(AppBaseModel):
     code: str = Field(..., min_length=6, max_length=6)
     new_password: str
 
-    # FIX: imports moved to module level — class-body imports are fragile
+    # enforce strong password rules via shared validator
     @field_validator("new_password")
     @classmethod
     def strong_password(cls, v: str) -> str:
