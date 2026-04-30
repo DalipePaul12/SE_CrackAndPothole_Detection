@@ -4,6 +4,11 @@ import AdminHeader  from "../../components/AdminHeader.jsx";
 import { getReports, updateReport, uploadReportMedia, addComment } from "../../api/reports";
 import "./AdminManageReports.css";
 
+function isCoordinateString(str) {
+  if (!str) return false;
+  return /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(str.trim());
+}
+
 const STATUS_FLOW = ["pending","verified","assigned","in_progress","completed","rejected"];
 const STATUS_LABELS = {
   pending:"Pending", verified:"Verified", assigned:"Assigned",
@@ -17,7 +22,7 @@ const WORKERS = [
 ];
 const TEAMS_DEFAULT = [
   { id:1, name:"Team Alpha", leader:"Juan dela Cruz",    members:["Pedro Reyes","Ana Garcia"] },
-  { id:2, name:"Team Beta",  leader:"Maria Santos",     members:["Marco Villanueva"] },
+  { id:2, name:"Team Beta",  leader:"Maria Santos",      members:["Marco Villanueva"] },
   { id:3, name:"Team Gamma", leader:"Marco Villanueva", members:["Liza Mendoza","Pedro Reyes"] },
 ];
 
@@ -126,7 +131,7 @@ function getPriority(r) {
 const damageType = r => r.ai_damage_type ?? r.damage_type ?? "—";
 const severity   = r => r.ai_severity    ?? r.severity     ?? "—";
 const barangay   = r => r.barangay ?? r.location_address?.split(",")[0] ?? "—";
-const street     = r => r.location_address ?? "";
+const street     = r => r.exact_address || r.street_name || r.location_address || "";
 
 const mediaFull  = (r, idx=0) => {
   const att = r.media_attachments?.[idx];
@@ -281,8 +286,53 @@ function AdminManageReports() {
     setLoading(true); setError(null);
     const res = await getReports({ page_size:200 });
     if (!res.success) { setError(res.error); setLoading(false); return; }
-    setReports(res.data?.results ?? []);
+    
+    let reportsData = res.data?.results ?? [];
+    setReports(reportsData);
     setLoading(false); setCountdown(30);
+
+    const geoCache = {};
+    const updatedReports = [...reportsData];
+    let stateNeedsUpdate = false;
+
+    for (let i = 0; i < updatedReports.length; i++) {
+      let r = updatedReports[i];
+      let addressString = r.exact_address || r.street_name || r.location_address || "";
+
+      if (isCoordinateString(addressString)) {
+        const [lat, lon] = addressString.split(',').map(s => s.trim());
+        const cacheKey = `${lat},${lon}`;
+
+        if (!geoCache[cacheKey]) {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+            const data = await response.json();
+            
+            let streetName = data.address?.road || data.address?.neighbourhood || data.address?.suburb || "Unnamed Road";
+            if (data.address?.house_number) {
+              streetName = `${streetName} ${data.address.house_number}`;
+            }
+
+            geoCache[cacheKey] = streetName;
+          } catch (err) {
+            geoCache[cacheKey] = "Unknown Road";
+          }
+        }
+
+        updatedReports[i] = { 
+          ...r, 
+          exact_address: geoCache[cacheKey],
+          street_name: geoCache[cacheKey], 
+          location_address: geoCache[cacheKey] 
+        };
+        stateNeedsUpdate = true;
+      }
+    }
+
+    if (stateNeedsUpdate) {
+      setReports([...updatedReports]);
+    }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -508,11 +558,15 @@ function AdminManageReports() {
                       </td>
 
                       <td>
-                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                          <IcoMapPin size={14} style={{ color:C.green600, flexShrink:0 }}/>
-                          <div className="report-cell">
-                            <span className="report-name" style={{fontSize:"0.8rem", fontWeight:600}}>{barangay(r)}</span>
-                            {street(r) && <span className="report-location">{street(r)}</span>}
+                        <div style={{ display:"flex", alignItems:"flex-start", gap:6 }}>
+                          <IcoMapPin size={14} style={{ color:C.green600, flexShrink:0, marginTop:2 }}/>
+                          <div style={{ display:"flex", flexDirection:"column" }}>
+                            <span style={{fontSize:"0.9rem", fontWeight:700, color:C.text}}>{barangay(r)}</span>
+                            {street(r) && (
+                              <span style={{fontSize:"0.75rem", color:C.textSub, marginTop:2}}>
+                                {isCoordinateString(street(r)) ? "Translating coordinates..." : street(r)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>

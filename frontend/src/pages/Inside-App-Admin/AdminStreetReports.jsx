@@ -4,6 +4,12 @@ import AdminSidebar from "../../components/AdminSidebar.jsx";
 import AdminHeader from "../../components/AdminHeader.jsx";
 import { getReports } from "../../api/reports";
 
+function isCoordinateString(str) {
+  if (!str) return false;
+  // Matches patterns like "14.68649, 120.95642"
+  return /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(str.trim());
+}
+
 function groupByLocation(reports) {
   const map = {};
   reports.forEach((r) => {
@@ -35,9 +41,69 @@ function AdminStreetReports() {
     setLoading(true);
     setError(null);
     const res = await getReports({ page_size: 500 });
-    if (!res.success) { setError(res.error); setLoading(false); return; }
-    setAllReports(res.data?.results ?? []);
+    
+    if (!res.success) { 
+      setError(res.error); 
+      setLoading(false); 
+      return; 
+    }
+
+    let reportsData = res.data?.results ?? [];
+    
+    // 1. Instantly show the reports to the user
+    setAllReports(reportsData);
     setLoading(false);
+
+    // 2. Background Task: Convert any raw coordinates into real street names
+    const geoCache = {};
+    const updatedReports = [...reportsData];
+    let stateNeedsUpdate = false;
+
+    for (let i = 0; i < updatedReports.length; i++) {
+      let r = updatedReports[i];
+      let addressString = r.street_name || r.location_address || "";
+
+      if (isCoordinateString(addressString)) {
+        const [lat, lon] = addressString.split(',').map(s => s.trim());
+        const cacheKey = `${lat},${lon}`;
+
+        if (!geoCache[cacheKey]) {
+          try {
+            // We use OpenStreetMap (Nominatim). 
+            // The 1-second delay is required to not get banned from their free server.
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+            const data = await response.json();
+            
+            // Extract the base street name
+            let streetName = data.address?.road || data.address?.neighbourhood || data.address?.suburb || "Unnamed Road";
+            
+            // Add the house/building number if it exists in the data
+            if (data.address?.house_number) {
+              streetName = `${streetName} ${data.address.house_number}`;
+            }
+
+            geoCache[cacheKey] = streetName;
+          } catch (error) {
+            geoCache[cacheKey] = "Unknown Road";
+          }
+        }
+
+        // Replace the coordinate with the real street name + number
+        updatedReports[i] = { 
+          ...r, 
+          street_name: geoCache[cacheKey], 
+          location_address: geoCache[cacheKey] 
+        };
+        stateNeedsUpdate = true;
+      }
+    }
+
+    // 3. Re-render the table with the human-readable streets
+    if (stateNeedsUpdate) {
+      setAllReports([...updatedReports]);
+    }
+
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -147,7 +213,13 @@ function AdminStreetReports() {
                       <td className="col-expand">
                         <span className={`chevron ${expandedRow === row.key ? "open" : ""}`}>›</span>
                       </td>
-                      <td className="asr-street-name">{row.street}</td>
+                      <td className="asr-street-name">
+                        {isCoordinateString(row.street) ? (
+                           <span style={{color: '#888', fontStyle: 'italic'}}>Translating coordinates...</span>
+                        ) : (
+                           row.street
+                        )}
+                      </td>
                       <td>{row.barangay}</td>
                       <td><span className="asr-total-pill">{row.total}</span></td>
                       <td>
@@ -172,36 +244,41 @@ function AdminStreetReports() {
                             </div>
                           </td>
                         </tr>
-                        {row.reports.map((r) => (
-                          <tr key={r.id} className="asr-child-row clickable-row" onClick={(e) => { e.stopPropagation(); setSelected(r); }}>
-                            <td></td>
-                            <td>
-                              <strong className="asr-report-id">#{String(r.id).padStart(4, "0")}</strong>
-                              <div className="asr-exact-address" title={r.exact_address || r.location_address}>
-                                {r.exact_address || r.location_address || "No exact address provided"}
-                              </div>
-                            </td>
-                            <td>
-                              {r.latitude && r.longitude ? (
-                                <a 
-                                  href={`https://www.google.com/maps/search/?api=1&query=${r.latitude},${r.longitude}`}
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="asr-map-link"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  📍 View on Map
-                                </a>
-                              ) : (
-                                <span className="asr-no-coords">No GPS Data</span>
-                              )}
-                            </td>
-                            <td><span className={`type-badge ${damageType(r).toLowerCase()}`}>{damageType(r)}</span></td>
-                            <td><span className={`admin-severity ${severity(r).toLowerCase().replace(/[\s_]/g, "-")}`}>{severity(r)}</span></td>
-                            <td><span className={`admin-status ${r.status?.toLowerCase().replace(/[\s_]/g, "-")}`}>{STATUS_LABEL[r.status] ?? r.status}</span></td>
-                            <td>{dateStr(r)}</td>
-                          </tr>
-                        ))}
+                        {row.reports.map((r) => {
+                          // Extract the most accurate address string available
+                          const displayAddress = r.exact_address || r.street_name || r.location_address || "No address provided";
+                          
+                          return (
+                            <tr key={r.id} className="asr-child-row clickable-row" onClick={(e) => { e.stopPropagation(); setSelected(r); }}>
+                              <td></td>
+                              <td>
+                                <strong className="asr-report-id">#{String(r.id).padStart(4, "0")}</strong>
+                                <div className="asr-exact-address" title={displayAddress}>
+                                  {displayAddress}
+                                </div>
+                              </td>
+                              <td>
+                                {r.latitude && r.longitude ? (
+                                  <a 
+                                    href={`https://www.google.com/maps/search/?api=1&query=${r.latitude},${r.longitude}`}
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="asr-map-link"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    📍 View on Map
+                                  </a>
+                                ) : (
+                                  <span className="asr-no-coords">No GPS Data</span>
+                                )}
+                              </td>
+                              <td><span className={`type-badge ${damageType(r).toLowerCase()}`}>{damageType(r)}</span></td>
+                              <td><span className={`admin-severity ${severity(r).toLowerCase().replace(/[\s_]/g, "-")}`}>{severity(r)}</span></td>
+                              <td><span className={`admin-status ${r.status?.toLowerCase().replace(/[\s_]/g, "-")}`}>{STATUS_LABEL[r.status] ?? r.status}</span></td>
+                              <td>{dateStr(r)}</td>
+                            </tr>
+                          );
+                        })}
                         <tr className="asr-spacer-row"><td colSpan={7}></td></tr>
                       </>
                     )}
@@ -226,6 +303,9 @@ function StreetReportModal({ report: r, onClose }) {
   const mediaUrl = r.media_attachments?.[0]?.file_url;
   const mediaType = r.media_attachments?.[0]?.media_type;
   const fullUrl = mediaUrl ? `${import.meta.env.VITE_API_URL || ""}${mediaUrl}` : null;
+  
+  // Also updated the modal to use the fallback chain
+  const displayAddress = r.exact_address || r.street_name || r.location_address || "—";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -247,8 +327,7 @@ function StreetReportModal({ report: r, onClose }) {
               <p className="additional-info">{r.description ?? "—"}</p>
             </div>
             <div className="location-info">
-              <p><strong>Exact Address:</strong> {r.exact_address || r.location_address || "—"}</p>
-              <p><strong>Street:</strong> {r.street_name || "—"}</p>
+              <p><strong>Exact Address:</strong> {displayAddress}</p>
               <p><strong>Barangay:</strong> {r.barangay || "—"}</p>
               <p><strong>City/Municipality:</strong> {r.municipality || "Malabon"}</p>
               <p><strong>Coordinates:</strong> {r.latitude ? `${r.latitude}, ${r.longitude}` : "N/A"}</p>

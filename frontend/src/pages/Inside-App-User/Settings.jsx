@@ -84,7 +84,6 @@ function Settings() {
       <div className="settings-container">
         <div className="settings-header">
           <h1>Preferences</h1>
-          <p>Customize your Snap2Fix experience.</p>
         </div>
 
         <div className="settings-card">

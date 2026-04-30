@@ -1,48 +1,23 @@
-/**
- * AllReports.jsx — Admin: All Reports Database
- * ==============================================
- * Fixes applied:
- *  [A1]  image URL now uses import.meta.env.VITE_API_URL (no hardcoded localhost)
- *  [A2]  Pagination added — page controls with total count display
- *  [A3]  Error state rendered with retry button
- *  [A4]  Image field: media_attachments[0]?.file_url (correct backend field)
- *  [A5]  Severity CSS: .replaceAll(" ", "-") instead of .replace (first-only)
- *  [A7]  Keyboard handlers on table rows (Enter/Space to open modal)
- *  [A8]  Image loads with onError fallback
- *  [A10] Sidebar overlay uses React state (no direct DOM mutation)
- *  [M8]  Modal closes on Escape key
- *  [M9]  Decline reason shown when report is DECLINED
- *        upvote_count shown in modal
- */
-
 import React, { useState, useEffect, useCallback } from "react";
+import { AlertTriangle, ChevronLeft, ChevronRight, X, ChevronDown, ImageOff } from "lucide-react";
 import "./AllReports.css";
-
-import Sidebar   from "../../components/Sidebar.jsx";
+import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
-
 import { useReports } from "../../hooks/useReports";
 
-// [A1] Base URL from env — never hardcode localhost
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-/** Normalises a string for CSS class names: lowercase + hyphens. */
 const toClass = (str = "") =>
   str.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 
-/** Formats ISO date string to locale date. */
 const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" }) : "—";
 
-/** Extracts the first media file URL from a report. */
 const getImageUrl = (report) => {
   const url = report?.media_attachments?.[0]?.file_url;
   return url ? `${BASE_URL}${url}` : null;
 };
 
-// ── Pagination controls ────────────────────────────────────────────────────────
 function Pagination({ page, setPage, total, pageSize = 15 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
@@ -54,7 +29,7 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
         disabled={page <= 1}
         aria-label="Previous page"
       >
-        ‹ Prev
+        <ChevronLeft size={16} /> Prev
       </button>
       <span className="page-info">
         Page {page} of {totalPages} &nbsp;·&nbsp; {total} report{total !== 1 ? "s" : ""}
@@ -65,18 +40,16 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
         disabled={page >= totalPages}
         aria-label="Next page"
       >
-        Next ›
+        Next <ChevronRight size={16} />
       </button>
     </div>
   );
 }
 
-// ── Report detail modal ────────────────────────────────────────────────────────
 function ReportModal({ report, onClose }) {
   const imageUrl = getImageUrl(report);
   const [imgError, setImgError] = useState(false);
 
-  // [M8] Close on Escape
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
@@ -100,13 +73,12 @@ function ReportModal({ report, onClose }) {
           onClick={onClose}
           aria-label="Close modal"
         >
-          ×
+          <X size={24} />
         </button>
 
         <h3 className="modal-title">Report Details</h3>
 
         <div className="modal-body">
-          {/* ── Left: info ─────────────────────────────────────────────── */}
           <div className="modal-left">
             <div className="reporter-info">
               <div className="info-row">
@@ -131,11 +103,11 @@ function ReportModal({ report, onClose }) {
                   &nbsp;{report.status ?? "—"}
                 </span>
               </p>
-              {/* [M9] Decline reason */}
               {report.status === "DECLINED" && report.decline_reason && (
-                <p className="decline-reason">
+                <div className="decline-reason">
+                  <AlertTriangle size={16} className="inline-icon" />
                   <strong>Reason:</strong> {report.decline_reason}
-                </p>
+                </div>
               )}
               <p><strong>AI Confidence:</strong>{" "}
                 {report.ai_confidence != null
@@ -157,17 +129,16 @@ function ReportModal({ report, onClose }) {
               <p><strong>Submitted:</strong> {fmtDate(report.created_at)}</p>
             </div>
 
-            {/* AI flag badge */}
             {report.is_flagged_fake && (
               <div className="ai-flag-badge" role="alert">
-                ⚠️ Flagged as possibly AI-generated
+                <AlertTriangle size={16} className="inline-icon" />
+                Flagged as possibly AI-generated
                 {report.fake_confidence != null &&
                   ` (${(report.fake_confidence * 100).toFixed(0)}% confidence)`}
               </div>
             )}
           </div>
 
-          {/* ── Right: media ────────────────────────────────────────────── */}
           <div className="modal-right">
             <div className="modal-media">
               {imageUrl && !imgError ? (
@@ -178,7 +149,10 @@ function ReportModal({ report, onClose }) {
                   loading="lazy"
                 />
               ) : (
-                <div className="no-image">No image available</div>
+                <div className="no-image">
+                  <ImageOff size={32} />
+                  <span>No image available</span>
+                </div>
               )}
             </div>
           </div>
@@ -188,28 +162,23 @@ function ReportModal({ report, onClose }) {
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
 function AllReports() {
-  // [A10] React state for sidebar overlay
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
   const [filters, setFilters] = useState({
     type: "All",
     severity: "All",
     status: "All",
   });
   const [activeFilters, setActiveFilters] = useState({});
-
   const [selectedReport, setSelectedReport] = useState(null);
 
   const { reports, loading, error, page, setPage, total, refetch } =
     useReports({ mine: false, ...activeFilters });
 
-  // Apply filter button
   const applyFilters = useCallback(() => {
     setPage(1);
     setActiveFilters({
-      status:   filters.status   !== "All" ? filters.status   : null,
+      status: filters.status !== "All" ? filters.status : null,
       barangay: undefined,
     });
   }, [filters, setPage]);
@@ -220,25 +189,23 @@ function AllReports() {
     setPage(1);
   }, [setPage]);
 
-  // Client-side type + severity filter (these aren't query params on backend)
   const filteredReports = reports.filter((r) => {
-    const type     = r.ai_damage_type ?? "";
-    const severity = r.ai_severity    ?? "";
+    const type = r.ai_damage_type ?? "";
+    const severity = r.ai_severity ?? "";
     return (
-      (filters.type     === "All" || type.toLowerCase()     === filters.type.toLowerCase()) &&
+      (filters.type === "All" || type.toLowerCase() === filters.type.toLowerCase()) &&
       (filters.severity === "All" || severity.toLowerCase() === filters.severity.toLowerCase())
     );
   });
 
   const handleRowClick = useCallback((report) => setSelectedReport(report), []);
-  const closeModal     = useCallback(() => setSelectedReport(null), []);
+  const closeModal = useCallback(() => setSelectedReport(null), []);
 
   return (
     <>
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <AppHeader onMenuClick={() => setSidebarOpen(true)} />
 
-      {/* [A10] React-controlled overlay */}
       {sidebarOpen && (
         <div
           className="sidebar-overlay active"
@@ -248,8 +215,6 @@ function AllReports() {
       )}
 
       <div className="allreports-container">
-
-        {/* ── Filters ─────────────────────────────────────────────────── */}
         <div className="allreports-filters">
           <div className="allreports-header">
             <h2>All Reports Database</h2>
@@ -257,7 +222,6 @@ function AllReports() {
           </div>
 
           <div className="filters-row-allreports">
-            {/* Damage Type */}
             <div className="filter-group-allreports">
               <label>Damage Type</label>
               <div className="filter-buttons-allreports">
@@ -274,7 +238,6 @@ function AllReports() {
               </div>
             </div>
 
-            {/* Severity */}
             <div className="filter-group-allreports">
               <label htmlFor="ar-severity">Severity</label>
               <div className="custom-select-allreports">
@@ -289,10 +252,10 @@ function AllReports() {
                   <option value="low">Low</option>
                   <option value="critical">Critical</option>
                 </select>
+                <ChevronDown size={16} className="select-icon" />
               </div>
             </div>
 
-            {/* Status */}
             <div className="filter-group-allreports">
               <label htmlFor="ar-status">Status</label>
               <div className="custom-select-allreports">
@@ -310,6 +273,7 @@ function AllReports() {
                   <option value="RESOLVED">Resolved</option>
                   <option value="DECLINED">Declined</option>
                 </select>
+                <ChevronDown size={16} className="select-icon" />
               </div>
             </div>
 
@@ -324,15 +288,16 @@ function AllReports() {
           </div>
         </div>
 
-        {/* ── Error banner [A3] ────────────────────────────────────────── */}
         {error && (
           <div className="reports-error-banner" role="alert">
-            <span>⚠ {error}</span>
+            <span className="flex-center">
+              <AlertTriangle size={18} className="inline-icon" />
+              {error}
+            </span>
             <button onClick={refetch} className="retry-btn-small">Retry</button>
           </div>
         )}
 
-        {/* ── Table ───────────────────────────────────────────────────── */}
         <div className="allreports-table-container">
           {loading ? (
             <div className="table-skeleton">
@@ -379,7 +344,6 @@ function AllReports() {
                       </td>
                       <td>{report.ai_damage_type ?? "—"}</td>
                       <td>
-                        {/* [A5] .replaceAll not .replace */}
                         <span
                           className={`severity ${toClass(report.ai_severity ?? "")}`}
                         >
@@ -406,13 +370,11 @@ function AllReports() {
           )}
         </div>
 
-        {/* ── Pagination [A2] ──────────────────────────────────────────── */}
         {!loading && (
           <Pagination page={page} setPage={setPage} total={total} pageSize={15} />
         )}
       </div>
 
-      {/* ── Modal ───────────────────────────────────────────────────────── */}
       {selectedReport && (
         <ReportModal report={selectedReport} onClose={closeModal} />
       )}

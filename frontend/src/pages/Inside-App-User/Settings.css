@@ -1,6 +1,6 @@
 .settings-container {
     padding: 2rem;
-    background-color: rgba(250, 238, 228, 0.722);
+    background-color: var(--bg);
     min-height: 92vh;
     width: calc(100% - 255px); /* Adjust for sidebar width */
     margin-top: 0; /* Height of the header */
@@ -447,4 +447,77 @@
     font-size: 0.85rem;
     padding: 8px 12px;
   }
+}
+
+/* ═══════════════════════════════════
+   DARK MODE OVERRIDES (Settings Page)
+═══════════════════════════════════ */
+
+body.dark .settings-container {
+  background-color: var(--bg);
+}
+
+body.dark .settings-card {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 2px 5px var(--shadow);
+  border-bottom: 2px solid var(--primary);
+}
+
+body.dark .settings-header h1 {
+  color: var(--text);
+}
+
+body.dark .settings-header p {
+  color: var(--subtext);
+}
+
+body.dark .settings-card h2,
+body.dark .settings-card label {
+  color: var(--text);
+}
+
+body.dark .settings-card p {
+  color: var(--subtext);
+}
+
+body.dark .setting-item {
+  background: var(--bg-secondary);
+  color: var(--text);
+  box-shadow: 0 2px 2px var(--shadow);
+}
+
+body.dark .setting-item p {
+  color: var(--subtext);
+}
+
+/* Inputs */
+body.dark .password-section input {
+  background-color: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--input-border);
+}
+
+/* Switch */
+body.dark .slider {
+  background-color: var(--border);
+}
+
+body.dark .switch input:checked + .slider {
+  background-color: var(--primary);
+}
+
+/* App info text */
+body.dark .app-description,
+body.dark .app-meta {
+  color: var(--subtext);
+}
+
+/* Buttons (optional tweak) */
+body.dark .save-btn {
+  background: linear-gradient(180deg, var(--primary), #025302);
+}
+
+body.dark .logout-btn-page {
+  background: linear-gradient(180deg, #9b2d2d, #690303);
 }
