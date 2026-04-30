@@ -4,7 +4,7 @@ import {
   getDamageTypeStats,
   getReportStatusStats,
   getMonthlyReports,
-  getBarangayRanking,
+  getHotspots,          // FIX: was getBarangayRanking → export removed from analytics.js
   getSeverityStats,
 } from "../api/analytics";
 
@@ -69,7 +69,7 @@ export function useAnalytics() {
           getDamageTypeStats(),
           getReportStatusStats(),
           getMonthlyReports(),
-          getBarangayRanking(),
+          getHotspots(),        // FIX: was getBarangayRanking()
           getSeverityStats(),
         ]);
 

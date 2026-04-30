@@ -3,6 +3,7 @@ import "./Dashboard.css";
 
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
+import { SeverityInline } from "../../components/SeverityBadge.jsx";
 
 import { GiBookCover } from "react-icons/gi";
 import { IoMdCheckmarkCircleOutline } from "react-icons/io";
@@ -124,6 +125,7 @@ function CitizenDashboard() {
                 reports.slice(0, 4).map((r) => (
                   <li key={r.id} className="activity-card">
                     <FaRegCircleDot className="activity-icon" />
+                    <SeverityInline severity={r.ai_severity} damageType={r.ai_damage_type} confidence={r.ai_confidence} />
                     Report #{r.id} — {r.barangay ?? "Unknown"} —{" "}
                     <span style={{ textTransform: "capitalize" }}>{r.status}</span>
                   </li>

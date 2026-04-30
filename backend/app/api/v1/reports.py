@@ -1,40 +1,3 @@
-"""
-Reports router — unified production version
-============================================
-Merges the two conflicting reports.py versions into one authoritative file.
-
-Key fixes vs the two originals:
-  1. POST /reports/{id}/media  → no longer re-runs the full ML pipeline.
-     The frontend already ran /ml/analyze on file select. This endpoint
-     only stores the file + the pre-computed results passed in the form.
-     This eliminates the double-inference cost and the 202/polling confusion.
-
-  2. GET /reports/mine  → renamed from /my-reports to /mine to match
-     the useReports.js hook that calls /reports/mine.
-
-  3. Admin actions (validate, decline, comments, nearby-cctv) preserved
-     from the second version.
-
-  4. _fetch_report_with_relations() helper restored for eager-loading
-     media_attachments and ai_detections in list/get endpoints.
-
-Routes:
-  POST   /reports                      — create report
-  GET    /reports                      — list all (admin/contractor)
-  GET    /reports/mine                 — own reports (citizen)
-  GET    /reports/{id}                 — single report
-  PATCH  /reports/{id}                 — update status (admin/contractor)
-  DELETE /reports/{id}                 — delete (admin)
-  POST   /reports/{id}/media           — attach file + store pre-computed AI results
-  POST   /reports/{id}/upvote          — toggle upvote
-  PUT    /reports/{id}/validate        — admin quick-verify
-  PUT    /reports/{id}/decline         — admin decline with reason
-  GET    /reports/{id}/comments        — list comments
-  POST   /reports/{id}/comments        — add comment
-  DELETE /reports/comments/{id}        — delete comment (owner or admin)
-  GET    /reports/{id}/nearby-cctv     — CCTV cameras within 100 m
-"""
-
 import uuid
 from pathlib import Path
 
@@ -73,16 +36,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
-# ── Inline schemas ─────────────────────────────────────────────────────────────
-
 class CommentCreate(BaseModel):
     content: str
 
 
-# ── Shared helper ──────────────────────────────────────────────────────────────
-
 async def _fetch_report_or_404(db: AsyncSession, report_id: int) -> Report:
-    """Eagerly load relations so response serialization doesn't trigger lazy loads."""
     result = await db.execute(
         select(Report)
         .options(
@@ -97,8 +55,6 @@ async def _fetch_report_or_404(db: AsyncSession, report_id: int) -> Report:
     return report
 
 
-# ── Core CRUD ──────────────────────────────────────────────────────────────────
-
 @router.post("", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
 async def create_report(
@@ -107,12 +63,6 @@ async def create_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Step 1 of the submit flow.
-    Creates the report record with AI classification results embedded
-    (the frontend sends damage_type, severity, is_ai_generated from /ml/analyze).
-    Media is attached separately via POST /reports/{id}/media.
-    """
     report = await report_service.create_report(db, data, current_user.id)
     report = await _fetch_report_or_404(db, report.id)
     upvote_count = await report_service.get_upvote_count(db, report.id)
@@ -155,7 +105,6 @@ async def get_my_reports(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Returns only reports submitted by the authenticated user."""
     reports, total = await report_service.list_reports(
         db, owner_id=current_user.id, status=status, page=page, page_size=page_size
     )
@@ -188,7 +137,6 @@ async def update_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin_or_contractor),
 ):
-    """Admin/contractor only — update status, notes, assigned contractor, etc."""
     report = await _fetch_report_or_404(db, report_id)
     updated = await report_service.update_report_status(db, report, data, current_user)
 
@@ -219,8 +167,6 @@ async def delete_report(
     await db.commit()
 
 
-# ── Media upload ───────────────────────────────────────────────────────────────
-
 @router.post("/{report_id}/media", status_code=status.HTTP_200_OK)
 @limiter.limit("20/minute")
 async def upload_media(
@@ -230,23 +176,6 @@ async def upload_media(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Step 2 of the submit flow — attaches the media file to an existing report.
-
-    FIX: This endpoint NO LONGER re-runs ML analysis.
-    The frontend already ran /ml/analyze on file select and stored the results
-    in state. Those results were embedded into the report record in POST /reports.
-    Re-running inference here would:
-      (a) double the latency
-      (b) create a race condition where results could differ
-      (c) cause 500 errors when the file is a duplicate frame from a video
-
-    The endpoint simply:
-      1. Validates file type + size
-      2. Saves the file to disk
-      3. Creates a MediaAttachment record linked to the report
-      4. Returns the media ID + the AI results already on the report
-    """
     report = await _fetch_report_or_404(db, report_id)
 
     if report.owner_id != current_user.id and current_user.role.value != "admin":
@@ -279,15 +208,12 @@ async def upload_media(
             detail=f"File exceeds the maximum allowed size of {mb} MB.",
         )
 
-    # ── Save to disk ──────────────────────────────────────────────────────────
     safe_name = f"{uuid.uuid4().hex}_{Path(file.filename or 'upload').name}"
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / safe_name
     file_path.write_bytes(contents)
 
-    # ── Persist attachment record ─────────────────────────────────────────────
-    # Import here to avoid circular imports if MediaAttachment references Report
     from app.models.media_attachment import MediaAttachment  # noqa: PLC0415
 
     attachment = MediaAttachment(
@@ -297,9 +223,8 @@ async def upload_media(
         file_size_bytes=len(contents),
         media_type=media_type,
         is_processed=True,
-        # Mirror the AI flags already stored on the report record
-        is_ai_generated=report.is_ai_generated,
-        ai_generated_confidence=None,  # confidence stored on report; not repeated here
+        is_ai_generated=report.is_flagged_fake,  # FIX: was report.is_ai_generated
+        ai_generated_confidence=None,
     )
     db.add(attachment)
     await db.commit()
@@ -315,11 +240,9 @@ async def upload_media(
         "data": {
             "media_id": attachment.id,
             "file_url": attachment.file_url,
-            # Return the AI results from the report so the frontend
-            # can confirm what was persisted matches what was displayed.
             "ai_validation": {
-                "is_ai_generated": report.is_ai_generated,
-                "status": "flagged" if report.is_ai_generated else "approved",
+                "is_ai_generated": report.is_flagged_fake,  # FIX: was report.is_ai_generated
+                "status": "flagged" if report.is_flagged_fake else "approved",
             },
             "classification": {
                 "damage_type": report.damage_type.value if report.damage_type else None,
@@ -328,8 +251,6 @@ async def upload_media(
         },
     }
 
-
-# ── Upvote ─────────────────────────────────────────────────────────────────────
 
 @router.post("/{report_id}/upvote")
 async def toggle_upvote(
@@ -342,8 +263,6 @@ async def toggle_upvote(
     return {"upvoted": added, "upvote_count": count}
 
 
-# ── Admin actions ──────────────────────────────────────────────────────────────
-
 @router.put("/{report_id}/validate", status_code=status.HTTP_200_OK)
 async def validate_report(
     report_id: int,
@@ -351,7 +270,6 @@ async def validate_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin: quick-mark a flagged or pending report as VERIFIED."""
     report = await _fetch_report_or_404(db, report_id)
     report.status = ReportStatus.VERIFIED
     await db.commit()
@@ -376,7 +294,6 @@ async def decline_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin: decline a report and record the reason."""
     report = await _fetch_report_or_404(db, report_id)
     report.status = ReportStatus.DECLINED
     report.decline_reason = reason
@@ -394,9 +311,7 @@ async def decline_report(
     return {"message": "Report declined."}
 
 
-# ── Comments ───────────────────────────────────────────────────────────────────
 # NOTE: /comments/{id} MUST come before /{report_id} to prevent routing conflict
-
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(
     comment_id: int,
@@ -419,7 +334,7 @@ async def get_comments(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await _fetch_report_or_404(db, report_id)  # ensures 404 if report missing
+    await _fetch_report_or_404(db, report_id)
     result = await db.execute(
         select(Comment)
         .options(selectinload(Comment.user))
@@ -448,8 +363,6 @@ async def add_comment(
     return comment
 
 
-# ── Nearby CCTV ────────────────────────────────────────────────────────────────
-
 @router.get("/{report_id}/nearby-cctv")
 async def get_nearby_cctv(
     report_id: int,
@@ -457,7 +370,6 @@ async def get_nearby_cctv(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return active CCTV cameras within `radius_meters` of the report location."""
     report = await _fetch_report_or_404(db, report_id)
 
     cam_result = await db.execute(select(CCTV).where(CCTV.is_active == True))  # noqa: E712

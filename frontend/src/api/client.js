@@ -1,26 +1,3 @@
-/**
- * client.js
- * =========
- *
- * ROOT CAUSE FIX — BASE_URL is now "" (relative) in development.
- *
- * BEFORE (broken):
- *   BASE_URL = "http://127.0.0.1:8000"
- *   Browser sent: localhost:5173 → 127.0.0.1:8000  (cross-origin)
- *   Chrome treats "localhost" ≠ "127.0.0.1" as different origins.
- *   Result: CORS preflight blocked → ERR_FAILED on every API call.
- *
- * AFTER (fixed):
- *   BASE_URL = "" (relative path)
- *   Browser sends: localhost:5173/api/v1/reports  (same origin — no CORS)
- *   Vite proxy in vite.config.js forwards to 127.0.0.1:8000 server-side.
- *   Server↔server has no CORS. Browser never sees a cross-origin request.
- *
- * FOR PRODUCTION:
- *   Set VITE_API_URL=https://api.yourdomain.com in your hosting env vars.
- *   FastAPI CORS must allow that domain via BACKEND_CORS_ORIGINS in .env.
- */
-
 const BASE_URL   = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 const API_PREFIX = "/api/v1";
 

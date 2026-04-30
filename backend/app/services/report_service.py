@@ -11,6 +11,10 @@ from app.models.enums import ReportStatus
 from app.models.user import User
 from app.schemas.report import ReportCreate, ReportUpdate
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 async def get_upvote_count(db: AsyncSession, report_id: int) -> int:
     result = await db.execute(
@@ -76,24 +80,22 @@ async def list_reports(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[Report], int]:
-    # ── Count query ────────────────────────────────────────────────────────────
     count_q = select(func.count(Report.id))
     if owner_id is not None:
         count_q = count_q.where(Report.owner_id == owner_id)
-    if status is not None:                          # FIX: was `if status:` — falsy for some enum values
+    if status is not None:
         count_q = count_q.where(Report.status == status)
     if barangay:
         count_q = count_q.where(Report.barangay.ilike(f"%{barangay}%"))
     total = (await db.execute(count_q)).scalar_one()
 
-    # ── Data query ─────────────────────────────────────────────────────────────
     query = select(Report).options(
         selectinload(Report.owner),
         selectinload(Report.media_attachments),
     )
     if owner_id is not None:
         query = query.where(Report.owner_id == owner_id)
-    if status is not None:                          # FIX: same as above
+    if status is not None:
         query = query.where(Report.status == status)
     if barangay:
         query = query.where(Report.barangay.ilike(f"%{barangay}%"))
@@ -118,21 +120,27 @@ async def update_report_status(
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(report, field, value)
 
-    if data.status and data.status != old_status:
-        log = AuditLog(
-            user_id=changed_by.id,
-            action="STATUS_CHANGED",
-            target_resource="reports",
-            target_id=report.id,
-            details={
-                "old_status": old_status.value,
-                "new_status": data.status.value,
-            },
-        )
-        db.add(log)
-
     await db.commit()
     await db.refresh(report)
+
+    if data.status and data.status != old_status:
+        try:
+            log = AuditLog(
+                user_id=changed_by.id,
+                action="STATUS_CHANGED",
+                target_resource="reports",
+                target_id=report.id,
+                details={
+                    "old_status": old_status.value,
+                    "new_status": data.status.value,
+                },
+            )
+            db.add(log)
+            await db.commit()
+        except Exception as e:
+            logger.warning("AuditLog insert failed (non-fatal): %s", e)
+            await db.rollback()
+
     return report
 
 
