@@ -1,20 +1,25 @@
+/* ════════════════════════════════════════
+   APP HEADER — Dark Mode Ready
+   Uses global CSS vars from index.css
+════════════════════════════════════════ */
+
 .app-header {
   height: 80px;
-  background: #ffffff;
-  border-bottom: 1px solid #e0e0e0;
+  background: var(--card);
+  border-bottom: 2px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 40px;
   position: fixed;
   top: 0;
-  left: 260px; /* same as sidebar width */
+  left: 260px;
   right: 0;
   z-index: 100;
   border-bottom-left-radius: 30px;
   border-bottom-right-radius: 30px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border-bottom: #19391993 2px solid;
+  box-shadow: var(--shadow-md);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .app-header-left {
@@ -25,8 +30,9 @@
 
 .app-header-left h2 {
   font-size: 1.6rem;
-  color: #193919;
+  color: var(--text);
   font-weight: 600;
+  transition: color 0.3s ease;
 }
 
 .app-header-right {
@@ -37,15 +43,17 @@
 
 .user-name {
   font-weight: 500;
-  color: #333;
+  color: var(--subtext);
+  transition: color 0.3s ease;
 }
 
 .profile-icon {
   font-size: 35px;
-  color: #058605;
+  color: var(--primary);
   cursor: pointer;
-  border: #000000 1px solid;
+  border: 1px solid var(--border-strong);
   border-radius: 50%;
+  transition: color 0.3s ease, border-color 0.3s ease;
 }
 
 .profile-image {
@@ -54,68 +62,50 @@
   border-radius: 50%;
   object-fit: cover;
   cursor: pointer;
-  border: #045a22 2px solid;
+  border: 2px solid var(--primary);
+  transition: border-color 0.3s ease;
 }
-
 
 .logout-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #058605;
-  color: white;
-  border: 1px solid #000;
-  box-shadow: 0 3px 1px rgba(0, 0, 0, 0.9);
+  background: var(--primary);
+  color: #ffffff;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 3px 1px rgba(0, 0, 0, 0.25);
   padding: 8px 14px;
   border-radius: 20px;
   cursor: pointer;
   font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .logout-btn:hover {
-  background: #184a18;
+  background: var(--primary-hover);
+  box-shadow: 0 4px 12px var(--shadow-md);
 }
 
-.burger-btn{
+.burger-btn {
   font-size: 1.4rem;
   border: none;
   background: none;
   cursor: pointer;
   margin-right: 15px;
   display: none;
+  color: var(--text);
+  transition: color 0.3s ease;
 }
 
-
-/*responsiveness*/
-/* show burger only on tablet/mobile */
-@media (max-width: 1024px){
-
-  .burger-btn{
-    display: block;
-  }
-
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .burger-btn  { display: block; }
+  .app-header  { left: 0; }
 }
 
-@media (max-width: 1024px){
-
-  .app-header{
-    left: 0;
-  }
-
-}
-
-@media (max-width: 768px){
-
-  .app-header{
-    padding: 0 20px;
-  }
-
-  .app-header-right{
-    gap: 15px;
-  }
-
-  .user-name{
-    display:none; /* optional if space is tight */
-  }
-
+@media (max-width: 768px) {
+  .app-header       { padding: 0 20px; }
+  .app-header-right { gap: 15px; }
+  .user-name        { display: none; }
 }

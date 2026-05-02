@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, X, ChevronDown, ImageOff } from "lucide-react";
+import {
+  AlertTriangle, ChevronLeft, ChevronRight, X,
+  ChevronDown, ImageOff, MapPin, Calendar,
+  Activity, Shield, TrendingUp, Database,
+} from "lucide-react";
 import "./AllReports.css";
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
@@ -18,6 +22,7 @@ const getImageUrl = (report) => {
   return url ? `${BASE_URL}${url}` : null;
 };
 
+/* ── Pagination ──────────────────────────────────────────────── */
 function Pagination({ page, setPage, total, pageSize = 15 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
@@ -29,7 +34,7 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
         disabled={page <= 1}
         aria-label="Previous page"
       >
-        <ChevronLeft size={16} /> Prev
+        <ChevronLeft size={15} /> Prev
       </button>
       <span className="page-info">
         Page {page} of {totalPages} &nbsp;·&nbsp; {total} report{total !== 1 ? "s" : ""}
@@ -40,12 +45,13 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
         disabled={page >= totalPages}
         aria-label="Next page"
       >
-        Next <ChevronRight size={16} />
+        Next <ChevronRight size={15} />
       </button>
     </div>
   );
 }
 
+/* ── Report Modal ────────────────────────────────────────────── */
 function ReportModal({ report, onClose }) {
   const imageUrl = getImageUrl(report);
   const [imgError, setImgError] = useState(false);
@@ -64,81 +70,108 @@ function ReportModal({ report, onClose }) {
       aria-modal="true"
       aria-label="Report details"
     >
-      <div
-        className="modal-content"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <button
           className="modal-close-btn"
           onClick={onClose}
           aria-label="Close modal"
         >
-          <X size={24} />
+          <X size={18} />
         </button>
 
-        <h3 className="modal-title">Report Details</h3>
+        <h3 className="modal-title">Report #{report.id}</h3>
 
         <div className="modal-body">
+          {/* Left column */}
           <div className="modal-left">
             <div className="reporter-info">
               <div className="info-row">
-                <strong>Report:</strong>&nbsp;#{report.id}
+                <strong>Report ID</strong>
+                <span>#{report.id}</span>
               </div>
               {report.upvote_count > 0 && (
                 <div className="info-row">
-                  <strong>Upvotes:</strong>&nbsp;{report.upvote_count}
+                  <strong>Upvotes</strong>
+                  <span>{report.upvote_count}</span>
                 </div>
               )}
             </div>
 
             <div className="info-card">
-              <p><strong>Damage Type:</strong> {report.ai_damage_type ?? "—"}</p>
-              <p><strong>Severity:</strong>
+              <div className="info-row">
+                <strong>Damage Type</strong>
+                <span>{report.ai_damage_type ?? "—"}</span>
+              </div>
+              <div className="info-row">
+                <strong>Severity</strong>
                 <span className={`severity ${toClass(report.ai_severity ?? "")}`}>
-                  &nbsp;{report.ai_severity ?? "—"}
+                  {report.ai_severity ?? "—"}
                 </span>
-              </p>
-              <p><strong>Status:</strong>
+              </div>
+              <div className="info-row">
+                <strong>Status</strong>
                 <span className={`status ${toClass(report.status ?? "")}`}>
-                  &nbsp;{report.status ?? "—"}
+                  {report.status ?? "—"}
                 </span>
-              </p>
+              </div>
               {report.status === "DECLINED" && report.decline_reason && (
                 <div className="decline-reason">
-                  <AlertTriangle size={16} className="inline-icon" />
-                  <strong>Reason:</strong> {report.decline_reason}
+                  <AlertTriangle size={15} />
+                  <span><strong>Reason:</strong> {report.decline_reason}</span>
                 </div>
               )}
-              <p><strong>AI Confidence:</strong>{" "}
-                {report.ai_confidence != null
-                  ? `${(report.ai_confidence * 100).toFixed(1)}%`
-                  : "—"}
-              </p>
-              <p><strong>Description:</strong> {report.description ?? "—"}</p>
+              <div className="info-row">
+                <strong>AI Confidence</strong>
+                <span>
+                  {report.ai_confidence != null
+                    ? `${(report.ai_confidence * 100).toFixed(1)}%`
+                    : "—"}
+                </span>
+              </div>
+              {report.description && (
+                <div className="info-row" style={{ alignItems: "flex-start", flexDirection: "column", gap: "6px" }}>
+                  <strong>Description</strong>
+                  <span style={{ color: "var(--text)" }}>{report.description}</span>
+                </div>
+              )}
             </div>
 
             <div className="location-info">
-              <p><strong>Barangay:</strong> {report.barangay ?? "—"}</p>
-              <p><strong>Street:</strong> {report.street_name ?? "—"}</p>
-              <p>
-                <strong>Coordinates:</strong>{" "}
-                {report.latitude != null && report.longitude != null
-                  ? `${report.latitude.toFixed(6)}, ${report.longitude.toFixed(6)}`
-                  : "—"}
-              </p>
-              <p><strong>Submitted:</strong> {fmtDate(report.created_at)}</p>
+              <div className="info-row">
+                <strong>Barangay</strong>
+                <span>{report.barangay ?? "—"}</span>
+              </div>
+              <div className="info-row">
+                <strong>Street</strong>
+                <span>{report.street_name ?? "—"}</span>
+              </div>
+              <div className="info-row">
+                <strong>Coordinates</strong>
+                <span>
+                  {report.latitude != null && report.longitude != null
+                    ? `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}`
+                    : "—"}
+                </span>
+              </div>
+              <div className="info-row">
+                <strong>Submitted</strong>
+                <span>{fmtDate(report.created_at)}</span>
+              </div>
             </div>
 
             {report.is_flagged_fake && (
               <div className="ai-flag-badge" role="alert">
-                <AlertTriangle size={16} className="inline-icon" />
-                Flagged as possibly AI-generated
-                {report.fake_confidence != null &&
-                  ` (${(report.fake_confidence * 100).toFixed(0)}% confidence)`}
+                <AlertTriangle size={15} />
+                <span>
+                  Flagged as possibly AI-generated
+                  {report.fake_confidence != null &&
+                    ` (${(report.fake_confidence * 100).toFixed(0)}% confidence)`}
+                </span>
               </div>
             )}
           </div>
 
+          {/* Right column */}
           <div className="modal-right">
             <div className="modal-media">
               {imageUrl && !imgError ? (
@@ -162,6 +195,7 @@ function ReportModal({ report, onClose }) {
   );
 }
 
+/* ── Main Component ──────────────────────────────────────────── */
 function AllReports() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filters, setFilters] = useState({
@@ -179,7 +213,6 @@ function AllReports() {
     setPage(1);
     setActiveFilters({
       status: filters.status !== "All" ? filters.status : null,
-      barangay: undefined,
     });
   }, [filters, setPage]);
 
@@ -190,7 +223,7 @@ function AllReports() {
   }, [setPage]);
 
   const filteredReports = reports.filter((r) => {
-    const type = r.ai_damage_type ?? "";
+    const type     = r.ai_damage_type ?? "";
     const severity = r.ai_severity ?? "";
     return (
       (filters.type === "All" || type.toLowerCase() === filters.type.toLowerCase()) &&
@@ -199,7 +232,7 @@ function AllReports() {
   });
 
   const handleRowClick = useCallback((report) => setSelectedReport(report), []);
-  const closeModal = useCallback(() => setSelectedReport(null), []);
+  const closeModal     = useCallback(() => setSelectedReport(null), []);
 
   return (
     <>
@@ -215,13 +248,17 @@ function AllReports() {
       )}
 
       <div className="allreports-container">
+
+        {/* ── Filter Panel ── */}
         <div className="allreports-filters">
           <div className="allreports-header">
+            <Database size={18} style={{ color: "var(--primary)", flexShrink: 0 }} />
             <h2>All Reports Database</h2>
             <span className="report-count">{total} total</span>
           </div>
 
           <div className="filters-row-allreports">
+            {/* Damage Type */}
             <div className="filter-group-allreports">
               <label>Damage Type</label>
               <div className="filter-buttons-allreports">
@@ -238,6 +275,7 @@ function AllReports() {
               </div>
             </div>
 
+            {/* Severity */}
             <div className="filter-group-allreports">
               <label htmlFor="ar-severity">Severity</label>
               <div className="custom-select-allreports">
@@ -252,10 +290,11 @@ function AllReports() {
                   <option value="low">Low</option>
                   <option value="critical">Critical</option>
                 </select>
-                <ChevronDown size={16} className="select-icon" />
+                <ChevronDown size={15} className="select-icon" />
               </div>
             </div>
 
+            {/* Status */}
             <div className="filter-group-allreports">
               <label htmlFor="ar-status">Status</label>
               <div className="custom-select-allreports">
@@ -273,10 +312,11 @@ function AllReports() {
                   <option value="RESOLVED">Resolved</option>
                   <option value="DECLINED">Declined</option>
                 </select>
-                <ChevronDown size={16} className="select-icon" />
+                <ChevronDown size={15} className="select-icon" />
               </div>
             </div>
 
+            {/* Actions */}
             <div className="filter-actions">
               <button className="apply-filter-btn" onClick={applyFilters}>
                 Apply
@@ -288,16 +328,18 @@ function AllReports() {
           </div>
         </div>
 
+        {/* ── Error Banner ── */}
         {error && (
           <div className="reports-error-banner" role="alert">
             <span className="flex-center">
-              <AlertTriangle size={18} className="inline-icon" />
+              <AlertTriangle size={17} className="inline-icon" />
               {error}
             </span>
             <button onClick={refetch} className="retry-btn-small">Retry</button>
           </div>
         )}
 
+        {/* ── Table ── */}
         <div className="allreports-table-container">
           {loading ? (
             <div className="table-skeleton">
@@ -309,11 +351,27 @@ function AllReports() {
             <table className="allreports-table" aria-label="All reports">
               <thead>
                 <tr>
-                  <th scope="col">Report</th>
+                  <th scope="col">
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Activity size={13} /> Report
+                    </span>
+                  </th>
                   <th scope="col">Type</th>
-                  <th scope="col">Severity</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Date</th>
+                  <th scope="col">
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <TrendingUp size={13} /> Severity
+                    </span>
+                  </th>
+                  <th scope="col">
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Shield size={13} /> Status
+                    </span>
+                  </th>
+                  <th scope="col">
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Calendar size={13} /> Date
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -335,18 +393,14 @@ function AllReports() {
                     >
                       <td>
                         <strong>Report #{report.id}</strong>
-                        <div
-                          className="report-location-allreports"
-                          title={report.barangay}
-                        >
+                        <div className="report-location-allreports" title={report.barangay}>
+                          <MapPin size={11} />
                           {report.barangay ?? report.street_name ?? "—"}
                         </div>
                       </td>
                       <td>{report.ai_damage_type ?? "—"}</td>
                       <td>
-                        <span
-                          className={`severity ${toClass(report.ai_severity ?? "")}`}
-                        >
+                        <span className={`severity ${toClass(report.ai_severity ?? "")}`}>
                           {report.ai_severity ?? "—"}
                         </span>
                       </td>

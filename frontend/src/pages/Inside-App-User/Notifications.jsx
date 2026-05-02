@@ -1,84 +1,76 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import "./Notifications.css";
-
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
-import { useNavigate } from "react-router-dom";
-import { useNotifications } from "../../hooks/useNotifications"; // ← your hook
-
 import {
-  FaBell,
-  FaTrash,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaClock,
-  FaCheckDouble,
-  FaCog,
-  FaExclamationCircle,
-  FaEnvelopeOpen,
-  FaComment,
-  FaChevronDown,
-  FaChevronUp,
-  FaEye,
-  FaCheck,
-  FaInbox,
-  FaFilter,
-  FaTimes,
-  FaSlidersH,
-} from "react-icons/fa";
+  Bell, CheckCheck, Settings, X, Clock,
+  ShieldCheck, ShieldX, Wrench, CircleCheck,
+  MessageSquare, AlertTriangle, Info, ChevronDown,
+  Eye, Trash2,
+} from "lucide-react";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────
+   CONSTANTS & HELPERS
+────────────────────────────────────────────────────────── */
+const TYPE_CONFIG = {
+  verified:   { icon: ShieldCheck, label: "Verified",    cls: "type-verified" },
+  declined:   { icon: ShieldX,     label: "Declined",    cls: "type-declined" },
+  inprogress: { icon: Wrench,      label: "In Progress", cls: "type-inprogress" },
+  resolved:   { icon: CircleCheck, label: "Resolved",    cls: "type-resolved" },
+  comment:    { icon: MessageSquare, label: "Comment",   cls: "type-comment" },
+  admin:      { icon: ShieldCheck, label: "Admin",       cls: "type-admin" },
+  system:     { icon: Info,        label: "System",      cls: "type-system" },
+};
 
-function timeAgo(dateStr) {
-  if (!dateStr) return "";
-  const date = new Date(dateStr);
-  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (diff < 60) return "Just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const FILTER_TABS = [
+  { key: "all",       label: "All" },
+  { key: "unread",    label: "Unread" },
+  { key: "verified",  label: "Verified" },
+  { key: "declined",  label: "Declined" },
+  { key: "resolved",  label: "Resolved" },
+  { key: "comment",   label: "Comments" },
+];
+
+const normalizeType = (t = "") => t.toLowerCase().replace(/[^a-z]/g, "");
+
+function fmtTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)   return "Just now";
+  if (mins < 60)  return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7)   return `${days}d ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function getTypeConfig(type, title = "") {
-  const t  = (type  || "").toLowerCase();
-  const tl = (title || "").toLowerCase();
-  if (t === "verified"    || tl.includes("verified"))   return { label: "Verified",    className: "type-verified",    icon: <FaCheckCircle /> };
-  if (t === "declined"    || tl.includes("declined"))   return { label: "Declined",    className: "type-declined",    icon: <FaTimesCircle /> };
-  if (t === "in_progress" || t === "in-progress" || tl.includes("progress")) return { label: "In Progress", className: "type-inprogress", icon: <FaClock /> };
-  if (t === "resolved"    || tl.includes("resolved"))   return { label: "Resolved",    className: "type-resolved",    icon: <FaCheckDouble /> };
-  if (t === "system"      || tl.includes("system"))     return { label: "System",      className: "type-system",      icon: <FaCog /> };
-  if (t === "comment"     || tl.includes("comment"))    return { label: "Comment",     className: "type-comment",     icon: <FaComment /> };
-  if (t === "admin"       || tl.includes("admin") || tl.includes("message")) return { label: "Admin", className: "type-admin", icon: <FaEnvelopeOpen /> };
-  return { label: "Update", className: "type-system", icon: <FaExclamationCircle /> };
-}
-
-const TABS = ["All", "Unread", "Verified", "Declined", "Resolved", "Comments"];
-
-function matchesTab(notif, tab) {
-  if (tab === "All")    return true;
-  if (tab === "Unread") return !notif.is_read;
-  const { label } = getTypeConfig(notif.type, notif.title);
-  if (tab === "Comments") return label === "Comment" || label === "Admin";
-  return label === tab;
-}
-
-// ─── Toast ────────────────────────────────────────────────────────────────────
-
-function Toast({ toasts, onDismiss }) {
+/* ──────────────────────────────────────────────────────────
+   TOAST
+────────────────────────────────────────────────────────── */
+function Toast({ toasts, onRemove }) {
   return (
-    <div className="toast-container">
+    <div className="notif-toast-container" aria-live="polite" aria-atomic="false">
       {toasts.map((t) => {
-        const cfg = getTypeConfig(t.type, t.title);
+        const cfg = TYPE_CONFIG[normalizeType(t.type)] ?? TYPE_CONFIG.system;
+        const Icon = cfg.icon;
         return (
-          <div key={t.toastId} className={`toast-item ${cfg.className}`}>
-            <span className="toast-icon">{cfg.icon}</span>
-            <div className="toast-body">
-              <strong>{t.title}</strong>
-              <p>{t.message}</p>
+          <div key={t.id} className={`notif-toast ${cfg.cls}`} role="alert">
+            <div className="notif-toast-icon-wrap">
+              <Icon size={18} aria-hidden="true" />
             </div>
-            <button className="toast-close" onClick={() => onDismiss(t.toastId)}>
-              <FaTimes />
+            <div className="notif-toast-body">
+              <p className="notif-toast-title">{t.title}</p>
+              <p className="notif-toast-message">{t.message}</p>
+            </div>
+            <button
+              className="notif-toast-close"
+              onClick={() => onRemove(t.id)}
+              aria-label="Dismiss notification"
+            >
+              <X size={15} />
             </button>
           </div>
         );
@@ -87,128 +79,195 @@ function Toast({ toasts, onDismiss }) {
   );
 }
 
-// ─── Settings Panel ───────────────────────────────────────────────────────────
+function useToasts() {
+  const [toasts, setToasts] = useState([]);
 
-function SettingsPanel({ prefs, onChange, onClose }) {
+  const addToast = useCallback((title, message, type = "system") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, title, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  return { toasts, addToast, removeToast };
+}
+
+/* ──────────────────────────────────────────────────────────
+   TOGGLE SWITCH
+────────────────────────────────────────────────────────── */
+function ToggleSwitch({ on, onToggle, label }) {
   return (
-    <div className="settings-panel">
-      <div className="settings-header">
-        <h3><FaSlidersH /> Notification Preferences</h3>
-        <button className="settings-close" onClick={onClose}><FaTimes /></button>
+    <button
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      className={`toggle-switch ${on ? "on" : ""}`}
+      onClick={onToggle}
+    >
+      <span className="toggle-knob" />
+    </button>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────
+   SETTINGS PANEL
+────────────────────────────────────────────────────────── */
+function SettingsPanel({ settings, onToggle, onClose }) {
+  const items = [
+    { key: "push",   label: "Push Notifications",  desc: "Get alerts when your reports are updated" },
+    { key: "email",  label: "Email Notifications",  desc: "Receive summaries via email" },
+    { key: "sound",  label: "Notification Sounds",  desc: "Play a sound for new notifications" },
+    { key: "grouped",label: "Group by Type",        desc: "Group similar notifications together" },
+  ];
+
+  return (
+    <div className="notif-settings-panel">
+      <div className="settings-panel-header">
+        <div className="settings-panel-title">
+          <Settings size={16} aria-hidden="true" />
+          Notification Preferences
+        </div>
+        <button className="settings-panel-close" onClick={onClose} aria-label="Close settings">
+          <X size={16} />
+        </button>
       </div>
-      <div className="settings-body">
-        {[
-          { key: "report_updates", label: "Report Updates",       desc: "Verified, declined, and resolved reports" },
-          { key: "comments",       label: "Comments & Messages",  desc: "Admin messages and comments on your posts" },
-          { key: "system",         label: "System Notifications", desc: "App updates and announcements" },
-        ].map(({ key, label, desc }) => (
-          <label key={key} className="settings-toggle">
+      <div className="settings-toggle-list">
+        {items.map(({ key, label, desc }) => (
+          <div key={key} className="settings-toggle-row">
             <div className="settings-toggle-info">
               <span className="settings-toggle-label">{label}</span>
               <span className="settings-toggle-desc">{desc}</span>
             </div>
-            <div
-              className={`toggle-switch ${prefs[key] ? "on" : ""}`}
-              onClick={() => onChange(key, !prefs[key])}
-              role="switch"
-              aria-checked={prefs[key]}
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && onChange(key, !prefs[key])}
-            >
-              <span className="toggle-knob" />
-            </div>
-          </label>
+            <ToggleSwitch
+              on={settings[key]}
+              onToggle={() => onToggle(key)}
+              label={label}
+            />
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-// ─── Notification Card ────────────────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────
+   NOTIFICATION CARD
+────────────────────────────────────────────────────────── */
+function NotifCard({ notif, onMarkRead, onDelete, onView }) {
+  const type = normalizeType(notif.type);
+  const cfg  = TYPE_CONFIG[type] ?? TYPE_CONFIG.system;
+  const Icon = cfg.icon;
 
-function NotificationCard({ notif, onRead, onDelete, onNavigate, compact }) {
-  const cfg = getTypeConfig(notif.type, notif.title);
+  const handleKey = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onView(notif);
+    }
+  };
+
   return (
     <div
-      className={`notification-card ${cfg.className} ${!notif.is_read ? "unread" : "read"} ${compact ? "compact" : ""}`}
-      onClick={() => {
-        if (!notif.is_read) onRead(notif.id);
-        if (notif.report_id) onNavigate(notif.report_id);
-      }}
+      className={`notif-card ${cfg.cls} ${notif.is_read ? "is-read" : "is-unread"}`}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && (!notif.is_read ? onRead(notif.id) : null)}
+      aria-label={`Notification: ${notif.title}`}
+      onClick={() => { onView(notif); if (!notif.is_read) onMarkRead(notif.id); }}
+      onKeyDown={handleKey}
     >
-      <span className="notif-type-bar" aria-hidden="true" />
-      <span className="notification-icon">{cfg.icon}</span>
+      <div className="notif-accent-bar" aria-hidden="true" />
 
-      <div className="notification-content">
-        <div className="notif-top-row">
-          <h3 className="notif-title">{notif.title ?? "Notification"}</h3>
-          <span className="notif-type-badge">{cfg.label}</span>
-        </div>
-        <p className="notif-message">{notif.message}</p>
-        <span className="notification-time">{timeAgo(notif.created_at)}</span>
+      <div className="notif-card-icon-wrap" aria-hidden="true">
+        <Icon size={18} />
       </div>
 
-      <div className="notif-actions" onClick={(e) => e.stopPropagation()}>
-        {notif.report_id && (
-          <button className="notif-action-btn view" title="View Report" onClick={() => onNavigate(notif.report_id)}>
-            <FaEye /><span>View</span>
-          </button>
-        )}
+      <div className="notif-card-body">
+        <div className="notif-card-top">
+          <span className="notif-card-title">{notif.title}</span>
+          <span className="notif-type-chip">{cfg.label}</span>
+        </div>
+        <p className="notif-card-message">{notif.message}</p>
+        <div className="notif-card-time">
+          <Clock size={11} aria-hidden="true" />
+          <span>{fmtTime(notif.created_at)}</span>
+        </div>
+      </div>
+
+      <div className="notif-card-actions" role="group" aria-label="Notification actions">
+        <button
+          className="notif-action-btn btn-view"
+          onClick={(e) => { e.stopPropagation(); onView(notif); }}
+          aria-label="View details"
+        >
+          <Eye size={12} />
+        </button>
         {!notif.is_read && (
-          <button className="notif-action-btn mark" title="Mark as read" onClick={() => onRead(notif.id)}>
-            <FaCheck /><span>Read</span>
+          <button
+            className="notif-action-btn btn-mark"
+            onClick={(e) => { e.stopPropagation(); onMarkRead(notif.id); }}
+            aria-label="Mark as read"
+          >
+            <CheckCheck size={12} />
           </button>
         )}
-        <button className="notif-action-btn delete" title="Delete" onClick={() => onDelete(notif.id)}>
-          <FaTrash />
+        <button
+          className="notif-action-btn btn-delete"
+          onClick={(e) => { e.stopPropagation(); onDelete(notif.id); }}
+          aria-label="Delete notification"
+        >
+          <Trash2 size={12} />
         </button>
       </div>
     </div>
   );
 }
 
-// ─── Grouped Card ─────────────────────────────────────────────────────────────
-
-function GroupedCard({ group, onRead, onDelete, onNavigate }) {
-  const [expanded, setExpanded] = useState(false);
-  const cfg = getTypeConfig(group[0].type, group[0].title);
-  const unreadInGroup = group.filter((n) => !n.is_read).length;
-
-  if (group.length === 1) {
-    return <NotificationCard notif={group[0]} onRead={onRead} onDelete={onDelete} onNavigate={onNavigate} />;
-  }
+/* ──────────────────────────────────────────────────────────
+   GROUP CARD
+────────────────────────────────────────────────────────── */
+function GroupCard({ groupKey, items, onMarkRead, onDelete, onView }) {
+  const [open, setOpen] = useState(false);
+  const type = normalizeType(groupKey);
+  const cfg  = TYPE_CONFIG[type] ?? TYPE_CONFIG.system;
+  const Icon = cfg.icon;
+  const unreadCount = items.filter((n) => !n.is_read).length;
 
   return (
-    <div className={`group-card ${cfg.className}`}>
+    <div className={`notif-group-card ${cfg.cls}`}>
       <div
-        className="group-header"
-        onClick={() => setExpanded((p) => !p)}
+        className="notif-group-header"
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === "Enter" && setExpanded((p) => !p)}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setOpen((o) => !o); }}
+        aria-expanded={open}
       >
-        <span className="group-type-icon">{cfg.icon}</span>
-        <div className="group-info">
-          <strong>{group.length} {cfg.label} notifications</strong>
-          {unreadInGroup > 0 && <span className="group-unread-badge">{unreadInGroup} unread</span>}
+        <div className="notif-card-icon-wrap" aria-hidden="true">
+          <Icon size={18} />
         </div>
-        <button className="group-expand-btn">
-          {expanded ? <FaChevronUp /> : <FaChevronDown />}
+        <div className="notif-group-info">
+          <span className="notif-group-label">{cfg.label} — {items.length} notification{items.length !== 1 ? "s" : ""}</span>
+          {unreadCount > 0 && (
+            <span className="notif-group-unread">{unreadCount} unread</span>
+          )}
+        </div>
+        <button className={`notif-group-expand ${open ? "open" : ""}`} aria-hidden="true" tabIndex={-1}>
+          <ChevronDown size={16} />
         </button>
       </div>
-      {expanded && (
-        <div className="group-children">
-          {group.map((notif) => (
-            <NotificationCard
-              key={notif.id}
-              notif={notif}
-              onRead={onRead}
+      {open && (
+        <div className="notif-group-children">
+          {items.map((n) => (
+            <NotifCard
+              key={n.id}
+              notif={n}
+              onMarkRead={onMarkRead}
               onDelete={onDelete}
-              onNavigate={onNavigate}
-              compact
+              onView={onView}
             />
           ))}
         </div>
@@ -217,92 +276,157 @@ function GroupedCard({ group, onRead, onDelete, onNavigate }) {
   );
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
-function EmptyState({ tab }) {
+/* ──────────────────────────────────────────────────────────
+   EMPTY STATE
+────────────────────────────────────────────────────────── */
+function EmptyState({ activeFilter }) {
   return (
-    <div className="empty-state">
-      <div className="empty-icon-wrap"><FaInbox className="empty-icon" /></div>
-      <h3>You&apos;re all caught up!</h3>
+    <div className="notif-empty-state">
+      <div className="notif-empty-icon">
+        <Bell size={32} />
+      </div>
+      <h3>
+        {activeFilter === "all"
+          ? "No Notifications Yet"
+          : `No ${activeFilter} notifications`}
+      </h3>
       <p>
-        {tab === "Unread" ? "No unread notifications."
-          : tab === "All" ? "No notifications yet."
-          : `No ${tab.toLowerCase()} notifications.`}
+        {activeFilter === "all"
+          ? "When your reports get updates, they'll appear here."
+          : "Try switching to a different filter."}
       </p>
     </div>
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-const POLL_INTERVAL = 30_000; // 30 seconds — adjust as needed
-
+/* ──────────────────────────────────────────────────────────
+   MAIN COMPONENT
+────────────────────────────────────────────────────────── */
 function Notifications() {
-  const {
-    notifications,
-    unreadCount,
-    loading,
-    error,
-    markAsRead,
-    markAllAsRead,
-    remove,
-    refetch,
-  } = useNotifications(); // ← directly using your hook, no context needed
+  const [sidebarOpen, setSidebarOpen]     = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState(null);
+  const [activeFilter, setActiveFilter]   = useState("all");
+  const [showSettings, setShowSettings]   = useState(false);
+  const [settings, setSettings]           = useState({
+    push: true, email: false, sound: false, grouped: false,
+  });
 
-  const navigate = useNavigate();
-  const [sidebarOpen,   setSidebarOpen]   = useState(false);
-  const [activeTab,     setActiveTab]     = useState("All");
-  const [toasts,        setToasts]        = useState([]);
-  const [showSettings,  setShowSettings]  = useState(false);
-  const [prefs, setPrefs] = useState({ report_updates: true, comments: true, system: true });
+  const { toasts, addToast, removeToast } = useToasts();
 
-  // ── Polling: re-fetch from backend every 30s ───────────────────────────────
-  useEffect(() => {
-    const id = setInterval(refetch, POLL_INTERVAL);
-    return () => clearInterval(id);
-  }, [refetch]);
+  /* Fetch notifications */
+  const fetchNotifications = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || ""}/api/v1/notifications`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error("Failed to load notifications.");
+      const data = await res.json();
+      setNotifications(Array.isArray(data) ? data : data?.results ?? []);
+    } catch (err) {
+      setError(err.message || "Could not load notifications.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // ── Toast: only fire when unread count genuinely increases after first load ─
-  const prevCountRef  = useRef(-1);   // -1 = not yet seeded
-  const initialLoaded = useRef(false);
+  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
-  useEffect(() => {
-    // Wait until the first successful load (loading done, data present)
-    if (loading) return;
+  /* Computed values */
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-    if (!initialLoaded.current) {
-      // Seed baseline on first load — no toast
-      prevCountRef.current  = unreadCount;
-      initialLoaded.current = true;
-      return;
+  const filtered = notifications.filter((n) => {
+    if (activeFilter === "all")    return true;
+    if (activeFilter === "unread") return !n.is_read;
+    return normalizeType(n.type) === activeFilter;
+  });
+
+  const tabBadges = FILTER_TABS.reduce((acc, tab) => {
+    if (tab.key === "unread") acc[tab.key] = unreadCount;
+    else if (tab.key !== "all") {
+      acc[tab.key] = notifications.filter(
+        (n) => !n.is_read && normalizeType(n.type) === tab.key
+      ).length;
+    }
+    return acc;
+  }, {});
+
+  /* Actions */
+  const markRead = useCallback((id) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+    );
+  }, []);
+
+  const markAllRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    addToast("All Caught Up", "All notifications marked as read.", "system");
+  }, [addToast]);
+
+  const deleteNotif = useCallback((id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const viewNotif = useCallback((notif) => {
+    markRead(notif.id);
+    addToast(notif.title, notif.message, notif.type);
+  }, [markRead, addToast]);
+
+  const toggleSetting = useCallback((key) => {
+    setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  /* Grouped render */
+  const renderList = () => {
+    if (loading) {
+      return Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="skeleton-row" style={{ height: 72, borderRadius: "var(--radius-xl)" }} />
+      ));
+    }
+    if (error) {
+      return (
+        <div className="notif-status-msg is-error" role="alert">
+          <AlertTriangle size={16} style={{ display: "inline", marginRight: 6 }} />
+          {error}
+        </div>
+      );
+    }
+    if (filtered.length === 0) return <EmptyState activeFilter={activeFilter} />;
+
+    if (settings.grouped && activeFilter === "all") {
+      const groups = filtered.reduce((acc, n) => {
+        const key = normalizeType(n.type);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(n);
+        return acc;
+      }, {});
+      return Object.entries(groups).map(([key, items]) => (
+        <GroupCard
+          key={key}
+          groupKey={key}
+          items={items}
+          onMarkRead={markRead}
+          onDelete={deleteNotif}
+          onView={viewNotif}
+        />
+      ));
     }
 
-    if (unreadCount > prevCountRef.current) {
-      const newest = notifications.find((n) => !n.is_read);
-      if (newest) {
-        const toastId = Date.now();
-        setToasts((prev) => [{ ...newest, toastId }, ...prev.slice(0, 2)]);
-        setTimeout(() => setToasts((prev) => prev.filter((t) => t.toastId !== toastId)), 5000);
-      }
-    }
-
-    prevCountRef.current = unreadCount;
-  }, [loading, unreadCount, notifications]);
-
-  const dismissToast     = useCallback((id) => setToasts((p) => p.filter((t) => t.toastId !== id)), []);
-  const handleNavigate   = useCallback((reportId) => navigate(`/report/${reportId}`), [navigate]);
-  const handlePrefChange = useCallback((key, val) => setPrefs((p) => ({ ...p, [key]: val })), []);
-
-  // ── Filter + Group ─────────────────────────────────────────────────────────
-  const filtered = notifications.filter((n) => matchesTab(n, activeTab));
-
-  const grouped = [];
-  const seen    = new Map();
-  for (const n of filtered) {
-    const { label } = getTypeConfig(n.type, n.title);
-    if (!seen.has(label)) { seen.set(label, []); grouped.push(seen.get(label)); }
-    seen.get(label).push(n);
-  }
+    return filtered.map((n) => (
+      <NotifCard
+        key={n.id}
+        notif={n}
+        onMarkRead={markRead}
+        onDelete={deleteNotif}
+        onView={viewNotif}
+      />
+    ));
+  };
 
   return (
     <>
@@ -310,84 +434,97 @@ function Notifications() {
       <AppHeader onMenuClick={() => setSidebarOpen(true)} />
 
       {sidebarOpen && (
-        <div className="sidebar-overlay active" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
+        <div
+          className="sidebar-overlay active"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
       )}
 
-      <Toast toasts={toasts} onDismiss={dismissToast} />
+      <Toast toasts={toasts} onRemove={removeToast} />
 
-      <div className="notifications-container">
-        <div className="notifications-panel">
+      <main className="notifications-page">
+        <div className="notifications-inner">
 
-          {/* ── Header ── */}
-          <div className="notifications-header">
-            <div className="notifications-header-left">
-              <FaBell className="fabell-icon" />
-              <h1>Notifications</h1>
-              {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
-            </div>
-            <div className="notifications-header-right">
+          {/* ── Page Header ── */}
+          <div className="notif-page-header">
+            <div className="notif-page-title-group">
+              <div className="notif-page-icon-wrap" aria-hidden="true">
+                <Bell size={22} />
+              </div>
+              <div>
+                <h1 className="notif-page-title">Notifications</h1>
+                <p className="notif-page-subtitle">Stay updated on your reports</p>
+              </div>
               {unreadCount > 0 && (
-                <button className="mark-all-btn" onClick={markAllAsRead}>
-                  <FaCheckDouble /> <span>Mark all read</span>
+                <span className="notif-count-pill" aria-label={`${unreadCount} unread`}>
+                  <Bell size={11} aria-hidden="true" />
+                  {unreadCount} unread
+                </span>
+              )}
+            </div>
+
+            <div className="notif-header-actions">
+              {unreadCount > 0 && (
+                <button className="notif-mark-all-btn" onClick={markAllRead}>
+                  <CheckCheck size={15} aria-hidden="true" />
+                  <span>Mark all read</span>
                 </button>
               )}
               <button
-                className={`settings-btn ${showSettings ? "active" : ""}`}
-                onClick={() => setShowSettings((p) => !p)}
-                title="Notification settings"
+                className={`notif-settings-btn ${showSettings ? "active" : ""}`}
+                onClick={() => setShowSettings((s) => !s)}
+                aria-label="Notification settings"
+                aria-expanded={showSettings}
               >
-                <FaSlidersH />
+                <Settings size={18} />
               </button>
             </div>
           </div>
 
-          {/* ── Settings ── */}
+          {/* ── Settings Panel ── */}
           {showSettings && (
-            <SettingsPanel prefs={prefs} onChange={handlePrefChange} onClose={() => setShowSettings(false)} />
+            <SettingsPanel
+              settings={settings}
+              onToggle={toggleSetting}
+              onClose={() => setShowSettings(false)}
+            />
           )}
 
           {/* ── Filter Tabs ── */}
-          <div className="filter-tabs" role="tablist">
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                role="tab"
-                aria-selected={activeTab === tab}
-                className={`filter-tab ${activeTab === tab ? "active" : ""}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab === "Comments" && <FaComment    className="tab-icon" />}
-                {tab === "Verified" && <FaCheckCircle className="tab-icon" />}
-                {tab === "Declined" && <FaTimesCircle className="tab-icon" />}
-                {tab === "Resolved" && <FaCheckDouble  className="tab-icon" />}
-                {tab === "Unread"   && <FaFilter        className="tab-icon" />}
-                <span>{tab}</span>
-                {tab === "Unread" && unreadCount > 0 && (
-                  <span className="tab-badge">{unreadCount}</span>
-                )}
-              </button>
-            ))}
+          <div className="notif-filter-bar" role="tablist" aria-label="Notification filters">
+            {FILTER_TABS.map(({ key, label }) => {
+              const badge = tabBadges[key];
+              return (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={activeFilter === key}
+                  className={`notif-filter-tab ${activeFilter === key ? "active" : ""}`}
+                  onClick={() => setActiveFilter(key)}
+                >
+                  {label}
+                  {badge > 0 && (
+                    <span className="notif-tab-badge" aria-label={`${badge} unread`}>
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
-          {loading && <p className="notif-status">Loading notifications…</p>}
-          {error   && <p className="notif-status notif-error">{error}</p>}
-
-          {/* ── List ── */}
-          <div className="notifications-list">
-            {!loading && !error && filtered.length === 0 && <EmptyState tab={activeTab} />}
-            {grouped.map((group, i) => (
-              <GroupedCard
-                key={i}
-                group={group}
-                onRead={markAsRead}
-                onDelete={remove}
-                onNavigate={handleNavigate}
-              />
-            ))}
+          {/* ── Notifications List ── */}
+          <div
+            className="notif-list"
+            role="region"
+            aria-label="Notifications"
+            aria-live="polite"
+          >
+            {renderList()}
           </div>
-
         </div>
-      </div>
+      </main>
     </>
   );
 }

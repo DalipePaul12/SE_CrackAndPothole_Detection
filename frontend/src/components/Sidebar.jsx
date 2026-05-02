@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import CreateReport from "../pages/Inside-App-User/CreateReport";
 import { useNotifications } from "../hooks/useNotifications";
-import { useTheme } from "../pages/Contexts/ThemeContext"; 
+import { useTheme } from "../pages/Contexts/ThemeContext";
 
 import { Moon, Sun } from "lucide-react";
 import { FaHome, FaMapMarkedAlt, FaUser } from "react-icons/fa";
@@ -99,17 +99,22 @@ function Sidebar({ isOpen, onClose }) {
           aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
           title={isDark ? "Switch to light mode" : "Switch to dark mode"}
         >
-          {/* Pill track + sliding thumb */}
-          <span className="theme-track">
-            <span className="theme-thumb">
-              {isDark
-                ? <Sun  size={11} strokeWidth={2.5} className="icon-sun"  />
-                : <Moon size={11} strokeWidth={2.5} className="icon-moon" />
-              }
-            </span>
+          {/* Sun / Moon icon on the left */}
+          <span className={`theme-icon-wrap ${isDark ? "is-dark" : "is-light"}`}>
+            {isDark
+              ? <Sun  size={15} strokeWidth={2} className="theme-sun-icon"  />
+              : <Moon size={15} strokeWidth={2} className="theme-moon-icon" />
+            }
           </span>
+
+          {/* Label */}
           <span className="theme-label">
             {isDark ? "Light Mode" : "Dark Mode"}
+          </span>
+
+          {/* Pill toggle on the right */}
+          <span className={`theme-track ${isDark ? "track-dark" : "track-light"}`}>
+            <span className={`theme-thumb ${isDark ? "thumb-right" : "thumb-left"}`} />
           </span>
         </button>
       </div>
