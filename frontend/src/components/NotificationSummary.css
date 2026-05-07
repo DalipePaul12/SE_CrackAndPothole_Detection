@@ -1,0 +1,79 @@
+/* ── Notification Panel ───────────────────────────────────────────────────── */
+.notif-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.notif-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 0.83rem;
+  background: #f0fdf4;
+  transition: background 0.18s, transform 0.18s;
+  cursor: default;
+}
+
+.notif-item:hover {
+  transform: translateX(3px);
+}
+
+body.dark .notif-item {
+  background: var(--card-hover, rgba(255,255,255,0.05));
+}
+
+/* Dot */
+.notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.notif-resolved .notif-dot  { background: #2ba81d; }
+.notif-verified .notif-dot  { background: #3b82f6; }
+.notif-progress .notif-dot  { background: #f59e0b; }
+.notif-declined .notif-dot  { background: #6b7280; }
+.notif-new .notif-dot       { background: #ef4444; }
+
+/* Specific item tints */
+.notif-resolved { background: #f0fdf4; }
+.notif-verified { background: #eff6ff; }
+.notif-progress { background: #fffbeb; }
+.notif-declined { background: #f9fafb; }
+.notif-new      { background: #fef2f2; }
+
+body.dark .notif-resolved,
+body.dark .notif-verified,
+body.dark .notif-progress,
+body.dark .notif-declined,
+body.dark .notif-new {
+  background: var(--card-hover, rgba(255,255,255,0.05));
+}
+
+.notif-text {
+  flex: 1;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.notif-text strong {
+  color: #155318;
+}
+
+body.dark .notif-text strong {
+  color: #86efac;
+}
+
+.notif-time {
+  font-size: 0.72rem;
+  color: var(--subtext);
+  white-space: nowrap;
+  flex-shrink: 0;
+}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";          // ← top-level import, not require()
 import {
   AlertTriangle, ChevronLeft, ChevronRight, X,
   ChevronDown, ImageOff, MapPin, Calendar,
@@ -37,7 +38,7 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
         <ChevronLeft size={15} /> Prev
       </button>
       <span className="page-info">
-        Page {page} of {totalPages} &nbsp;·&nbsp; {total} report{total !== 1 ? "s" : ""}
+        Page {page} of {totalPages}&nbsp;·&nbsp;{total} report{total !== 1 ? "s" : ""}
       </span>
       <button
         className="page-btn"
@@ -51,18 +52,44 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
   );
 }
 
-/* ── Report Modal ────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   Report Modal
+   ─────────────────────────────────────────────────────────────
+   Rendered via createPortal(…, document.body).
+
+   WHY THIS FIXES DARK MODE:
+   Previously the modal was a child of .allreports-container.
+   CSS variables resolve based on where an element sits in the
+   DOM — if a parent had a hardcoded background, variables like
+   --card would still evaluate correctly BUT a stale paint from
+   a parent's background-color could bleed through.
+
+   More critically: some bundler/scoping setups cause :root vars
+   to win over body.dark vars when the modal is deeply nested.
+
+   By portaling into <body> directly, .modal-overlay becomes an
+   immediate child of <body class="dark">, so body.dark { --card }
+   is always the closest matching rule — #132a1c in dark mode,
+   #ffffff in light mode. No extra CSS overrides required.
+══════════════════════════════════════════════════════════════ */
 function ReportModal({ report, onClose }) {
   const imageUrl = getImageUrl(report);
   const [imgError, setImgError] = useState(false);
 
+  // Lock scroll while open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  // Escape key
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       className="modal-overlay"
       onClick={onClose}
@@ -71,19 +98,20 @@ function ReportModal({ report, onClose }) {
       aria-label="Report details"
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <button
-          className="modal-close-btn"
-          onClick={onClose}
-          aria-label="Close modal"
-        >
+
+        {/* Close */}
+        <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
           <X size={18} />
         </button>
 
         <h3 className="modal-title">Report #{report.id}</h3>
 
         <div className="modal-body">
-          {/* Left column */}
+
+          {/* ── Left column ── */}
           <div className="modal-left">
+
+            {/* ID card */}
             <div className="reporter-info">
               <div className="info-row">
                 <strong>Report ID</strong>
@@ -97,6 +125,7 @@ function ReportModal({ report, onClose }) {
               )}
             </div>
 
+            {/* Damage info */}
             <div className="info-card">
               <div className="info-row">
                 <strong>Damage Type</strong>
@@ -114,12 +143,14 @@ function ReportModal({ report, onClose }) {
                   {report.status ?? "—"}
                 </span>
               </div>
+
               {report.status === "DECLINED" && report.decline_reason && (
                 <div className="decline-reason">
                   <AlertTriangle size={15} />
                   <span><strong>Reason:</strong> {report.decline_reason}</span>
                 </div>
               )}
+
               <div className="info-row">
                 <strong>AI Confidence</strong>
                 <span>
@@ -128,14 +159,19 @@ function ReportModal({ report, onClose }) {
                     : "—"}
                 </span>
               </div>
+
               {report.description && (
-                <div className="info-row" style={{ alignItems: "flex-start", flexDirection: "column", gap: "6px" }}>
+                <div
+                  className="info-row"
+                  style={{ alignItems: "flex-start", flexDirection: "column", gap: "6px" }}
+                >
                   <strong>Description</strong>
                   <span style={{ color: "var(--text)" }}>{report.description}</span>
                 </div>
               )}
             </div>
 
+            {/* Location */}
             <div className="location-info">
               <div className="info-row">
                 <strong>Barangay</strong>
@@ -159,6 +195,7 @@ function ReportModal({ report, onClose }) {
               </div>
             </div>
 
+            {/* AI fake flag */}
             {report.is_flagged_fake && (
               <div className="ai-flag-badge" role="alert">
                 <AlertTriangle size={15} />
@@ -171,7 +208,7 @@ function ReportModal({ report, onClose }) {
             )}
           </div>
 
-          {/* Right column */}
+          {/* ── Right column (image) ── */}
           <div className="modal-right">
             <div className="modal-media">
               {imageUrl && !imgError ? (
@@ -191,18 +228,15 @@ function ReportModal({ report, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body   // ← portal: body.dark is always the ancestor
   );
 }
 
 /* ── Main Component ──────────────────────────────────────────── */
 function AllReports() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [filters, setFilters] = useState({
-    type: "All",
-    severity: "All",
-    status: "All",
-  });
+  const [filters, setFilters] = useState({ type: "All", severity: "All", status: "All" });
   const [activeFilters, setActiveFilters] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
 
@@ -211,9 +245,7 @@ function AllReports() {
 
   const applyFilters = useCallback(() => {
     setPage(1);
-    setActiveFilters({
-      status: filters.status !== "All" ? filters.status : null,
-    });
+    setActiveFilters({ status: filters.status !== "All" ? filters.status : null });
   }, [filters, setPage]);
 
   const resetFilters = useCallback(() => {
@@ -258,6 +290,7 @@ function AllReports() {
           </div>
 
           <div className="filters-row-allreports">
+
             {/* Damage Type */}
             <div className="filter-group-allreports">
               <label>Damage Type</label>
@@ -282,9 +315,7 @@ function AllReports() {
                 <select
                   id="ar-severity"
                   value={filters.severity}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, severity: e.target.value }))
-                  }
+                  onChange={(e) => setFilters((f) => ({ ...f, severity: e.target.value }))}
                 >
                   <option value="All">All Severity</option>
                   <option value="low">Low</option>
@@ -301,9 +332,7 @@ function AllReports() {
                 <select
                   id="ar-status"
                   value={filters.status}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, status: e.target.value }))
-                  }
+                  onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
                 >
                   <option value="All">All Status</option>
                   <option value="PENDING">Pending</option>
@@ -316,14 +345,10 @@ function AllReports() {
               </div>
             </div>
 
-            {/* Actions */}
+            {/* Apply / Reset */}
             <div className="filter-actions">
-              <button className="apply-filter-btn" onClick={applyFilters}>
-                Apply
-              </button>
-              <button className="reset-filter-btn" onClick={resetFilters}>
-                Reset
-              </button>
+              <button className="apply-filter-btn" onClick={applyFilters}>Apply</button>
+              <button className="reset-filter-btn" onClick={resetFilters}>Reset</button>
             </div>
           </div>
         </div>
@@ -352,23 +377,23 @@ function AllReports() {
               <thead>
                 <tr>
                   <th scope="col">
-                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Activity size={13} /> Report
                     </span>
                   </th>
                   <th scope="col">Type</th>
                   <th scope="col">
-                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <TrendingUp size={13} /> Severity
                     </span>
                   </th>
                   <th scope="col">
-                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Shield size={13} /> Status
                     </span>
                   </th>
                   <th scope="col">
-                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Calendar size={13} /> Date
                     </span>
                   </th>
@@ -429,6 +454,7 @@ function AllReports() {
         )}
       </div>
 
+      {/* Portal into document.body — dark mode variables resolve correctly */}
       {selectedReport && (
         <ReportModal report={selectedReport} onClose={closeModal} />
       )}

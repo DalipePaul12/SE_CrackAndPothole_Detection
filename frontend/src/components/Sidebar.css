@@ -51,7 +51,8 @@ body.dark {
   top: 0;
   display: flex;
   flex-direction: column;
-  padding: 14px 16px 12px;
+  /* More generous horizontal padding, comfortable vertical rhythm */
+  padding: 20px 18px 16px;
   font-family: "Poppins", sans-serif;
   border-right: 1px solid var(--sb-border);
   border-bottom-right-radius: 15px;
@@ -59,6 +60,7 @@ body.dark {
   z-index: 1000;
   transition: background 0.3s, color 0.3s, left 0.3s;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* ── Logo ── */
@@ -66,14 +68,17 @@ body.dark {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 8px;
+  /* More space below logo before nav starts */
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--sb-border);
 }
 
 .sidebar-logo img {
   margin-top: 4px;
-  width: 50px;
-  height: 50px;
+  width: 54px;
+  height: 54px;
   border-radius: 30%;
   border: 1px solid var(--sb-logo-border);
 }
@@ -85,19 +90,38 @@ body.dark {
   margin: 0;
 }
 
+/* ── Nav (scrollable middle) ── */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Hide scrollbar visually but keep it functional */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* Gap between the two sections */
+  gap: 0;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Report button ── */
 .sidebar-reports-button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 14px;
+  padding: 10px 16px;
   border-radius: 20px;
   background: linear-gradient(180deg, var(--sb-btn-from), var(--sb-btn-to));
   color: white;
   border: 1px solid #000;
   cursor: pointer;
   font-size: 0.9rem;
-  margin-bottom: 8px;
+  /* Space below the button before section label */
+  margin-bottom: 18px;
   transition: background 0.2s;
   font-family: "Poppins", sans-serif;
   width: 100%;
@@ -109,58 +133,78 @@ body.dark {
 }
 
 .addreport-icon {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   flex-shrink: 0;
 }
 
 /* ── Section labels ── */
 .sidebar-section-label {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--sb-text-muted);
-  margin: 4px 0 2px;
-  padding-left: 4px;
+  /* Good breathing room above and below each label */
+  margin: 14px 0 6px;
+  padding-left: 6px;
   display: block;
 }
 
-/* ── Nav ── */
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  flex: 1;
-  overflow: hidden;
+/* Remove top margin from first label so it doesn't push too far down */
+.sidebar-main-section .sidebar-section-label:first-of-type {
+  margin-top: 0;
 }
 
+/* ── Main section (Dashboard, Reports, Map) ── */
 .sidebar-main-section {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  /* Links have their own padding; use gap for breathing room */
+  gap: 3px;
   border-bottom: 1.5px solid var(--sb-divider);
-  padding-bottom: 8px;
-  margin-bottom: 2px;
+  /* Space between last link and the divider */
+  padding-bottom: 14px;
+  /* Space between divider and "Personal" section */
+  margin-bottom: 0;
 }
 
+/* ── Other section (Notifications, Settings) ── */
 .sidebar-other-section {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  margin-top: 2px;
+  gap: 3px;
+  /* Space above this section after the divider */
+  margin-top: 4px;
+  padding-top: 2px;
 }
 
-/* ── Links ── */
+/* ── Nav Links ── */
 .sidebar-link,
 .sidebar-link-others {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 12px;
+  /* Taller, more comfortable click target */
+  padding: 10px 14px;
   border-radius: 30px;
   color: var(--sb-text);
   text-decoration: none;
-  transition: background 0.2s, color 0.2s;
   font-size: 0.88rem;
+  font-weight: 500;
+  transition: background 0.2s, color 0.2s;
+  /* Prevent icon/text from being cramped */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-link svg,
+.sidebar-link-others svg,
+.sidebar-link > *:first-child,
+.sidebar-link-others > *:first-child {
+  /* Icons don't shrink */
+  flex-shrink: 0;
+  font-size: 1rem;
 }
 
 .sidebar-link:hover,
@@ -173,6 +217,7 @@ body.dark {
 .sidebar-link-others.active {
   background: linear-gradient(180deg, var(--sb-active-from), var(--sb-active-to));
   color: white;
+  font-weight: 600;
 }
 
 .sidebar-link.active:hover,
@@ -181,27 +226,32 @@ body.dark {
   color: white;
 }
 
+/* ── Notification badge ── */
 .notification-badge {
   margin-left: auto;
   background: #e63946;
   color: white;
   font-size: 0.65rem;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 10px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.4;
+  flex-shrink: 0;
 }
 
 .submissions-icon {
   font-size: 1.1rem;
   margin-left: -2px;
+  flex-shrink: 0;
 }
 
-/* ── Footer ── */
+/* ── Footer: theme toggle pinned to bottom ── */
 .sidebar-footer {
-  padding-top: 8px;
+  /* Clear separation from nav above */
+  padding-top: 12px;
   border-top: 1px solid var(--sb-border);
-  margin-top: 4px;
+  margin-top: 8px;
+  flex-shrink: 0;
 }
 
 /* ── Theme toggle button ── */
@@ -210,7 +260,8 @@ body.dark {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 12px;
+  /* Matches link height for consistency */
+  padding: 10px 14px;
   border: none;
   border-radius: 30px;
   background: transparent;
@@ -231,6 +282,7 @@ body.dark {
   color: #fff;
 }
 
+/* ── Icon wrapper ── */
 .theme-icon-wrap {
   display: flex;
   align-items: center;
@@ -277,7 +329,7 @@ body.dark {
 .theme-thumb.thumb-left  { left: 2px; }
 .theme-thumb.thumb-right { left: calc(100% - 18px); }
 
-/* ── Overlay ── */
+/* ── Overlay (mobile backdrop) ── */
 .sidebar-overlay {
   position: fixed;
   top: 0;

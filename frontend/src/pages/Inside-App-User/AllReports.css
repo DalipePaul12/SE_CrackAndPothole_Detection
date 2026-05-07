@@ -1,121 +1,120 @@
-:root {
-  --bg: #f5efe6;
-  --card: #ffffff;
-  --primary: #4CAF50;
-  --text: #1e1e1e;
-  --subtext: #6b6b6b;
-  --border: #e0e0e0;
-  --success: #2e7d32;
-  --warning: #e97537;
-  --danger: #b91c1c;
-  --info: #1565c0;
-  --hover-bg: #e8f5e9;
-}
+/* ══════════════════════════════════════════════════════════════
+   AllReports.css — Snap2Fix
+   Uses global design tokens from index.css
+   Dark mode is handled via body.dark class + CSS variables only.
+   No hardcoded colors — all values reference var(--*)
+   Hover & modal colors match MySubmissions dark-green scheme.
+══════════════════════════════════════════════════════════════ */
 
-body.dark {
-  --bg: #0f2a1d;
-  --card: #163d2a;
-  --primary: #4CAF50;
-  --text: #e8f5e9;
-  --subtext: #a5d6a7;
-  --border: #1f5c3f;
-  --success: #81c784;
-  --warning: #ffb74d;
-  --danger: #e57373;
-  --info: #64b5f6;
-  --hover-bg: #1e5236;
-}
-
+/* ── Page Layout ────────────────────────────────────────────────── */
 .allreports-container {
   padding: 2rem;
-  background-color: var(--bg);
+  background: var(--bg);
   color: var(--text);
   min-height: 100vh;
-  width: calc(100% - 255px);
-  margin-top: 0;
-  margin-left: 255px;
+  width: calc(100% - var(--sidebar-w, 255px));
+  margin-left: var(--sidebar-w, 255px);
   box-sizing: border-box;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background var(--transition-med, 0.3s ease),
+              color var(--transition-med, 0.3s ease);
 }
 
+/* ── Filter Panel ───────────────────────────────────────────────── */
 .allreports-filters {
   display: flex;
   flex-direction: column;
   background: var(--card);
-  padding: 20px;
-  border-radius: 30px;
-  margin-bottom: 25px;
+  padding: 1.5rem;
+  border-radius: var(--radius-2xl, 30px);
+  margin-bottom: 1.5rem;
   margin-top: 70px;
   border: 1px solid var(--border);
-  transition: background 0.3s ease, border-color 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--transition-med, 0.3s ease),
+              border-color var(--transition-med, 0.3s ease);
 }
 
 .allreports-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 
 .allreports-header h2 {
-  font-size: 1.5rem;
+  font-size: 1.35rem;
+  font-weight: 800;
   color: var(--text);
-  font-weight: 600;
-  margin-bottom: 10px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 10px;
+  margin: 0;
+  flex: 1;
 }
 
 .report-count {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--primary);
-  font-weight: 600;
-  background: var(--bg);
+  font-weight: 700;
+  background: var(--primary-subtle, rgba(76, 175, 80, 0.12));
   border: 1px solid var(--border);
-  padding: 3px 10px;
-  border-radius: 20px;
+  padding: 3px 12px;
+  border-radius: var(--radius-pill, 999px);
   white-space: nowrap;
-  margin-bottom: 4px;
 }
 
+/* ── Filters Row ────────────────────────────────────────────────── */
 .filters-row-allreports {
   display: flex;
   flex-wrap: wrap;
-  gap: 32px;
+  gap: 24px;
   align-items: flex-end;
 }
 
 .filter-group-allreports {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-left: 18px;
+  gap: 10px;
+  margin-left: 4px;
 }
 
 .filter-group-allreports label {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--subtext);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted, var(--subtext));
   text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
+/* ── Type Filter Buttons ────────────────────────────────────────── */
 .filter-buttons-allreports {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .filter-buttons-allreports button {
-  padding: 10px 30px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--text);
+  padding: 8px 24px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary, var(--bg));
+  color: var(--subtext);
+  font-size: 0.84rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast, 0.15s ease);
 }
 
+/* Light mode hover */
 .filter-buttons-allreports button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-subtle, rgba(76, 175, 80, 0.1));
+}
+
+/* Dark mode hover — match MySubmissions dark green */
+body.dark .filter-buttons-allreports button:hover {
+  background: rgba(52, 168, 83, 0.15);
   border-color: var(--primary);
   color: var(--primary);
 }
@@ -126,27 +125,51 @@ body.dark {
   border-color: var(--primary);
 }
 
+/* Dark mode active stays solid green */
+body.dark .filter-buttons-allreports button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* ── Status / Severity Select ───────────────────────────────────── */
 .custom-select-allreports {
   position: relative;
-  width: 230px;
+  width: 220px;
 }
 
 .custom-select-allreports select {
   width: 100%;
-  padding: 10px 40px 10px 12px;
-  border-radius: 15px;
-  border: 1px solid var(--border);
+  padding: 9px 38px 9px 14px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1.5px solid var(--border);
   appearance: none;
-  background: var(--card);
+  background: var(--input-bg, var(--card));
   color: var(--text);
+  font-size: 0.84rem;
   cursor: pointer;
-  transition: all 0.2s;
+  outline: none;
+  transition: border-color var(--transition-fast, 0.15s ease),
+              background var(--transition-med, 0.3s ease),
+              color var(--transition-med, 0.3s ease);
 }
 
 .custom-select-allreports select:hover,
 .custom-select-allreports select:focus {
   border-color: var(--primary);
-  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-subtle, rgba(76, 175, 80, 0.12));
+}
+
+/* Dark mode — select background matches card */
+body.dark .custom-select-allreports select {
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+body.dark .custom-select-allreports select option {
+  background: var(--card);
+  color: var(--text);
 }
 
 .select-icon {
@@ -155,9 +178,10 @@ body.dark {
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
-  color: var(--text);
+  color: var(--subtext);
 }
 
+/* ── Action Buttons ─────────────────────────────────────────────── */
 .filter-actions {
   display: flex;
   gap: 10px;
@@ -166,42 +190,59 @@ body.dark {
 
 .apply-filter-btn,
 .reset-filter-btn {
-  padding: 10px 24px;
-  border-radius: 20px;
+  padding: 9px 24px;
+  border-radius: var(--radius-pill, 999px);
   border: none;
   cursor: pointer;
-  font-weight: 600;
-  font-size: 0.9rem;
-  transition: opacity 0.2s;
+  font-weight: 700;
+  font-size: 0.86rem;
+  transition: all var(--transition-fast, 0.15s ease);
 }
 
 .apply-filter-btn {
   background: var(--primary);
   color: #fff;
+  box-shadow: 0 4px 12px var(--primary-subtle2, rgba(76, 175, 80, 0.25));
 }
 
 .apply-filter-btn:hover {
   opacity: 0.88;
+  box-shadow: 0 6px 16px var(--primary-subtle2, rgba(76, 175, 80, 0.3));
 }
 
 .reset-filter-btn {
-  background: var(--card);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: var(--bg-secondary, var(--bg));
+  color: var(--subtext);
+  border: 1.5px solid var(--border-strong, var(--border));
 }
 
 .reset-filter-btn:hover {
-  background: var(--bg);
+  background: var(--danger-bg, rgba(229, 115, 115, 0.1));
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
+body.dark .reset-filter-btn {
+  background: var(--card);
+  color: var(--subtext);
+  border: 1.5px solid var(--border);
+}
+
+body.dark .reset-filter-btn:hover {
+  background: rgba(229, 115, 115, 0.12);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ── Error Banner ───────────────────────────────────────────────── */
 .reports-error-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(229, 115, 115, 0.1);
-  border: 1px solid var(--danger);
+  background: var(--danger-bg, rgba(229, 115, 115, 0.1));
+  border: 1px solid var(--danger-border, var(--danger));
   color: var(--danger);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 12px);
   padding: 12px 16px;
   margin-bottom: 16px;
   font-size: 0.9rem;
@@ -214,24 +255,25 @@ body.dark {
   gap: 8px;
 }
 
-.inline-icon {
-  flex-shrink: 0;
-}
+.inline-icon { flex-shrink: 0; }
 
 .retry-btn-small {
   padding: 6px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--danger);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--danger-border, var(--danger));
   background: transparent;
   color: var(--danger);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  transition: background var(--transition-fast, 0.15s ease);
 }
 
 .retry-btn-small:hover {
-  background: rgba(229, 115, 115, 0.2);
+  background: var(--danger-bg, rgba(229, 115, 115, 0.2));
 }
 
+/* ── Sidebar Overlay ────────────────────────────────────────────── */
 .sidebar-overlay {
   display: none;
   position: fixed;
@@ -240,17 +282,18 @@ body.dark {
   z-index: 999;
 }
 
-.sidebar-overlay.active {
-  display: block;
-}
+.sidebar-overlay.active { display: block; }
 
+/* ── Table Container ────────────────────────────────────────────── */
 .allreports-table-container {
   background: var(--card);
-  border-radius: 30px;
-  padding: 20px;
+  border-radius: var(--radius-2xl, 30px);
+  padding: 1.25rem;
   border: 1px solid var(--border);
   overflow-x: auto;
-  transition: background 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--transition-med, 0.3s ease),
+              border-color var(--transition-med, 0.3s ease);
 }
 
 .allreports-table {
@@ -261,30 +304,34 @@ body.dark {
 
 .allreports-table th {
   text-align: left;
-  font-size: 1rem;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
-  color: var(--subtext);
-  padding-top: 5px;
-  padding-bottom: 15px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, var(--subtext));
+  padding: 6px 14px 14px;
   position: sticky;
   top: 0;
   background: var(--card);
-  padding-left: 40px;
   z-index: 1;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  transition: background var(--transition-med, 0.3s ease);
 }
 
 .allreports-table td {
-  padding: 15px 0;
-  border-top: 1px solid var(--border);
-  padding-left: 40px;
-  font-size: 0.9rem;
-  color: var(--text);
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.87rem;
+  color: var(--subtext);
+  vertical-align: middle;
+  transition: background var(--transition-fast, 0.15s ease);
 }
 
 .allreports-table tbody {
   display: block;
   overflow-y: auto;
-  max-height: 350px;
+  max-height: 380px;
 }
 
 .allreports-table thead,
@@ -295,21 +342,27 @@ body.dark {
 }
 
 .report-location-allreports {
-  font-size: 0.8rem;
-  color: var(--subtext);
+  font-size: 0.76rem;
+  color: var(--text-muted, var(--subtext));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
 }
 
 .no-data-allreports {
   text-align: center;
   padding: 30px 20px;
   color: var(--subtext);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
+/* ── Skeleton Loader ────────────────────────────────────────────── */
 .table-skeleton {
   display: flex;
   flex-direction: column;
@@ -318,55 +371,60 @@ body.dark {
 }
 
 .skeleton-row {
-  height: 48px;
-  border-radius: 8px;
-  background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
+  height: 52px;
+  border-radius: var(--radius-lg, 12px);
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary, var(--bg)) 25%,
+    var(--border) 50%,
+    var(--bg-secondary, var(--bg)) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
 }
 
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
+  0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
 
-.severity.low, .status.resolved {
-  color: var(--success);
-  font-weight: 600;
+/* ── Status / Severity Badges ───────────────────────────────────── */
+.severity,
+.status {
+  font-weight: 700;
+  font-size: 0.84rem;
 }
 
-.severity.moderate, .status.in-progress {
-  color: var(--warning);
-  font-weight: 600;
-}
+.severity.low,
+.severity.non-critical      { color: var(--status-resolved, var(--success)); }
+.severity.moderate          { color: var(--status-progress, var(--warning)); }
+.severity.high              { color: var(--warning); }
+.severity.critical          { color: var(--status-declined, var(--danger)); }
 
-.severity.high, .severity.critical, .status.declined {
-  color: var(--danger);
-  font-weight: 600;
-}
+.status.pending             { color: var(--status-pending, var(--subtext)); }
+.status.verified            { color: var(--status-verified, var(--info)); }
+.status.in-progress         { color: var(--status-progress, var(--warning)); }
+.status.resolved            { color: var(--status-resolved, var(--success)); }
+.status.declined            { color: var(--status-declined, var(--danger)); }
 
-.severity.non-critical {
-  color: var(--success);
-  font-weight: 600;
-}
-
-.status.pending {
-  color: var(--subtext);
-  font-weight: 600;
-}
-
-.status.verified {
-  color: var(--info);
-  font-weight: 600;
-}
-
+/* ══════════════════════════════════════════════════════════════
+   CLICKABLE ROWS — Dark-green hover matching MySubmissions
+   Light mode: subtle green tint
+   Dark mode: deeper green overlay (no white flash)
+══════════════════════════════════════════════════════════════ */
 .clickable-row {
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast, 0.15s ease);
 }
 
+/* Light mode hover — soft green */
 .clickable-row:hover {
-  background: var(--hover-bg); 
+  background: rgba(76, 175, 80, 0.07);
+}
+
+/* Dark mode hover — dark green matching MySubmissions */
+body.dark .clickable-row:hover {
+  background: rgba(52, 168, 83, 0.13);
 }
 
 .clickable-row:focus {
@@ -374,6 +432,7 @@ body.dark {
   outline-offset: -2px;
 }
 
+/* ── Pagination ─────────────────────────────────────────────────── */
 .pagination {
   display: flex;
   align-items: center;
@@ -388,83 +447,129 @@ body.dark {
   align-items: center;
   gap: 6px;
   padding: 8px 20px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  border: 1.5px solid var(--border);
   background: var(--card);
-  color: var(--text);
+  color: var(--subtext);
   font-weight: 600;
+  font-size: 0.86rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast, 0.15s ease);
 }
 
 .page-btn:hover:not(:disabled) {
   border-color: var(--primary);
   color: var(--primary);
+  background: var(--primary-subtle, rgba(76, 175, 80, 0.08));
+}
+
+body.dark .page-btn:hover:not(:disabled) {
+  background: rgba(52, 168, 83, 0.15);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .page-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .page-info {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: var(--subtext);
 }
 
+/* ══════════════════════════════════════════════════════════════
+   MODAL — Full dark mode support
+   Inherits --card, --text, --bg-secondary so dark mode works
+   automatically. All hardcoded whites replaced with variables.
+══════════════════════════════════════════════════════════════ */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 9999;
+  backdrop-filter: blur(4px);
 }
 
+/* Modal card — uses --card so dark mode flips automatically */
 .modal-content {
   background: var(--card);
   color: var(--text);
-  width: 80%;
+  width: 82%;
   max-width: 900px;
   max-height: 90vh;
   overflow-y: auto;
-  border-radius: 20px;
-  padding: 25px;
+  border-radius: var(--radius-2xl, 20px);
+  padding: 1.75rem;
   position: relative;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
+  box-shadow: var(--shadow-xl, 0 25px 60px rgba(0, 0, 0, 0.35));
+  transition: background var(--transition-med, 0.3s ease),
+              border-color var(--transition-med, 0.3s ease),
+              color var(--transition-med, 0.3s ease);
 }
 
+.modal-content::-webkit-scrollbar { width: 4px; }
+.modal-content::-webkit-scrollbar-thumb {
+  background: var(--border-strong, var(--border));
+  border-radius: var(--radius-pill, 999px);
+}
+
+/* Close button */
 .modal-close-btn {
   position: absolute;
-  top: 15px;
-  right: 20px;
-  background: transparent;
-  border: none;
+  top: 14px;
+  right: 14px;
+  background: var(--bg-secondary, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
   cursor: pointer;
-  color: var(--text);
-  transition: color 0.2s;
+  color: var(--subtext);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast, 0.15s ease);
 }
 
 .modal-close-btn:hover {
+  background: var(--danger-bg, rgba(229, 115, 115, 0.12));
+  border-color: var(--danger-border, var(--danger));
+  color: var(--danger);
+}
+
+/* Dark mode close button — no white background */
+body.dark .modal-close-btn {
+  background: var(--card);
+  border-color: var(--border);
+  color: var(--subtext);
+}
+
+body.dark .modal-close-btn:hover {
+  background: rgba(229, 115, 115, 0.15);
+  border-color: var(--danger);
   color: var(--danger);
 }
 
 .modal-title {
-  font-size: 1.5rem;
-  text-align: center;
-  color: var(--text);
-  margin-bottom: 20px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 1.25rem;
+  padding-right: 40px;
 }
 
+/* ── Modal Body Layout ──────────────────────────────────────────── */
 .modal-body {
   display: flex;
-  gap: 30px;
+  gap: 24px;
   flex-wrap: wrap;
 }
 
@@ -473,81 +578,123 @@ body.dark {
   min-width: 250px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
 
-.reporter-info, .info-card, .location-info {
-  background: var(--bg);
-  border-radius: 15px;
-  padding: 15px;
+/* Info cards inside modal — use --bg-secondary so they adapt in dark */
+.reporter-info,
+.info-card,
+.location-info {
+  background: var(--bg-secondary, var(--bg));
+  border-radius: var(--radius-xl, 15px);
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   border: 1px solid var(--border);
+  transition: background var(--transition-med, 0.3s ease),
+              border-color var(--transition-med, 0.3s ease);
+}
+
+/* Dark mode info cards — deeper tint for contrast */
+body.dark .reporter-info,
+body.dark .info-card,
+body.dark .location-info {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border);
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.88rem;
   font-weight: 500;
   color: var(--text);
 }
 
-.info-card p, .location-info p {
-  margin-bottom: 10px;
-  font-size: 0.95rem;
-  color: var(--text);
+.info-row strong {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, var(--subtext));
+  flex-shrink: 0;
 }
 
+.info-row span {
+  color: var(--text);
+  text-align: right;
+}
+
+/* Decline reason */
 .decline-reason {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(229, 115, 115, 0.1);
-  border: 1px solid var(--danger);
-  border-radius: 8px;
-  padding: 8px 12px;
+  background: var(--danger-bg, rgba(229, 115, 115, 0.1));
+  border: 1px solid var(--danger-border, var(--danger));
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 12px;
   color: var(--danger);
-  font-size: 0.9rem;
-  margin-bottom: 10px;
+  font-size: 0.86rem;
 }
 
+body.dark .decline-reason {
+  background: rgba(229, 115, 115, 0.12);
+}
+
+/* AI flag */
 .ai-flag-badge {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 183, 77, 0.1);
-  border: 1px solid var(--warning);
-  border-radius: 8px;
-  padding: 8px 12px;
+  background: var(--warning-bg, rgba(255, 183, 77, 0.1));
+  border: 1px solid var(--warning-border, var(--warning));
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 12px;
   color: var(--warning);
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   font-weight: 500;
 }
 
+body.dark .ai-flag-badge {
+  background: rgba(255, 183, 77, 0.12);
+}
+
+/* ── Modal Right (Image) ────────────────────────────────────────── */
 .modal-right {
   flex: 1;
-  min-width: 250px;
+  min-width: 260px;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .modal-media {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: var(--bg);
+  background: var(--bg-secondary, var(--bg));
   padding: 10px;
-  border-radius: 15px;
+  border-radius: var(--radius-xl, 15px);
   border: 1px solid var(--border);
   width: 100%;
+  min-height: 200px;
+  transition: background var(--transition-med, 0.3s ease),
+              border-color var(--transition-med, 0.3s ease);
+}
+
+body.dark .modal-media {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .modal-media img,
 .modal-media video {
   max-width: 100%;
-  border-radius: 15px;
+  border-radius: var(--radius-lg, 12px);
+  display: block;
 }
 
 .no-image {
@@ -557,118 +704,154 @@ body.dark {
   justify-content: center;
   width: 100%;
   min-height: 180px;
-  color: var(--subtext);
-  font-size: 0.9rem;
-  background: var(--bg);
-  border-radius: 12px;
-  border: 1px dashed var(--border);
+  color: var(--text-muted, var(--subtext));
+  font-size: 0.88rem;
+  background: var(--bg-secondary, var(--bg));
+  border-radius: var(--radius-lg, 12px);
+  border: 1px dashed var(--border-strong, var(--border));
   gap: 12px;
+  transition: background var(--transition-med, 0.3s ease);
 }
 
+body.dark .no-image {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
   .allreports-container {
     width: 100%;
     margin-left: 0;
   }
+
   .filters-row-allreports {
-    gap: 20px;
+    gap: 18px;
   }
+
   .custom-select-allreports {
-    width: 200px;
+    width: 190px;
   }
 }
 
 @media (max-width: 768px) {
   .allreports-container {
-    padding: 15px;
-    min-height: 100vh;
+    padding: 1rem;
     width: 100%;
     margin-left: 0;
   }
+
   .allreports-filters {
-    padding: 15px;
+    padding: 1rem;
     margin-top: 60px;
   }
+
   .allreports-header h2 {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
   }
+
   .filters-row-allreports {
     flex-direction: column;
     align-items: flex-start;
-    gap: 16px;
+    gap: 14px;
   }
+
   .filter-group-allreports {
     margin-left: 0;
     width: 100%;
   }
+
   .filter-buttons-allreports {
     width: 100%;
     gap: 8px;
   }
+
   .filter-buttons-allreports button {
     flex: 1;
     padding: 8px 10px;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     min-height: 40px;
   }
+
   .custom-select-allreports {
     width: 100%;
   }
+
   .custom-select-allreports select {
     min-height: 40px;
   }
+
   .filter-actions {
     width: 100%;
   }
+
   .apply-filter-btn,
   .reset-filter-btn {
     flex: 1;
     min-height: 40px;
   }
+
   .allreports-table-container {
-    padding: 10px;
+    padding: 0.75rem;
   }
+
   .allreports-table th {
-    font-size: 0.8rem;
-    padding-left: 8px;
-    padding-right: 4px;
-    padding-bottom: 10px;
+    font-size: 0.68rem;
+    padding: 6px 8px 10px;
   }
+
   .allreports-table td {
-    font-size: 0.78rem;
-    padding: 10px 4px;
-    padding-left: 8px;
+    font-size: 0.76rem;
+    padding: 10px 8px;
   }
+
   .report-location-allreports {
     font-size: 0.65rem;
   }
+
+  /* Modal mobile */
   .modal-content {
-    width: 95%;
-    padding: 15px;
-    max-height: 92vh;
+    width: 96%;
+    padding: 1.1rem;
+    max-height: 93vh;
   }
+
   .modal-body {
     flex-direction: column;
-    gap: 15px;
+    gap: 14px;
   }
+
   .modal-left,
   .modal-right {
     min-width: unset;
     width: 100%;
   }
+
   .modal-title {
-    font-size: 1.2rem;
-    margin-bottom: 15px;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
   }
-  .info-card p,
-  .info-row,
-  .location-info {
+
+  .info-row {
     font-size: 0.82rem;
   }
+
   .modal-media img,
   .modal-media video {
     width: 100%;
     max-height: 220px;
     object-fit: contain;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-actions {
+    flex-direction: column;
+  }
+
+  .apply-filter-btn,
+  .reset-filter-btn {
+    width: 100%;
   }
 }

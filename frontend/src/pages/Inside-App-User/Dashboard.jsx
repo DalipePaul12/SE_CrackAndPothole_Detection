@@ -5,6 +5,11 @@ import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
 import { SeverityInline } from "../../components/SeverityBadge.jsx";
 
+// New feature components
+//import FloatingReportButton from "../../components/FloatingReportButton.jsx";
+import ReportProgressTracker from "../../components/ReportProgressTracker.jsx";
+import NotificationSummary from "../../components/NotificationSummary.jsx";
+
 import { GiBookCover } from "react-icons/gi";
 import { IoMdCheckmarkCircleOutline } from "react-icons/io";
 import { FaExclamationCircle, FaChartPie, FaUsers, FaLightbulb, FaBell, FaMedal } from "react-icons/fa";
@@ -23,8 +28,25 @@ import {
 
 import { useAnalytics, invalidateAnalyticsCache } from "../../hooks/useAnalytics";
 import { useReports } from "../../hooks/useReports";
+import { useNavigate } from "react-router-dom";
 
+// ── Color palette ────────────────────────────────────────────────────────────
 const PIE_COLORS = ["#155318", "#2ba81d", "#5cd65c", "#98e698"];
+
+// Multi-color bar palette (green family + harmonious accents)
+const BAR_COLORS = {
+  pending:     "#ef4444",
+  verified:    "#3b82f6",
+  "in progress": "#f59e0b",
+  resolved:    "#2ba81d",
+  submitted:   "#155318",
+  crack:       "#2ba81d",
+  pothole:     "#5cd65c",
+  default: [
+    "#155318", "#1a6b1e", "#2ba81d", "#3ec42d",
+    "#5cd65c", "#80e080", "#98e698", "#b8f0b8",
+  ],
+};
 
 function timeAgo(dateStr) {
   if (!dateStr) return "Unknown time";
@@ -39,14 +61,21 @@ function timeAgo(dateStr) {
 
 function statusColor(status) {
   const s = status?.toLowerCase();
-  if (s === "resolved") return "#2ba81d";
+  if (s === "resolved")    return "#2ba81d";
   if (s === "in_progress") return "#f59e0b";
-  if (s === "pending") return "#ef4444";
-  if (s === "verified") return "#3b82f6";
-  if (s === "declined") return "#6b7280";
+  if (s === "pending")     return "#ef4444";
+  if (s === "verified")    return "#3b82f6";
+  if (s === "declined")    return "#6b7280";
   return "#9ca3af";
 }
 
+function getBarColor(entry, index) {
+  if (!entry) return BAR_COLORS.default[index % BAR_COLORS.default.length];
+  const key = (entry.status || entry.name || "").toLowerCase();
+  return BAR_COLORS[key] ?? BAR_COLORS.default[index % BAR_COLORS.default.length];
+}
+
+// ── Skeleton ─────────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
     <div className="summary-card skeleton" aria-busy="true">
@@ -65,6 +94,7 @@ function SkeletonPanel() {
   );
 }
 
+// ── SparklineChart ────────────────────────────────────────────────────────────
 function SparklineChart({ data, color = "#2ba81d" }) {
   if (!data || data.length < 2) return null;
   const max = Math.max(...data);
@@ -83,6 +113,7 @@ function SparklineChart({ data, color = "#2ba81d" }) {
   );
 }
 
+// ── KPICard ───────────────────────────────────────────────────────────────────
 function KPICard({ title, value, icon, colorClass, trend, sparkData, loading }) {
   if (loading) return <SkeletonCard />;
   const isPositive = trend >= 0;
@@ -103,6 +134,7 @@ function KPICard({ title, value, icon, colorClass, trend, sparkData, loading }) 
   );
 }
 
+// ── PredictiveAlert ────────────────────────────────────────────────────────────
 function PredictiveAlert({ data, prevData }) {
   const alert = useMemo(() => {
     if (!data || !prevData || data === 0) return null;
@@ -123,38 +155,44 @@ function PredictiveAlert({ data, prevData }) {
   );
 }
 
+// ── InsightsPanel (improved: max 3, better spacing) ────────────────────────────
 function InsightsPanel({ reports, barangayRanking, damageStats, summary }) {
   const insights = useMemo(() => {
     const list = [];
+
     if (barangayRanking && barangayRanking.length > 0) {
       const top = barangayRanking[0];
-      list.push(`Most reports come from ${top.barangay} (${top.count} reports)`);
+      list.push({
+        text: `Most reports come from ${top.barangay} with ${top.count} report${top.count !== 1 ? "s" : ""}`,
+        color: PIE_COLORS[0],
+      });
     }
+
     if (damageStats && damageStats.length > 0) {
       const total = damageStats.reduce((s, d) => s + d.value, 0);
       const top = [...damageStats].sort((a, b) => b.value - a.value)[0];
       if (total > 0) {
-        list.push(`${top.name}s dominate ${Math.round((top.value / total) * 100)}% of all damage reports`);
+        list.push({
+          text: `${top.name} accounts for ${Math.round((top.value / total) * 100)}% of all reported damage`,
+          color: PIE_COLORS[1],
+        });
       }
     }
+
     if (summary) {
-      const total = summary.total_reports || 0;
+      const total    = summary.total_reports || 0;
       const resolved = summary.resolved || 0;
       if (total > 0) {
         const rate = Math.round((resolved / total) * 100);
-        list.push(`Resolution rate is at ${rate}% (${resolved} of ${total} reports resolved)`);
-      }
-      if (summary.in_progress > 0) {
-        list.push(`${summary.in_progress} report${summary.in_progress > 1 ? "s" : ""} currently in progress`);
-      }
-    }
-    if (reports && reports.length > 0) {
-      const critical = reports.filter(r => r.ai_severity?.toLowerCase() === "critical").length;
-      if (critical > 0) {
-        list.push(`${critical} critical severity report${critical > 1 ? "s" : ""} require attention`);
+        list.push({
+          text: `Resolution rate is ${rate}% — ${resolved} of ${total} reports resolved`,
+          color: PIE_COLORS[2],
+        });
       }
     }
-    return list.slice(0, 4);
+
+    // Cap at 3 for readability
+    return list.slice(0, 3);
   }, [reports, barangayRanking, damageStats, summary]);
 
   return (
@@ -166,8 +204,8 @@ function InsightsPanel({ reports, barangayRanking, damageStats, summary }) {
         <ul className="insights-list">
           {insights.map((insight, i) => (
             <li key={i} className="insight-item">
-              <span className="insight-dot" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-              {insight}
+              <span className="insight-dot" style={{ background: insight.color }} />
+              <span className="insight-text">{insight.text}</span>
             </li>
           ))}
         </ul>
@@ -176,13 +214,17 @@ function InsightsPanel({ reports, barangayRanking, damageStats, summary }) {
   );
 }
 
+// ── ContributionPanel ──────────────────────────────────────────────────────────
 function ContributionPanel({ total, resolved, loading }) {
   const score = useMemo(() => {
     if (!total) return 0;
     return Math.min(100, Math.round((resolved / total) * 60 + Math.min(total, 10) * 4));
   }, [total, resolved]);
 
-  const badge = score >= 80 ? "🏆 Top Reporter" : score >= 50 ? "⭐ Active Reporter" : score >= 20 ? "🌱 Rising Reporter" : "📋 New Reporter";
+  const badge = score >= 80 ? "🏆 Top Reporter"
+              : score >= 50 ? "⭐ Active Reporter"
+              : score >= 20 ? "🌱 Rising Reporter"
+              : "📋 New Reporter";
 
   if (loading) return <div className="dashboard-panel"><SkeletonPanel /></div>;
 
@@ -215,42 +257,60 @@ function ContributionPanel({ total, resolved, loading }) {
   );
 }
 
+// ── CustomBarLabel ─────────────────────────────────────────────────────────────
 const CustomBarLabel = ({ x, y, width, value }) => {
   if (!value) return null;
   return (
-    <text x={x + width / 2} y={y - 4} fill="#555" fontSize={11} textAnchor="middle">
+    <text x={x + width / 2} y={y - 4} fill="var(--subtext)" fontSize={11} textAnchor="middle">
       {value}
     </text>
   );
 };
 
-function GradientBarChart({ data, dataKey = "count", xKey = "status" }) {
+// ── ColoredBarChart (replaces GradientBarChart — multi-color, green palette) ──
+function ColoredBarChart({ data, dataKey = "count", xKey = "status" }) {
   return (
-    <>
-      <defs>
-        <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#2ba81d" />
-          <stop offset="100%" stopColor="#155318" />
-        </linearGradient>
-      </defs>
-      <ResponsiveContainer width="95%" height={210}>
-        <BarChart data={data} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
-          <XAxis dataKey={xKey} tick={{ fill: "#666", fontSize: 11 }} tickLine={false} axisLine={false} />
-          <YAxis allowDecimals={false} tick={{ fill: "#aaa", fontSize: 10 }} axisLine={false} tickLine={false} />
-          <Tooltip
-            contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
-            formatter={(v) => [`${v} reports`, "Count"]}
-          />
-          <Bar dataKey={dataKey} fill="url(#barGrad)" radius={[8, 8, 0, 0]} maxBarSize={64} label={<CustomBarLabel />} isAnimationActive={true} animationDuration={800} />
-        </BarChart>
-      </ResponsiveContainer>
-    </>
+    <ResponsiveContainer width="95%" height={210}>
+      <BarChart data={data} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+        <defs>
+          {data.map((entry, index) => {
+            const color = getBarColor(entry, index);
+            const lighter = color + "99"; // semi-transparent for gradient bottom
+            return (
+              <linearGradient key={index} id={`barGrad${index}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor={color}   stopOpacity={1}   />
+                <stop offset="100%" stopColor={lighter}  stopOpacity={0.7} />
+              </linearGradient>
+            );
+          })}
+        </defs>
+        <XAxis dataKey={xKey} tick={{ fill: "var(--subtext)", fontSize: 11 }} tickLine={false} axisLine={false} />
+        <YAxis allowDecimals={false} tick={{ fill: "var(--subtext)", fontSize: 10 }} axisLine={false} tickLine={false} />
+        <Tooltip
+          contentStyle={{ borderRadius: 10, border: "1px solid var(--border)", fontSize: 12, background: "var(--card)", color: "var(--text)" }}
+          formatter={(v) => [`${v} reports`, "Count"]}
+        />
+        <Bar
+          dataKey={dataKey}
+          radius={[8, 8, 0, 0]}
+          maxBarSize={64}
+          label={<CustomBarLabel />}
+          isAnimationActive={true}
+          animationDuration={800}
+        >
+          {data.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={`url(#barGrad${index})`} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
-// ── CitizenDashboard ─────────────────────────────────────────────────────────
+// ── CitizenDashboard ───────────────────────────────────────────────────────────
 function CitizenDashboard() {
   const { reports, loading, total } = useReports({ mine: true });
+  const navigate = useNavigate();
 
   const pending    = reports.filter(r => r.status?.toLowerCase() === "pending").length;
   const verified   = reports.filter(r => r.status?.toLowerCase() === "verified").length;
@@ -266,32 +326,41 @@ function CitizenDashboard() {
 
   const sparkData = [0, Math.floor(total * 0.3), Math.floor(total * 0.5), resolved, total];
 
+  // FAB handler — navigate to CreateReport page
+  const handleFabProceed = useCallback(() => {
+    navigate("/create-report");
+  }, [navigate]);
+
+  const statusBarData = useMemo(() => [
+    { status: "Pending",     count: pending    },
+    { status: "Verified",    count: verified   },
+    { status: "In Progress", count: inProgress },
+    { status: "Resolved",    count: resolved   },
+  ], [pending, verified, inProgress, resolved]);
+
   return (
     <div className="dashboard-container">
       <PredictiveAlert data={total} prevData={Math.max(0, total - 2)} />
 
       <div className="dashboard-summary">
-        <KPICard title="My Reports"   value={total}      icon={<GiBookCover className="icon" />}                colorClass="total"     trend={total > 0 ? 12 : 0}      sparkData={sparkData}                    loading={loading} />
-        <KPICard title="Pending"      value={pending}    icon={<MdOutlinePendingActions className="icon" />}    colorClass="pending"   trend={pending > 0 ? -5 : 0}    sparkData={[2, 3, pending, pending]}     loading={loading} />
-        <KPICard title="In Progress"  value={inProgress} icon={<FaExclamationCircle className="icon" />}        colorClass="progress"  trend={inProgress > 0 ? 8 : 0}  sparkData={[0, 1, inProgress, inProgress]} loading={loading} />
-        <KPICard title="Resolved"     value={resolved}   icon={<IoMdCheckmarkCircleOutline className="icon" />} colorClass="completed" trend={resolved > 0 ? 20 : 0}   sparkData={[0, 1, 1, resolved]}          loading={loading} />
+        <KPICard title="My Reports"   value={total}      icon={<GiBookCover className="icon" />}                colorClass="total"     trend={total > 0 ? 12 : 0}      sparkData={sparkData}                       loading={loading} />
+        <KPICard title="Pending"      value={pending}    icon={<MdOutlinePendingActions className="icon" />}    colorClass="pending"   trend={pending > 0 ? -5 : 0}    sparkData={[2, 3, pending, pending]}        loading={loading} />
+        <KPICard title="In Progress"  value={inProgress} icon={<FaExclamationCircle className="icon" />}        colorClass="progress"  trend={inProgress > 0 ? 8 : 0}  sparkData={[0, 1, inProgress, inProgress]}  loading={loading} />
+        <KPICard title="Resolved"     value={resolved}   icon={<IoMdCheckmarkCircleOutline className="icon" />} colorClass="completed" trend={resolved > 0 ? 20 : 0}   sparkData={[0, 1, 1, resolved]}             loading={loading} />
       </div>
 
       <div className="dashboard-grid">
+        {/* Existing: Status bar chart */}
         <div className="dashboard-panel">
           <h3>My Report Status <IoBarChart className="icon" /></h3>
           {loading ? <SkeletonPanel /> : total === 0 ? (
             <p className="empty-state">No report data available.</p>
           ) : (
-            <GradientBarChart data={[
-              { status: "Pending",     count: pending    },
-              { status: "Verified",    count: verified   },
-              { status: "In Progress", count: inProgress },
-              { status: "Resolved",    count: resolved   },
-            ]} />
+            <ColoredBarChart data={statusBarData} />
           )}
         </div>
 
+        {/* Existing: Recent Submissions */}
         <div className="dashboard-panel">
           <h3>Recent Submissions <LuActivity className="icon" /></h3>
           {loading ? <SkeletonPanel /> : (
@@ -317,6 +386,7 @@ function CitizenDashboard() {
           )}
         </div>
 
+        {/* Existing: Damage Types pie */}
         <div className="dashboard-panel-damagecategories">
           <h3>My Damage Types <FaChartPie className="icon" /></h3>
           {loading ? <SkeletonPanel /> : damageStats.length === 0 ? (
@@ -338,13 +408,23 @@ function CitizenDashboard() {
           )}
         </div>
 
+        {/* Existing: Contribution */}
         <ContributionPanel total={total} resolved={resolved} loading={loading} />
+
+        {/* NEW: Report Progress Tracker */}
+        <ReportProgressTracker reports={reports} loading={loading} />
+
+        {/* NEW: Notification Summary */}
+        <NotificationSummary reports={reports} loading={loading} />
       </div>
+
+      {/* NEW: FAB — citizen only */}
+      {/* <FloatingReportButton onProceed={handleFabProceed} /> */}
     </div>
   );
 }
 
-// ── AdminDashboard ───────────────────────────────────────────────────────────
+// ── AdminDashboard ─────────────────────────────────────────────────────────────
 function AdminDashboard() {
   const {
     summary, damageStats, statusStats, monthlyData,
@@ -400,12 +480,13 @@ function AdminDashboard() {
       </div>
 
       <div className="dashboard-grid">
+        {/* Colorized Status bar chart */}
         <div className="dashboard-panel">
           <h3>Status Summary <IoBarChart className="icon" /></h3>
           {loading ? <SkeletonPanel /> : statusStats.length === 0 ? (
             <p className="empty-state">No report data available.</p>
           ) : (
-            <GradientBarChart data={statusStats} />
+            <ColoredBarChart data={statusStats} />
           )}
         </div>
 
@@ -466,9 +547,9 @@ function AdminDashboard() {
                     <stop offset="95%" stopColor="#155318" stopOpacity={0}   />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="period" tick={{ fontSize: 10, fill: "#aaa" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "#aaa" }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }} formatter={(v, n) => [`${v}`, n]} />
+                <XAxis dataKey="period" tick={{ fontSize: 10, fill: "var(--subtext)" }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "var(--subtext)" }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--border)", fontSize: 12, background: "var(--card)", color: "var(--text)" }} formatter={(v, n) => [`${v}`, n]} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
                 <Area type="monotone" dataKey="Reports"  stroke="#2ba81d" strokeWidth={2.5} fill="url(#gradSubmit)"   dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={900} />
                 <Area type="monotone" dataKey="Resolved" stroke="#155318" strokeWidth={2.5} fill="url(#gradResolved)" dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={900} />
@@ -477,13 +558,14 @@ function AdminDashboard() {
           )}
         </div>
 
+        {/* Improved InsightsPanel: max 3, better spacing */}
         <InsightsPanel reports={[]} barangayRanking={barangayRanking} damageStats={damageStats} summary={summary} />
       </div>
     </div>
   );
 }
 
-// ── Root Dashboard ───────────────────────────────────────────────────────────
+// ── Root Dashboard ─────────────────────────────────────────────────────────────
 function Dashboard() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const role = user?.role ?? "citizen";
