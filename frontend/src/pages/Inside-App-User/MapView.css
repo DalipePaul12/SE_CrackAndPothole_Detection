@@ -30,8 +30,8 @@
   --mv-topbar-h:    56px;
   --mv-controls-h:  50px;
   --mv-strip-h:     100px;
-  --mv-sidebar-w:   240px;
-  --mv-header-h:    64px;
+  --mv-sidebar-w:   260px;
+  --mv-header-h:    80px;
   --mv-panel-w:     340px;
 
   /* Typography */
@@ -436,6 +436,13 @@
    ✦ flex:1 fills all horizontal space
    ✦ transition makes panel slide smooth
 ═══════════════════════════════════════════════ */
+.map-view {
+  padding-top: 0;              
+}
+.map-view-content {           
+  margin-left: 260px;
+  padding-top: 80px;
+}
 .mv-map-wrap {
   flex: 1;
   position: relative;

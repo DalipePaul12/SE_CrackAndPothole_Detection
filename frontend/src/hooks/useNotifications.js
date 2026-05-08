@@ -1,9 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+/**
+ * hooks/useNotifications.js
+ * ──────────────────────────
+ * Standalone polling hook for components that don't use NotificationProvider.
+ *
+ * If your app uses <NotificationProvider> in App.jsx, prefer
+ * useNotificationContext() instead — it shares state across all components
+ * and avoids duplicate network requests.
+ *
+ * This hook is kept for backward compatibility with Notifications.jsx which
+ * imports it directly.
+ *
+ * FIX: response normalization was double-wrapping data.
+ *   notifications.js api returns { success, data: [...], error }
+ *   Previously code did res.data which after client.js normalization
+ *   was already the array — but getNotifications() was re-wrapping it.
+ *   Now we read res.data directly which is the array of notifications.
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getNotifications,
-  markAsRead as markAsReadApi,
-  markAllAsRead as markAllAsReadApi,
   deleteNotification as deleteApi,
+  getNotifications,
+  markAllAsRead as markAllAsReadApi,
+  markAsRead as markAsReadApi,
 } from "../api/notifications";
 
 export function useNotifications() {
@@ -12,17 +31,15 @@ export function useNotifications() {
   const [error, setError]                 = useState(null);
 
   const abortRef        = useRef(false);
-  const pausePollingRef = useRef(false); // pause refetch briefly after bulk actions
+  const pausePollingRef = useRef(false);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  // ── Fetch (with merge: never revert locally-read notifications) ───────────
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+
   const fetchNotifications = useCallback(async () => {
     const token = localStorage.getItem("access_token");
-    if (!token) return;
-
-    // Don't overwrite state mid-action (e.g. right after mark-all-read)
-    if (pausePollingRef.current) return;
+    if (!token || pausePollingRef.current) return;
 
     setLoading(true);
     setError(null);
@@ -31,14 +48,17 @@ export function useNotifications() {
     try {
       const res = await getNotifications();
 
-      if (!res?.success) throw new Error(res?.error || "Failed to load notifications");
+      if (!res?.success) {
+        throw new Error(res?.error || "Failed to load notifications");
+      }
 
+      // getNotifications() already returns { success, data: [...] }
+      // where data is the plain array from FastAPI
       const fetched = Array.isArray(res.data) ? res.data : [];
 
       if (!abortRef.current) {
-        // Merge: if a notification is already marked read locally, keep it read
-        // even if the server (due to caching/race) still returns it as unread.
         setNotifications((prev) => {
+          // Preserve optimistic is_read state for items already read locally
           const localReadIds = new Set(
             prev.filter((n) => n.is_read).map((n) => n.id)
           );
@@ -50,69 +70,67 @@ export function useNotifications() {
     } catch (err) {
       if (!abortRef.current) {
         setError(err.message || "Failed to load notifications");
-        setNotifications([]);
       }
     } finally {
       if (!abortRef.current) setLoading(false);
     }
   }, []);
 
+  // ── Polling ───────────────────────────────────────────────────────────────
+
   useEffect(() => {
     fetchNotifications();
-    return () => { abortRef.current = true; };
+    const interval = setInterval(fetchNotifications, 30_000);
+
+    return () => {
+      abortRef.current = true;
+      clearInterval(interval);
+    };
   }, [fetchNotifications]);
 
-  // ── Mark one as read ──────────────────────────────────────────────────────
-  const markAsRead = async (id) => {
-    const prev = notifications;
+  // ── Actions ───────────────────────────────────────────────────────────────
 
-    // Optimistic update
-    setNotifications((curr) =>
-      curr.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+  const markAsRead = useCallback(async (id) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
-
     try {
-      const res = await markAsReadApi(id); // PATCH /notifications/{id}/read
-      if (!res?.success) throw new Error(res?.error || "Failed to update");
+      const res = await markAsReadApi(id);
+      if (!res?.success) throw new Error(res?.error || "Failed to mark as read");
     } catch {
-      setNotifications(prev); // revert on failure
+      // Rollback optimistic update
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: false } : n))
+      );
     }
-  };
+  }, []);
 
-  // ── Mark all as read ──────────────────────────────────────────────────────
-  const markAllAsRead = async () => {
-    const prev = notifications;
+  const markAllAsRead = useCallback(async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
 
-    // 1. Optimistic update immediately
-    setNotifications((curr) => curr.map((n) => ({ ...n, is_read: true })));
-
-    // 2. Pause polling for 5s so refetch doesn't overwrite us
     pausePollingRef.current = true;
-    setTimeout(() => { pausePollingRef.current = false; }, 5000);
+    setTimeout(() => { pausePollingRef.current = false; }, 5_000);
 
     try {
-      const res = await markAllAsReadApi(); // PATCH /notifications/read-all
-      if (!res?.success) throw new Error(res?.error || "Failed to update");
+      const res = await markAllAsReadApi();
+      if (!res?.success) throw new Error(res?.error || "Failed to mark all as read");
     } catch {
-      setNotifications(prev); // revert on failure
       pausePollingRef.current = false;
+      await fetchNotifications();
     }
-  };
+  }, [fetchNotifications]);
 
-  // ── Delete one ────────────────────────────────────────────────────────────
-  const remove = async (id) => {
-    const prev = notifications;
-
-    // Optimistic update
-    setNotifications((curr) => curr.filter((n) => n.id !== id));
+  const remove = useCallback(async (id) => {
+    const snapshot = notifications;
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
 
     try {
-      const res = await deleteApi(id); // DELETE /notifications/{id}
-      if (!res?.success) throw new Error(res?.error || "Delete failed");
+      const res = await deleteApi(id);
+      if (!res?.success) throw new Error(res?.error || "Failed to delete");
     } catch {
-      setNotifications(prev); // revert on failure
+      setNotifications(snapshot);
     }
-  };
+  }, [notifications]);
 
   return {
     notifications,

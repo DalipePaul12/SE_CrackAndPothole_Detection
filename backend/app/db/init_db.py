@@ -1,9 +1,6 @@
-"""
-Import all models here so Alembic can detect them for migrations.
-This file must be imported in alembic/env.py target_metadata setup.
-"""
+from app.models.frame_detection import FrameDetection   # noqa: F401  ← MOVE TO TOP
 from app.models.user import User                          # noqa: F401
-from app.models.report import Report                      # noqa: F401
+from app.models.report import Report                      # noqa: F401  ← AFTER FrameDetection
 from app.models.project import Project                    # noqa: F401
 from app.models.project_update import ProjectUpdate       # noqa: F401
 from app.models.comment import Comment                    # noqa: F401
@@ -17,7 +14,7 @@ from app.models.refresh_token import RefreshToken         # noqa: F401
 from app.models.report_upvote import ReportUpvote         # noqa: F401
 
 __all__ = [
-    "User", "Report", "Project", "ProjectUpdate", "Comment",
-    "Notification", "OTP", "AuditLog", "CCTV", "MediaAttachment",
-    "AIDetectionResult", "RefreshToken", "ReportUpvote",
+    "FrameDetection", "User", "Report", "Project", "ProjectUpdate",
+    "Comment", "Notification", "OTP", "AuditLog", "CCTV",
+    "MediaAttachment", "AIDetectionResult", "RefreshToken", "ReportUpvote",
 ]

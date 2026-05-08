@@ -13,11 +13,14 @@ class UserRole(str, enum.Enum):
 
 
 class ReportStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    VERIFIED = "VERIFIED"
-    DECLINED = "DECLINED"
+    PENDING     = "PENDING"
+    VERIFIED    = "VERIFIED"
+    DECLINED    = "DECLINED"
+    ASSIGNED    = "ASSIGNED"   
     IN_PROGRESS = "IN_PROGRESS"
-    RESOLVED = "RESOLVED"
+    COMPLETED   = "COMPLETED"   
+    REJECTED    = "REJECTED"    
+    RESOLVED    = "RESOLVED"
 
 
 class ProjectStatus(str, enum.Enum):
@@ -62,3 +65,8 @@ class NotificationType(str, enum.Enum):
 class MediaType(str, enum.Enum):
     image = "image"
     video = "video"
+
+class ReportType(str, enum.Enum):
+    image = "image"
+    video = "video"
+    hybrid = "hybrid"

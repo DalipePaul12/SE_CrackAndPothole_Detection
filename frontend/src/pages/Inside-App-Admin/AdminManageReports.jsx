@@ -9,11 +9,14 @@ function isCoordinateString(str) {
   return /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(str.trim());
 }
 
-const STATUS_FLOW = ["pending","verified","assigned","in_progress","completed","rejected"];
+const STATUS_FLOW = ["pending","verified","assigned","in_progress","resolved","rejected"];
 const STATUS_LABELS = {
-  pending:"Pending", verified:"Verified", assigned:"Assigned",
-  in_progress:"In Progress", completed:"Completed",
-  rejected:"Rejected", cancelled:"Cancelled",
+  pending:     "Pending",
+  verified:    "Verified",
+  assigned:    "Assigned",
+  in_progress: "In Progress",
+  resolved:    "Resolved",
+  rejected:    "Rejected",
 };
 const WORKERS = [
   { id:1, name:"Juan dela Cruz" }, { id:2, name:"Maria Santos" },
@@ -165,8 +168,8 @@ function StatsCards({ reports }) {
     { label:"In Progress",
       value: reports.filter(r=>r.status?.toLowerCase()==="in_progress").length,
       icon: <IcoWrench size={18}/>, className: "sc-inprogress" },
-    { label:"Completed Today",
-      value: reports.filter(r=>r.status?.toLowerCase()==="completed" && r.updated_at && new Date(r.updated_at).toDateString()===today).length,
+    { label:"Resolved Today",
+      value: reports.filter(r=>r.status?.toLowerCase()==="resolved" && r.updated_at && new Date(r.updated_at).toDateString()===today).length,
       icon: <IcoCheck size={18}/>, className: "sc-completed" },
   ];
 
@@ -188,7 +191,7 @@ function StatsCards({ reports }) {
 }
 
 function StatusTimeline({ currentStatus }) {
-  const steps = ["pending","verified","assigned","in_progress","completed"];
+  const steps = ["pending","verified","assigned","in_progress","resolved"];
   const isRej = currentStatus === "rejected" || currentStatus === "cancelled";
   const idx   = steps.indexOf(currentStatus);
   return (
@@ -241,16 +244,16 @@ function BulkBar({ count, onComplete, onAssign, onCancel, onClear }) {
   );
 }
 
-function ActionButtons({ r, onVerify, onAssign, onStart, onComplete, onCancel }) {
+function ActionButtons({ r, onVerify, onAssign, onStart, onComplete, onCancel, isPatching }) {
   const st = r.status?.toLowerCase();
   return (
     <div className="action-btns">
-      {st==="pending"     && <button className="action-btn ab-verify" onClick={e=>{e.stopPropagation();onVerify();}}><IcoShield size={11}/>Verify</button>}
-      {st==="verified"    && <button className="action-btn ab-assign" onClick={e=>{e.stopPropagation();onAssign();}}><IcoUsers size={11}/>Assign</button>}
-      {st==="assigned"    && <button className="action-btn ab-start" onClick={e=>{e.stopPropagation();onStart();}}><IcoWrench size={11}/>Start</button>}
-      {st==="in_progress" && <button className="action-btn ab-complete" onClick={e=>{e.stopPropagation();onComplete();}}><IcoCheck size={11}/>Done</button>}
-      {!["completed","rejected","cancelled"].includes(st) && (
-        <button className="action-btn ab-reject" onClick={e=>{e.stopPropagation();onCancel();}}><IcoBan size={11}/>Cancel</button>
+      {st==="pending"     && <button disabled={isPatching} className="action-btn ab-verify" onClick={e=>{e.stopPropagation();onVerify();}}><IcoShield size={11}/>Verify</button>}
+      {st==="verified"    && <button disabled={isPatching} className="action-btn ab-assign" onClick={e=>{e.stopPropagation();onAssign();}}><IcoUsers size={11}/>Assign</button>}
+      {st==="assigned"    && <button disabled={isPatching} className="action-btn ab-start" onClick={e=>{e.stopPropagation();onStart();}}><IcoWrench size={11}/>Start</button>}
+      {st==="in_progress" && <button disabled={isPatching} className="action-btn ab-complete" onClick={e=>{e.stopPropagation();onComplete();}}><IcoCheck size={11}/>Done</button>}
+      {!["resolved","rejected"].includes(st) && (
+        <button disabled={isPatching} className="action-btn ab-reject" onClick={e=>{e.stopPropagation();onCancel();}}><IcoBan size={11}/>Cancel</button>
       )}
     </div>
   );
@@ -391,21 +394,26 @@ function AdminManageReports() {
     });
   };
 
-  const patchStatus = async (id, status, extra={}) => {
-    const res = await updateReport(id, { status, ...extra });
-    if (res.success) setReports(prev => prev.map(r => r.id===id ? {...r, status:status.toLowerCase(),...extra} : r));
-    return res.success;
-  };
+
 
   const handleVerify   = id => patchStatus(id,"VERIFIED");
   const handleStart    = id => patchStatus(id,"IN_PROGRESS");
   const handleAssign   = async (id, teamOrWorker) => { await patchStatus(id,"ASSIGNED",{assigned_to:teamOrWorker.name}); setAssignReport(null); };
   const handleCancel   = async (id, reason) => { await patchStatus(id,"REJECTED",{rejection_reason:reason}); setCancelReport(null); };
-  const handleCompleteSuccess = id => { setReports(prev=>prev.map(r=>r.id===id?{...r,status:"completed"}:r)); setCompleteReport(null); };
+  const handleCompleteSuccess = id => { setReports(prev=>prev.map(r=>r.id===id?{...r,status:"resolved"}:r)); setCompleteReport(null); };
 
   const selectedIds = [...selected];
   const bulkPatch   = async (status) => { await Promise.all(selectedIds.map(id=>patchStatus(id,status))); setSelected(new Set()); setBulkMode(null); };
+  const [patching, setPatching] = useState(new Set());
 
+  const patchStatus = async (id, status, extra={}) => {
+  if (patching.has(id)) return false;  // ← block double click
+  setPatching(prev => new Set(prev).add(id));
+  const res = await updateReport(id, { status, ...extra });
+  if (res.success) setReports(prev => prev.map(r => r.id===id ? {...r, status:status.toLowerCase(),...extra} : r));
+  setPatching(prev => { const n = new Set(prev); n.delete(id); return n; });
+  return res.success;
+};
   return (
     <>
       <AdminHeader/>
@@ -487,7 +495,7 @@ function AdminManageReports() {
         {selected.size > 0 && (
           <BulkBar
             count={selected.size}
-            onComplete={()=>bulkPatch("COMPLETED")}
+            onComplete={()=>bulkPatch("RESOLVED")}
             onAssign={()=>setBulkMode("assign")}
             onCancel={()=>bulkPatch("REJECTED")}
             onClear={()=>setSelected(new Set())}
@@ -603,6 +611,7 @@ function AdminManageReports() {
                           onStart={()=>handleStart(r.id)}
                           onComplete={()=>setCompleteReport(r)}
                           onCancel={()=>setCancelReport(r)}
+                          isPatching={patching.has(r.id)}
                         />
                       </td>
                     </tr>
@@ -745,7 +754,7 @@ function ViewModal({ report:r, onClose, onMarkComplete, onAssign, onCancel, onVe
             {st==="verified"    && <button className="action-btn wide ab-assign" onClick={()=>onAssign(r)}><IcoUsers size={14}/> Assign Worker / Team</button>}
             {st==="assigned"    && <button className="action-btn wide ab-start" onClick={()=>onStart(r.id)}><IcoWrench size={14}/> Start Work</button>}
             {st==="in_progress" && <button className="action-btn wide ab-complete" onClick={()=>onMarkComplete(r)}><IcoCheck size={14}/> Mark as Completed</button>}
-            {!["completed","rejected","cancelled"].includes(st) && <button className="action-btn wide ab-reject" onClick={()=>onCancel(r)}><IcoBan size={14}/> Cancel Report</button>}
+            {!["resolved","rejected"].includes(st) && <button className="action-btn wide ab-reject" onClick={()=>onCancel(r)}><IcoBan size={14}/> Cancel Report</button>}
           </div>
         </div>
 
@@ -785,21 +794,23 @@ function CompleteModal({ report:r, onClose, onSuccess }) {
     setPreview(URL.createObjectURL(f));
   };
 
-  const handleSubmit = async () => {
-    setSaving(true); setErr(null);
-    if (proofFile) {
-      const up = await uploadReportMedia(r.id, proofFile);
-      if (!up.success) { setErr("Upload failed: " + (up.error??"Unknown")); setSaving(false); return; }
-    }
-    if (comment.trim()) {
-      const cm = await addComment(r.id, comment.trim());
-      if (!cm.success) { setErr("Comment failed: " + (cm.error??"Unknown")); setSaving(false); return; }
-    }
-    const res = await updateReport(r.id, { status:"RESOLVED" });
-    if (!res.success) { setErr("Could not resolve: " + (res.error??"Unknown")); setSaving(false); return; }
-    setSaving(false); onSuccess(r.id);
-  };
-
+    const handleSubmit = async () => {
+        setSaving(true); setErr(null);
+        if (proofFile) {
+          const up = await uploadReportMedia(r.id, proofFile);
+          console.log("upload result:", up);  // ← add this
+          if (!up.success) { setErr("Upload failed: " + (up.error??"Unknown")); setSaving(false); return; }
+        }
+        if (comment.trim()) {
+          const cm = await addComment(r.id, comment.trim());
+          console.log("comment result:", cm);  // ← add this
+          if (!cm.success) { setErr("Comment failed: " + (cm.error??"Unknown")); setSaving(false); return; }
+        }
+        const res = await updateReport(r.id, { status: "RESOLVED" });
+        console.log("updateReport result:", res);  // ← add this
+        if (!res.success) { setErr("Could not resolve: " + (res.error??"Unknown")); setSaving(false); return; }
+        setSaving(false); onSuccess(r.id);
+    };
   return (
     <ModalShell onClose={onClose}>
       <CloseBtn onClose={onClose}/>

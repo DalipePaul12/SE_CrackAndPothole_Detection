@@ -281,7 +281,7 @@ export default function DetectionOverlay({
 
       {/* Status indicators (realtime/video only) */}
       {(mode === "realtime" || mode === "video") && (
-        <div className="overlay-status" style={{ position: "absolute", top: 8, right: 8, zIndex: 15 }}>
+        <div className="overlay-status" style={{ position: 'absolute', top: 0, left: 0, zIndex: 10, pointerEvents: 'none' }}>
           <div className={`status-pill status-${mode}`}>
             <span className={`status-dot dot-${mode}`} />
             {isProcessing ? (stage || "PROCESSING") : 

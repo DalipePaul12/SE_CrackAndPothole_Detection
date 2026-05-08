@@ -152,3 +152,12 @@ export async function deleteReport(reportId) {
     return { success: false, error: String(detail) };
   }
 }
+
+export const getReport = async (id) => {
+  try {
+    const res = await api.get(`/reports/${id}`);
+    return { success: true, data: res.data, error: null };
+  } catch (error) {
+    return handleError(error);
+  }
+};

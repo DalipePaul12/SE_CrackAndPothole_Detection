@@ -51,8 +51,7 @@ body.dark {
   top: 0;
   display: flex;
   flex-direction: column;
-  /* More generous horizontal padding, comfortable vertical rhythm */
-  padding: 20px 18px 16px;
+  padding: 16px 14px 12px;
   font-family: "Poppins", sans-serif;
   border-right: 1px solid var(--sb-border);
   border-bottom-right-radius: 15px;
@@ -62,6 +61,7 @@ body.dark {
   box-sizing: border-box;
   overflow: hidden;
 }
+
 
 /* ── Logo ── */
 .sidebar-logo {
@@ -354,8 +354,8 @@ body.dark {
   .app-sidebar {
     position: fixed;
     left: -300px;
-    top: 0;
-    height: 100%;
+    top: 80px;
+    height: calc(100vh - 80px);
     transition: left 0.3s;
     z-index: 1000;
   }

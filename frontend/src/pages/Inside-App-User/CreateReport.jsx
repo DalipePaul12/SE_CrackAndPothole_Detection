@@ -1,11 +1,7 @@
 /**
  * CreateReport.jsx — Merged with RealtimeDetection + PhotoCaptureGuide
  *                  + DetectionOverlay integrated across all three modes
- *
- * Overlay integration points:
- *   1. Upload preview (photo + video tabs) — static bbox after analysis
- *   2. Camera viewfinder (photo/video tabs) — replaces CSS bbox-overlay div
- *   3. Live scan tab — replaces rdCanvasRef + drawDetectionOverlay()
+ *                  + Detection Filmstrip for video analysis results
  */
 
 import React, {
@@ -17,14 +13,15 @@ import {
   FaCamera, FaVideo, FaMapMarkerAlt, FaRegTrashAlt,
   FaTimes, FaExclamationCircle, FaCheckCircle,
   FaSpinner, FaExclamationTriangle, FaRedo, FaStop,
-  FaMicrophone, FaMicrophoneSlash,
+  FaMicrophone, FaMicrophoneSlash, FaFilm,
 } from "react-icons/fa";
 import { MdOutlineLocationOn, MdFiberManualRecord, MdRadar } from "react-icons/md";
 import { useUser } from "../../hooks/useUser";
 import { analyzeMedia, analyzeVideo } from "../../api/ml";
 import { api } from "../../api/client";
 import PhotoCaptureGuide from "../../components/PhotoCaptureGuide";
-import { DetectionOverlay } from "../../components/DetectionOverlay"; // ← NEW
+import DetectionOverlay from "../../components/DetectionOverlay";
+
 import {
   detectBarangay,
   NOMINATIM_URL,
@@ -44,12 +41,8 @@ const MAX_REC_SECS            = 10;
 const MAX_LOG_ENTRIES         = 50;
 
 const VIDEO_MIME_TYPES = new Set([
-  "video/mp4",
-  "video/webm",
-  "video/quicktime",
-  "video/x-msvideo",
-  "video/x-matroska",
-  "video/ogg",
+  "video/mp4", "video/webm", "video/quicktime",
+  "video/x-msvideo", "video/x-matroska", "video/ogg",
   "application/octet-stream",
 ]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".avi", ".mkv"]);
@@ -113,6 +106,71 @@ function distanceFeedback(bbox) {
   if (area > 0.40) return { ok: false, text: "Too close — step back (~10 m)", area };
   const est = area > 0 ? Math.round(10 / Math.sqrt(area)) : 0;
   return { ok: true, text: `~${est} m — good framing`, area };
+}
+
+// ─── Detection Filmstrip component ───────────────────────────────────────────
+
+function DetectionFilmstrip({ snapshots }) {
+  const [selected, setSelected] = useState(null);
+
+  if (!snapshots || snapshots.length === 0) return null;
+
+  return (
+    <div className="filmstrip-wrapper">
+      <div className="filmstrip-header">
+        <FaFilm className="filmstrip-icon" aria-hidden="true" />
+        <span>Detection Filmstrip</span>
+        <span className="filmstrip-count">{snapshots.length} frame{snapshots.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      <div className="filmstrip-scroll">
+        {snapshots.map((snap, i) => (
+          <button
+            key={i}
+            className={`filmstrip-thumb${selected === i ? " selected" : ""}`}
+            onClick={() => setSelected(selected === i ? null : i)}
+            aria-label={`Frame ${snap.frame}: ${snap.label} at ${Math.round(snap.confidence * 100)}% confidence`}
+          >
+            <img
+              src={`data:image/jpeg;base64,${snap.image_b64}`}
+              alt={`${snap.label} detection frame ${snap.frame}`}
+              className="filmstrip-thumb-img"
+            />
+            <div className={`filmstrip-badge filmstrip-badge-${snap.label}`}>
+              {snap.label} · {Math.round(snap.confidence * 100)}%
+            </div>
+            <div className="filmstrip-frame-num">#{snap.frame}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Expanded view */}
+      {selected !== null && snapshots[selected] && (
+        <div className="filmstrip-expanded">
+          <div className="filmstrip-expanded-header">
+            <span className={`filmstrip-expanded-label filmstrip-badge-${snapshots[selected].label}`}>
+              {snapshots[selected].label.toUpperCase()} DETECTED
+            </span>
+            <span className="filmstrip-expanded-conf">
+              {Math.round(snapshots[selected].confidence * 100)}% confidence · frame #{snapshots[selected].frame}
+            </span>
+            <button
+              className="filmstrip-expanded-close"
+              onClick={() => setSelected(null)}
+              aria-label="Close expanded view"
+            >
+              <FaTimes />
+            </button>
+          </div>
+          <img
+            src={`data:image/jpeg;base64,${snapshots[selected].image_b64}`}
+            alt={`${snapshots[selected].label} detection expanded`}
+            className="filmstrip-expanded-img"
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -202,17 +260,14 @@ function CreateReport({ onClose }) {
   const [rdLogEntries,    setRdLogEntries]    = useState([]);
   const [rdNotification,  setRdNotification]  = useState(null);
 
-  // ── NEW: overlay state ──────────────────────────────────────────────────────
-  // Stores the raw prediction object from the last completed analysis so the
-  // upload-preview overlay can render boxes independently of UI badge state.
-  const [predictionResult, setPredictionResult] = useState(null);
-  // Tracks display dimensions of the preview media element for canvas sizing.
-  const [previewSize, setPreviewSize] = useState({ width: 0, height: 0 });
-  // Tracks display dimensions of the photo/video camera viewfinder.
-  const [viewfinderSize, setViewfinderSize] = useState({ width: 0, height: 0 });
-  // Tracks display dimensions of the live-scan video element.
-  const [rdVideoSize, setRdVideoSize] = useState({ width: 0, height: 0 });
-  // ── END NEW ─────────────────────────────────────────────────────────────────
+  // Overlay state
+  const [predictionResult,    setPredictionResult]    = useState(null);
+  const [previewSize,         setPreviewSize]         = useState({ width: 0, height: 0 });
+  const [viewfinderSize,      setViewfinderSize]      = useState({ width: 0, height: 0 });
+  const [rdVideoSize,         setRdVideoSize]         = useState({ width: 0, height: 0 });
+
+  // ── FILMSTRIP state ─────────────────────────────────────────────────────────
+  const [detectionSnapshots, setDetectionSnapshots] = useState([]);
 
   const [isAnalyzing,      setIsAnalyzing]      = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(null);
@@ -223,6 +278,10 @@ function CreateReport({ onClose }) {
   const [severity,         setSeverity]         = useState(null);
   const [aiConfidence,     setAiConfidence]     = useState(null);
   const [analysisComplete, setAnalysisComplete] = useState(false);
+
+  const [isHybrid,        setIsHybrid]        = useState(false);
+  const [secondaryDamage, setSecondaryDamage] = useState(null);
+  const [detectionNote,   setDetectionNote]   = useState(null);
 
   const [coords,          setCoords]          = useState(null);
   const [city,            setCity]            = useState(DEFAULT_CITY);
@@ -239,20 +298,16 @@ function CreateReport({ onClose }) {
   const [showSubmitModal,  setShowSubmitModal] = useState(false);
 
   const fileRef          = useRef();
-  const videoRef         = useRef();        // photo/video camera feed
+  const videoRef         = useRef();
   const streamRef        = useRef(null);
   const detectionLoopRef = useRef(null);
   const analysisIdRef    = useRef(0);
   const mediaRecorderRef = useRef(null);
   const chunksRef        = useRef([]);
   const recordTimerRef   = useRef(null);
-
-  // ── NEW refs ────────────────────────────────────────────────────────────────
-  const previewMediaRef  = useRef(null);   // img or video in the upload preview
-  // ── END NEW ─────────────────────────────────────────────────────────────────
+  const previewMediaRef  = useRef(null);
 
   const rdVideoRef       = useRef(null);
-  // rdCanvasRef removed — replaced by <DetectionOverlay> component
   const rdStreamRef      = useRef(null);
   const rdIntervalRef    = useRef(null);
   const rdHasCapturedRef = useRef(false);
@@ -322,7 +377,7 @@ function CreateReport({ onClose }) {
     setIsRecording(false);
     setRecordingTime(0);
     setLiveDetection({ detected: false, label: null, confidence: 0, bbox: null, distance: null, status: "idle" });
-    setViewfinderSize({ width: 0, height: 0 }); // ← NEW: reset viewfinder size
+    setViewfinderSize({ width: 0, height: 0 });
   }, []);
 
   const startCamera = useCallback(async () => {
@@ -357,7 +412,6 @@ function CreateReport({ onClose }) {
           }
           const conf     = pred.confidence ?? 0;
           const firstBox = pred.boxes?.[0];
-          // Use norm_bbox from prediction object — backend returns it directly
           const normBox  = pred.norm_bbox ?? (
             firstBox
               ? [firstBox.x_norm, firstBox.y_norm,
@@ -372,13 +426,12 @@ function CreateReport({ onClose }) {
             confidence: conf,
             severity:   pred.severity,
             bbox:       normBox,
-            boxes:      pred.boxes ?? [],  // ← NEW: keep full boxes for overlay
+            boxes:      pred.boxes ?? [],
             distance:   dist,
             status:     conf >= REALTIME_CONF_THRESHOLD
               ? (dist.ok ? "detected" : "warning")
               : "scanning",
           });
-          // ── NEW: update viewfinder size for overlay sizing ─────────────────
           if (videoRef.current) {
             setViewfinderSize({
               width:  videoRef.current.offsetWidth  || 640,
@@ -472,7 +525,7 @@ function CreateReport({ onClose }) {
     setRdCornerStatus("idle"); setRdPillStatus("idle");
     setRdPillLabel("READY — TAP START");
     rdLastLabelRef.current = null;
-    setRdVideoSize({ width: 0, height: 0 }); // ← NEW
+    setRdVideoSize({ width: 0, height: 0 });
   }, []);
 
   const rdProcessFrame = useCallback(async () => {
@@ -522,14 +575,12 @@ function CreateReport({ onClose }) {
       setRdPillStatus(isLocked ? "locked" : "detecting");
       setRdPillLabel(`${pred.label.toUpperCase()} — ${sevLabel}`);
 
-      // ── NEW: update live-scan video size for overlay ───────────────────────
       if (rdVideoRef.current) {
         setRdVideoSize({
           width:  rdVideoRef.current.offsetWidth  || 640,
           height: rdVideoRef.current.offsetHeight || 360,
         });
       }
-      // ── END NEW ───────────────────────────────────────────────────────────
 
       if (pred.label !== rdLastLabelRef.current) {
         rdLastLabelRef.current = pred.label;
@@ -614,8 +665,12 @@ function CreateReport({ onClose }) {
     setImageType(null); setHfStatus(null); setDamageType(null);
     setSeverity(null);  setAiConfidence(null); setAnalyzeError(null);
     setIsAnalyzing(false); setAnalysisComplete(false); setAnalysisProgress(null);
-    setPredictionResult(null); // ← NEW
-    setPreviewSize({ width: 0, height: 0 }); // ← NEW
+    setPredictionResult(null);
+    setPreviewSize({ width: 0, height: 0 });
+    setDetectionSnapshots([]);
+    setIsHybrid(false);
+    setSecondaryDamage(null);
+    setDetectionNote(null);
   }, []);
 
   const runFullAnalysis = useCallback(async (f) => {
@@ -627,7 +682,6 @@ function CreateReport({ onClose }) {
       let result;
 
       if (isVideoFile(f)) {
-        // ── VIDEO pipeline ────────────────────────────────────────────────────
         result = await analyzeVideo(f, (msg) => {
           if (analysisIdRef.current === thisId) setAnalysisProgress(msg);
         });
@@ -643,14 +697,24 @@ function CreateReport({ onClose }) {
         setHfStatus("skipped");
         setImageType("REAL");
 
+        // ── FILMSTRIP: collect snapshots from analytics ──────────────────────
+        const snapshots = result.data?.analytics?.detection_snapshots ?? [];
+        setDetectionSnapshots(snapshots);
+
         const prediction = result.data?.prediction;
+
+        // Extract hybrid metadata from video pipeline
+        setIsHybrid(result.data?.is_hybrid ?? false);
+        setSecondaryDamage(result.data?.secondary_damage ?? null);
+        setDetectionNote(result.data?.detection_note ?? null);
+
         if (result.data?.detected && prediction) {
           const dt = normalizeDamageType(prediction.label);
           const sv = normalizeSeverity(prediction.severity);
           setDamageType(dt);
           setSeverity(sv);
           setAiConfidence(prediction.confidence ?? null);
-          setPredictionResult(prediction); // ← NEW
+          setPredictionResult(prediction);
           if (!dt) {
             setAnalyzeError("No damage detected in video. Try a clearer or longer clip.");
           }
@@ -660,7 +724,6 @@ function CreateReport({ onClose }) {
         }
 
       } else {
-        // ── IMAGE pipeline ────────────────────────────────────────────────────
         result = await analyzeMedia(f);
 
         if (analysisIdRef.current !== thisId) return;
@@ -692,7 +755,7 @@ function CreateReport({ onClose }) {
           setDamageType(dt);
           setSeverity(sv);
           setAiConfidence(prediction.confidence ?? null);
-          setPredictionResult(prediction); // ← NEW
+          setPredictionResult(prediction);
           if (prediction.label === "none" || dt === null) {
             setAnalyzeError("No damage detected. Please upload a clearer photo of road damage.");
           }
@@ -748,18 +811,25 @@ function CreateReport({ onClose }) {
     setIsSubmitting(true);
     setFormError("");
     try {
-      const is_flagged    = imageType === "AI-GENERATED";
+      const is_flagged = imageType === "AI-GENERATED";
+      const isVideo    = file && isVideoFile(file);
+
       const reportPayload = {
-        latitude:        coords.lat,
-        longitude:       coords.lng,
+        latitude:         coords.lat,
+        longitude:        coords.lng,
         barangay,
-        street_name:     streetName || null,
-        description:     additionalInfo?.trim() || null,
-        ai_damage_type:  DAMAGE_TYPE_BACKEND[damageType] ?? null,
-        ai_severity:     SEVERITY_BACKEND[severity]      ?? null,
-        ai_confidence:   aiConfidence ?? 0.0,
-        is_flagged_fake: is_flagged,
-        fake_confidence: is_flagged ? 0.9 : 0.0,
+        street_name:      streetName || null,
+        description:      additionalInfo?.trim() || null,
+        ai_damage_type:   DAMAGE_TYPE_BACKEND[damageType] ?? null,
+        ai_severity:      SEVERITY_BACKEND[severity]      ?? null,
+        ai_confidence:    aiConfidence ?? 0.0,
+        is_flagged_fake:  is_flagged,
+        fake_confidence:  is_flagged ? 0.9 : 0.0,
+        // ── Video / hybrid fields ──────────────────────────────
+        report_type:      isVideo ? "video" : "image",
+        is_hybrid:        isHybrid,
+        secondary_damage: secondaryDamage ?? null,
+        detection_note:   detectionNote   ?? null,
       };
       const reportRes = await api.post("/reports", reportPayload);
       if (!reportRes.success) throw new Error(reportRes.error || "Failed to create report.");
@@ -786,8 +856,6 @@ function CreateReport({ onClose }) {
   const rdPred         = rdPrediction;
   const rdSevStyle     = rdPred ? getSeverityStyle(rdPred.severity) : null;
 
-  // ── NEW: build normalised detection array for overlay ─────────────────────
-  // Backend _infer_frame already returns x_norm/y_norm/w_norm/h_norm per box.
   const previewOverlayDetections = (predictionResult?.boxes ?? []).map((b) => ({
     label:      b.label,
     confidence: b.confidence,
@@ -819,7 +887,6 @@ function CreateReport({ onClose }) {
     w_norm:     b.w_norm,
     h_norm:     b.h_norm,
   }));
-  // ── END NEW ───────────────────────────────────────────────────────────────
 
   const switchTab = useCallback((id) => {
     clearMedia();
@@ -890,7 +957,6 @@ function CreateReport({ onClose }) {
                   })}
                 />
 
-                {/* ── NEW: DetectionOverlay replaces rdCanvasRef + drawDetectionOverlay ── */}
                 {rdCameraActive && rdVideoSize.width > 0 && (
                   <DetectionOverlay
                     mode="realtime"
@@ -900,7 +966,6 @@ function CreateReport({ onClose }) {
                     frameCount={rdFps ?? 0}
                   />
                 )}
-                {/* ── END NEW ── */}
 
                 {["tl","tr","bl","br"].map((pos) => (
                   <span key={pos} aria-hidden="true"
@@ -1084,8 +1149,7 @@ function CreateReport({ onClose }) {
                     </div>
                   )}
 
-                  {/* ── NEW: DetectionOverlay replaces CSS bbox-overlay div ── */}
-                  {cameraActive && viewfinderSize.width > 0 && viewfinderOverlayDetections.length > 0 && (
+                  {cameraActive && viewfinderSize.width > 0 && (
                     <DetectionOverlay
                       mode="realtime"
                       detections={viewfinderOverlayDetections}
@@ -1093,7 +1157,6 @@ function CreateReport({ onClose }) {
                       height={viewfinderSize.height}
                     />
                   )}
-                  {/* ── END NEW ── */}
 
                   {cameraActive && liveDetection.distance && (
                     <div className={`distance-indicator ${liveDetection.distance.ok ? "ok" : "warn"}`} aria-hidden="true">
@@ -1178,14 +1241,16 @@ function CreateReport({ onClose }) {
                         src={preview}
                         alt="Uploaded evidence"
                         className="preview-img"
-                        onLoad={(e) => setPreviewSize({
-                          width:  e.target.offsetWidth,
-                          height: e.target.offsetHeight,
-                        })}
+                        onLoad={(e) => {
+                          const el = e.target;
+                          requestAnimationFrame(() => setPreviewSize({
+                            width:  el.offsetWidth,
+                            height: el.offsetHeight,
+                          }));
+                        }}
                       />
                     )}
 
-                  {/* ── NEW: static overlay after analysis completes ── */}
                   {analysisComplete && previewSize.width > 0 && previewOverlayDetections.length > 0 && (
                     <DetectionOverlay
                       mode="image"
@@ -1198,7 +1263,6 @@ function CreateReport({ onClose }) {
                       }}
                     />
                   )}
-                  {/* ── END NEW ── */}
 
                   {!isSubmitting && !isAnalyzing && (
                     <button className="trash-btn" onClick={clearMedia} aria-label="Remove file">
@@ -1216,6 +1280,11 @@ function CreateReport({ onClose }) {
                 </div>
               )}
             </div>
+          )}
+
+          {/* ── DETECTION FILMSTRIP (video tab only, after analysis) ── */}
+          {activeTab === "video" && analysisComplete && detectionSnapshots.length > 0 && (
+            <DetectionFilmstrip snapshots={detectionSnapshots} />
           )}
 
           {activeTab === "photo" && !showCamera && !preview && (

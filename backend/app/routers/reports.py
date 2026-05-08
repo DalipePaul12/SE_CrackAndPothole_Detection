@@ -35,27 +35,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
-# ── Inline schemas ─────────────────────────────────────────────────────────────
-
 class CommentCreate(BaseModel):
     content: str
 
 
-# ── Shared helper ──────────────────────────────────────────────────────────────
-
 async def _fetch_report_or_404(db: AsyncSession, report_id: int) -> Report:
-    """
-    Eagerly load media_attachments only.
-    ai_detections is intentionally excluded from list/detail calls —
-    it is only needed when the ML pipeline result is explicitly requested.
-    Removing it here prevents a 500 if the ai_detections table/relationship
-    is not yet migrated, which would be swallowed by safeGet() as an empty list.
-    """
     result = await db.execute(
         select(Report)
         .options(
             selectinload(Report.media_attachments),
-            # selectinload(Report.ai_detections),  ← re-enable after migration
         )
         .where(Report.id == report_id)
     )
@@ -64,8 +52,6 @@ async def _fetch_report_or_404(db: AsyncSession, report_id: int) -> Report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
     return report
 
-
-# ── Core CRUD ──────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
@@ -106,8 +92,6 @@ async def list_reports(
     return ReportListResponse(total=total, page=page, page_size=page_size, results=results)
 
 
-# NOTE: /mine MUST be declared BEFORE /{report_id} — FastAPI matches top-down.
-# If /{report_id} comes first, "mine" is treated as an integer and raises 422.
 @router.get("/mine", response_model=ReportListResponse)
 @limiter.limit("60/minute")
 async def get_my_reports(
@@ -118,7 +102,6 @@ async def get_my_reports(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Returns only reports submitted by the currently authenticated user."""
     reports, total = await report_service.list_reports(
         db, owner_id=current_user.id, status=status, page=page, page_size=page_size
     )
@@ -152,17 +135,23 @@ async def update_report(
     current_user: User = Depends(require_admin_or_contractor),
 ):
     report = await _fetch_report_or_404(db, report_id)
+    owner_id = report.owner_id
     await report_service.update_report_status(db, report, data, current_user)
 
-    if report.owner_id and data.status:
-        background_tasks.add_task(
-            notify_background,
-            user_id=report.owner_id,
-            title="Report Status Updated",
-            message=f"Your report #{report_id} is now {data.status.value}.",
-            type=NotificationType.info,
-            report_id=report_id,
-        )
+    # ── Direct notify — bypass background task entirely ──
+    if owner_id and data.status:
+        from app.services.notification_service import notify
+        try:
+            await notify(
+                db,
+                user_id=owner_id,
+                title="Report Status Updated",
+                message=f"Your report #{report_id} is now {data.status.value}.",
+                type=NotificationType.info,
+                report_id=report_id,
+            )
+        except Exception as e:
+            logger.error(f"Notify failed: {e}")
 
     updated = await _fetch_report_or_404(db, report_id)
     response = ReportResponse.model_validate(updated)
@@ -180,8 +169,6 @@ async def delete_report(
     await db.delete(report)
     await db.commit()
 
-
-# ── Media upload ───────────────────────────────────────────────────────────────
 
 @router.post("/{report_id}/media", status_code=status.HTTP_200_OK)
 @limiter.limit("20/minute")
@@ -260,13 +247,11 @@ async def upload_media(
             },
             "classification": {
                 "damage_type": report.ai_damage_type.value if report.ai_damage_type else None,
-                "severity": report.ai_severity.value if report.ai_severity else None,
+                "severity":    report.ai_severity.value    if report.ai_severity    else None,
             },
         },
     }
 
-
-# ── Upvote ─────────────────────────────────────────────────────────────────────
 
 @router.post("/{report_id}/upvote")
 async def toggle_upvote(
@@ -279,8 +264,6 @@ async def toggle_upvote(
     return {"upvoted": added, "upvote_count": count}
 
 
-# ── Admin actions ──────────────────────────────────────────────────────────────
-
 @router.put("/{report_id}/validate", status_code=status.HTTP_200_OK)
 async def validate_report(
     report_id: int,
@@ -289,13 +272,14 @@ async def validate_report(
     current_user: User = Depends(require_admin),
 ):
     report = await _fetch_report_or_404(db, report_id)
+    owner_id = report.owner_id
     report.status = ReportStatus.VERIFIED
     await db.commit()
 
-    if report.owner_id:
+    if owner_id:
         background_tasks.add_task(
             notify_background,
-            user_id=report.owner_id,
+            user_id=owner_id,
             title="Report Verified",
             message=f"Your report #{report_id} has been verified by an administrator.",
             type=NotificationType.success,
@@ -313,14 +297,15 @@ async def decline_report(
     current_user: User = Depends(require_admin),
 ):
     report = await _fetch_report_or_404(db, report_id)
+    owner_id = report.owner_id
     report.status = ReportStatus.DECLINED
     report.decline_reason = reason
     await db.commit()
 
-    if report.owner_id:
+    if owner_id:
         background_tasks.add_task(
             notify_background,
-            user_id=report.owner_id,
+            user_id=owner_id,
             title="Report Declined",
             message=f"Your report #{report_id} was declined. Reason: {reason}",
             type=NotificationType.warning,
@@ -328,9 +313,6 @@ async def decline_report(
         )
     return {"message": "Report declined."}
 
-
-# ── Comments ───────────────────────────────────────────────────────────────────
-# NOTE: /comments/{id} MUST come before /{report_id} to avoid routing conflict.
 
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(
@@ -382,8 +364,6 @@ async def add_comment(
     await db.refresh(comment)
     return comment
 
-
-# ── Nearby CCTV ────────────────────────────────────────────────────────────────
 
 @router.get("/{report_id}/nearby-cctv")
 async def get_nearby_cctv(

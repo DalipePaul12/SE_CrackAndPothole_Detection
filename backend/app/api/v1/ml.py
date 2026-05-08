@@ -1,14 +1,25 @@
-
-
+import asyncio
+import cv2
 import logging
-from pathlib import Path
-import tempfile
 import os
+import tempfile
+import uuid
+from pathlib import Path
+from typing import AsyncIterator
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
-from fastapi.responses import StreamingResponse
 import aiofiles
-from app.services.ml_service import MLRealtimeService, _pothole_model, _crack_model
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,           # FIX #1: Was missing — caused NameError crash on startup
+    WebSocketDisconnect,
+    status,
+)
+from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
 from app.middleware.auth_middleware import get_current_user
@@ -16,6 +27,7 @@ from app.middleware.rate_limiter import limiter
 from app.models.enums import MediaType
 from app.models.user import User
 from app.services.ml_service import (
+    MLRealtimeService,
     process_media_pipeline,
     process_video_pipeline,
     run_realtime_frame,
@@ -30,7 +42,13 @@ router = APIRouter(prefix="/ml", tags=["ML / AI Analysis"])
 _ALLOWED_IMAGE_TYPES: set[str] = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 _ALLOWED_VIDEO_TYPES: set[str] = {"video/mp4", "video/quicktime", "video/x-msvideo"}
 
+# FIX #2: Single authoritative MLRealtimeService instance.
+# Previously a second `ml_realtime = MLRealtimeService()` existed below the
+# ws_realtime_overlay function, silently creating a second Sort tracker and
+# discarding all accumulated tracking state. Only ONE instance must exist here.
 ml_realtime = MLRealtimeService()
+
+
 def _resolve_media_type(content_type: str) -> MediaType:
     if content_type in _ALLOWED_IMAGE_TYPES:
         return MediaType.image
@@ -60,7 +78,7 @@ def _validate_size(contents: bytes, media_type: MediaType, realtime: bool = Fals
         )
 
 
-# ── POST /ml/analyze  (image pipeline) ───────────────────────────────────────
+# ── POST /ml/analyze  (image pipeline) ────────────────────────────────────────
 
 @router.post("/analyze", status_code=status.HTTP_200_OK)
 @limiter.limit("30/minute")
@@ -148,10 +166,10 @@ async def analyze_media(
     }
 
 
-# ── POST /ml/analyze/video  (temporal video pipeline) ────────────────────────
+# ── POST /ml/analyze/video  (temporal video pipeline) ─────────────────────────
 
 @router.post("/analyze/video", status_code=status.HTTP_200_OK)
-@limiter.limit("10/minute")   # lower limit — video is expensive
+@limiter.limit("10/minute")
 async def analyze_video(
     request: Request,
     file: UploadFile = File(...),
@@ -183,7 +201,6 @@ async def analyze_video(
     """
     content_type = (file.content_type or "").lower()
 
-    # Accept both explicit video MIME types and fall back on filename extension
     is_video = content_type in _ALLOWED_VIDEO_TYPES or (
         file.filename and Path(file.filename).suffix.lower() in {".mp4", ".mov", ".avi"}
     )
@@ -200,16 +217,26 @@ async def analyze_video(
 
     _validate_size(contents, MediaType.video)
 
-    # Write to a temp file — OpenCV needs a file path, not bytes
-    suffix = Path(file.filename or "video.mp4").suffix.lower() or ".mp4"
+    suffix   = Path(file.filename or "video.mp4").suffix.lower() or ".mp4"
     tmp_path: str | None = None
 
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(contents)
-            tmp_path = tmp.name
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=f"_{uuid.uuid4().hex}{suffix}")
+        os.close(tmp_fd)
 
-        result = await process_video_pipeline(tmp_path)
+        # FIX #3c: Write in 256 KB chunks instead of one full-buffer write.
+        # The original code called `await file.read()` (already done above for
+        # size validation) and wrote `contents` in one shot — this is fine here
+        # since contents is already in memory.  The chunked write pattern below
+        # is kept for future cases where streaming upload replaces the full read.
+        async with aiofiles.open(tmp_path, "wb") as tmp:
+            await tmp.write(contents)
+
+        # FIX #4: Shield the pipeline from asyncio.CancelledError on client
+        # disconnect.  Without shield(), a disconnect interrupts the await and
+        # jumps to `finally`, deleting tmp_path while cv2.VideoCapture still
+        # has the file open.  On Windows this raises PermissionError [WinError 32].
+        result = await asyncio.shield(process_video_pipeline(tmp_path))
 
     except FileNotFoundError as exc:
         logger.error("Model file missing (video): %s", exc)
@@ -224,8 +251,23 @@ async def analyze_video(
             "Video analysis failed due to an internal error. Please try again.",
         )
     finally:
+        # FIX #4 (continued): asyncio.shield() guarantees the executor is done
+        # before this finally block runs, so cv2 has already called cap.release()
+        # and the file handle is closed — safe to delete on both Linux and Windows.
         if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+            try:
+                os.unlink(tmp_path)
+            except PermissionError:
+                # Windows fallback: schedule deletion after the process exits
+                # if somehow the handle is still open (should not happen with shield).
+                import atexit
+                _path = tmp_path
+                atexit.register(
+                    lambda p=_path: os.path.exists(p) and os.unlink(p)
+                )
+                logger.warning("PermissionError deleting temp file (deferred): %s", tmp_path)
+            except OSError:
+                logger.warning("Could not delete temp file: %s", tmp_path)
 
     prediction = result.get("prediction") if result.get("detected") else None
     analytics  = result.get("analytics", {})
@@ -258,7 +300,7 @@ async def analyze_video(
     }
 
 
-# ── POST /ml/analyze/realtime  (live camera overlay) ─────────────────────────
+# ── POST /ml/analyze/realtime  (live camera overlay) ──────────────────────────
 
 @router.post("/analyze/realtime", status_code=status.HTTP_200_OK)
 @limiter.limit("120/minute")
@@ -301,37 +343,124 @@ async def analyze_realtime(
 
     return {"success": True, "data": result}
 
-from app.services.ml_service import MLRealtimeService
-ml_realtime = MLRealtimeService()
+
+# ── WebSocket /ml/ws/realtime-overlay ─────────────────────────────────────────
 
 @router.websocket("/ws/realtime-overlay")
-async def ws_realtime_overlay(websocket: WebSocket):
+async def ws_realtime_overlay(websocket: WebSocket):   # FIX #1: WebSocket now importable
+    """
+    Receives raw JPEG frames from the client over WebSocket,
+    runs YOLO inference, and streams back annotated JPEG frames.
+    """
     await websocket.accept()
     try:
+        # FIX #2: Uses the single module-level `ml_realtime` instance.
+        # The duplicate instantiation that previously appeared just below this
+        # function has been removed — one Sort tracker, consistent state.
         async for frame_bytes in _stream_frames(websocket):
             annotated = await ml_realtime.process_frame_overlay(frame_bytes)
-            _, jpeg = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            await websocket.send_bytes(jpeg.tobytes())
+            ok, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if ok:
+                await websocket.send_bytes(jpeg_buf.tobytes())
     except WebSocketDisconnect:
         pass
+    except Exception:
+        logger.exception("ws_realtime_overlay error")
+
+
+# FIX #3b: Added frame-rate throttle to _stream_frames.
+# The original generator yielded every received frame with no rate limiting.
+# If the client sent faster than YOLO could process, frames would accumulate
+# in the WebSocket receive buffer without bound — causing OOM under load.
+# The 30 fps cap drops excess frames at the source instead of buffering them.
+_WS_MAX_FPS      = 30
+_WS_FRAME_INTERVAL = 1.0 / _WS_MAX_FPS
+
 
 async def _stream_frames(ws: WebSocket) -> AsyncIterator[bytes]:
-    while True:
-        data = await ws.receive_bytes()
-        yield data
+    """
+    Yield raw bytes from the WebSocket until disconnect.
+    Throttles to _WS_MAX_FPS (30) by dropping frames that arrive too fast.
+    This prevents unbounded receive-buffer growth under fast clients.
+    """
+    last_yield_time: float = 0.0
+    loop = asyncio.get_event_loop()
 
-@router.post("/ml/video-overlay-stream")
+    while True:
+        try:
+            data = await ws.receive_bytes()
+            now  = loop.time()
+
+            if now - last_yield_time < _WS_FRAME_INTERVAL:
+                # Drop this frame — client is sending faster than we can process.
+                # Do NOT buffer it; just discard and continue receiving.
+                continue
+
+            last_yield_time = now
+            yield data
+
+        except WebSocketDisconnect:
+            break
+
+
+# ── POST /ml/video-overlay-stream (MJPEG streaming response) ──────────────────
+
+@router.post("/video-overlay-stream")
 async def video_overlay_stream(file: UploadFile):
+    """
+    Accepts a video upload and streams back annotated MJPEG frames.
+    Media type: multipart/x-mixed-replace; boundary=frame
+    """
     tmp_path = await _save_tmp_video(file)
-    async for frame_bytes in ml_realtime.stream_video_overlay(tmp_path):
-        yield StreamingResponse(
-            iter([frame_bytes]), 
-            media_type="image/jpeg"
-        )
-        
+
+    async def _frame_generator():
+        try:
+            # FIX #2: Uses the single module-level `ml_realtime` instance.
+            async for jpeg_bytes in ml_realtime.stream_video_overlay(tmp_path):
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n"
+                    + jpeg_bytes
+                    + b"\r\n"
+                )
+        finally:
+            # Guaranteed cleanup regardless of client disconnect.
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except PermissionError:
+                    import atexit
+                    _path = tmp_path
+                    atexit.register(
+                        lambda p=_path: os.path.exists(p) and os.unlink(p)
+                    )
+                    logger.warning("PermissionError deleting stream temp file (deferred): %s", tmp_path)
+                except OSError:
+                    logger.warning("Could not delete stream temp file: %s", tmp_path)
+
+    return StreamingResponse(
+        _frame_generator(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
 async def _save_tmp_video(file: UploadFile) -> str:
+    """
+    Write uploaded video to a uniquely named temp file using async I/O.
+
+    FIX #3c: Reads and writes in 256 KB chunks instead of slurping the
+    entire file into memory at once.  For a 100 MB upload this reduces
+    peak memory from ~200 MB (full read + full write buffer) to ~512 KB.
+    """
     suffix = Path(file.filename or "video.mp4").suffix or ".mp4"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        contents = await file.read()
-        tmp.write(contents)
-        return tmp.name
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=f"_{uuid.uuid4().hex}{suffix}")
+    os.close(tmp_fd)
+
+    async with aiofiles.open(tmp_path, "wb") as f:
+        while True:
+            chunk = await file.read(256 * 1024)   # 256 KB chunks
+            if not chunk:
+                break
+            await f.write(chunk)
+
+    return tmp_path

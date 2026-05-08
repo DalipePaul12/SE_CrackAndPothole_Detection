@@ -1,6 +1,6 @@
 import os
 import logging
-
+import app.db.init_db
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
@@ -37,73 +37,91 @@ from app.api.v1 import ml
 from app.api.v1 import analytics, cctv, media
 
 
-# ── FIX-1: lifespan replaces deprecated @app.on_event ────────────────────────
-# @app.on_event("startup") is deprecated in FastAPI 0.93+ and will be removed.
-# All original startup/shutdown logic is preserved — only the pattern changes.
+# ── Lifespan — startup / shutdown ─────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # ── STARTUP ───────────────────────────────────────────────────────────────
     logger.info("Starting %s [%s]", settings.PROJECT_NAME, settings.ENVIRONMENT)
+
     if settings.AI_ENABLED:
         try:
+            # FIX: Models are loaded HERE at startup so the first real user
+            # request does not pay the 5-15s YOLO cold-start penalty.
+            # load_models() is idempotent — safe to call multiple times.
             from app.services.ml_service import load_models
             load_models()
-            logger.info("Both YOLO models loaded successfully.")
-        except Exception as e:
-            logger.error("Failed to load YOLO models: %s", e)
-            logger.warning("AI endpoints will fail until models are available.")
-    logger.info("Startup complete.")
+            logger.info("✅ Both YOLO models loaded and ready.")
+        except FileNotFoundError as exc:
+            # Missing .pt files — ML endpoints will return 422, but the rest of
+            # the app still starts normally.
+            logger.critical(
+                "❌ Model weights missing: %s — ML endpoints will fail until fixed.", exc
+            )
+        except Exception as exc:
+            logger.error(
+                "❌ Failed to preload YOLO models: %s — AI endpoints may be slow on first call.", exc
+            )
+    else:
+        logger.info("AI_ENABLED=False — skipping model preload.")
 
-    yield  # app runs here
+    logger.info("✅ Startup complete.")
 
-    # Shutdown
-    logger.info("Shutting down.")
+    yield  # ── application runs here ──────────────────────────────────────────
 
+    # ── SHUTDOWN ──────────────────────────────────────────────────────────────
+    logger.info("Shutting down %s.", settings.PROJECT_NAME)
+
+
+# ── FastAPI app ───────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
     description="LGU Road Damage Reporting System with AI-powered pothole/crack detection.",
-    docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
-    redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
+    # Hide docs in production — avoids leaking schema/endpoint info publicly.
+    docs_url="/docs"        if settings.ENVIRONMENT != "production" else None,
+    redoc_url="/redoc"      if settings.ENVIRONMENT != "production" else None,
     openapi_url="/openapi.json" if settings.ENVIRONMENT != "production" else None,
-    lifespan=lifespan,   # FIX-1
+    lifespan=lifespan,
 )
 
 
-# Exception handlers — must be registered before middleware
+# ── Exception handlers ────────────────────────────────────────────────────────
+# Must be registered BEFORE middleware so they can intercept errors thrown
+# from within middleware layers.
+
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(IntegrityError, integrity_error_handler)
-app.add_exception_handler(Exception, unhandled_exception_handler)
+app.add_exception_handler(IntegrityError,         integrity_error_handler)
+app.add_exception_handler(Exception,              unhandled_exception_handler)
 
 
-# ── FIX-2: CORS reads from settings.cors_origins instead of hardcoded list ───
-# The hardcoded ["http://localhost:5173", ...] means any domain you add to
-# BACKEND_CORS_ORIGINS in .env (e.g. staging URL) is silently ignored.
-# settings.cors_origins (built in config.py) merges BACKEND_CORS_ORIGINS +
-# FRONTEND_URLS and always guarantees the two local dev origins are present.
-#
-# ⚠️  CORS must stay as the FIRST add_middleware call — do not reorder.
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Must be the FIRST add_middleware call — Starlette processes middleware in
+# reverse registration order, so CORS must wrap everything else.
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,   # FIX-2
+    allow_origins=settings.cors_origins,   # merged from BACKEND_CORS_ORIGINS + FRONTEND_URLS
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Total-Count"],
 )
 
+# ── Rate limiter ──────────────────────────────────────────────────────────────
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# ── Audit middleware ──────────────────────────────────────────────────────────
 app.add_middleware(AuditMiddleware)
 
+# ── Static file serving ───────────────────────────────────────────────────────
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 
-# ── AI Validation Router ───────────────────────────────────────────────────────
+# ── AI Validation Router ──────────────────────────────────────────────────────
 
 class AIValidateRequest(BaseModel):
     media_id: int
@@ -127,14 +145,17 @@ async def ai_validate(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
 
     if media.is_ai_generated is None:
-        raise HTTPException(status_code=status.HTTP_202_ACCEPTED, detail="AI validation still processing")
+        raise HTTPException(
+            status_code=status.HTTP_202_ACCEPTED,
+            detail="AI validation still processing",
+        )
 
     return {
         "success": True,
         "data": {
             "is_ai_generated": media.is_ai_generated,
-            "confidence": media.ai_generated_confidence or 0.0,
-            "status": "rejected" if media.is_ai_generated else "approved_for_classification",
+            "confidence":      media.ai_generated_confidence or 0.0,
+            "status":          "rejected" if media.is_ai_generated else "approved_for_classification",
         },
     }
 
@@ -162,7 +183,10 @@ async def ml_classify(
     media = media_result.scalar_one_or_none()
 
     if not media:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Media not found",
+        )
 
     if media.is_ai_generated:
         raise HTTPException(
@@ -185,21 +209,28 @@ async def ml_classify(
 
     if not detections:
         if not media.is_processed:
-            raise HTTPException(status_code=status.HTTP_202_ACCEPTED, detail="ML classification still processing")
-        return {"success": True, "data": {"label": "none", "confidence": 0.0, "severity": None}}
+            raise HTTPException(
+                status_code=status.HTTP_202_ACCEPTED,
+                detail="ML classification still processing",
+            )
+        return {
+            "success": True,
+            "data": {"label": "none", "confidence": 0.0, "severity": None},
+        }
 
     best = detections[0]
     return {
         "success": True,
         "data": {
-            "label": best.detected_class.value,
+            "label":      best.detected_class.value,
             "confidence": round(best.confidence, 4),
-            "severity": best.severity.value if best.severity else None,
+            "severity":   best.severity.value if best.severity else None,
         },
     }
 
 
-# ── Routers ────────────────────────────────────────────────────────────────────
+# ── Route registration ────────────────────────────────────────────────────────
+
 PREFIX = settings.API_V1_STR
 
 app.include_router(auth.router,          prefix=PREFIX)
@@ -215,13 +246,29 @@ app.include_router(ml.router,            prefix=PREFIX)
 app.include_router(ws.router)
 
 
-# ── Health check ───────────────────────────────────────────────────────────────
+# ── Health check ──────────────────────────────────────────────────────────────
+
 @app.get("/health", tags=["Health"])
 async def health():
+    """
+    Public endpoint — no auth required.
+    Used by Docker/K8s probes and uptime monitors.
+    """
     return {
-        "status": "ok",
-        "environment": settings.ENVIRONMENT,
-        "ai_enabled": settings.AI_ENABLED,
-        "fake_detection_enabled": settings.AI_FAKE_DETECTION_ENABLED,
-        "version": "1.0.0",
+        "status":                  "ok",
+        "environment":             settings.ENVIRONMENT,
+        "ai_enabled":              settings.AI_ENABLED,
+        "fake_detection_enabled":  settings.AI_FAKE_DETECTION_ENABLED,
+        "version":                 "1.0.0",
     }
+    
+import traceback
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def debug_exception_handler(request, exc):
+    traceback.print_exc()  # prints full traceback to terminal
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__}
+    )

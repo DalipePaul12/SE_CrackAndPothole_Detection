@@ -1,12 +1,12 @@
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, DateTime,
-    Enum as SQLEnum, Float, ForeignKey, Integer, String, Index
+    Enum as SQLEnum, Float, ForeignKey, Integer, String, Text, Index
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base
-from app.models.enums import DamageType, ReportStatus, SeverityLevel
+from app.models.enums import DamageType, ReportStatus, ReportType, SeverityLevel
 
 
 class Report(Base):
@@ -22,10 +22,12 @@ class Report(Base):
             name="ck_report_fake_confidence_range",
         ),
 
-        # useful indexes for performance
-        Index("idx_report_status", "status"),
-        Index("idx_report_barangay", "barangay"),
-        Index("idx_report_ai_damage_type", "ai_damage_type"),
+        # Indexes for performance
+        Index("idx_report_status",         "status"),
+        Index("idx_report_barangay",        "barangay"),
+        Index("idx_report_ai_damage_type",  "ai_damage_type"),
+        Index("idx_report_type",            "report_type"),
+        Index("idx_report_is_hybrid",       "is_hybrid"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -36,16 +38,15 @@ class Report(Base):
         nullable=True,
     )
 
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
-    barangay = Column(String, nullable=True)
+    latitude   = Column(Float,  nullable=False)
+    longitude  = Column(Float,  nullable=False)
+    barangay   = Column(String, nullable=True)
     street_name = Column(String, nullable=True)
 
-    # removed direct dependency on single image
-    # use media_attachments instead
+    # Removed direct dependency on single image — use media_attachments instead
     description = Column(String, nullable=True)
 
-    # ML RESULTS (nullable until classification runs)
+    # ── ML RESULTS (nullable until classification runs) ──────────────────────
     ai_damage_type = Column(
         SQLEnum(DamageType, name="damagetype", create_type=True),
         nullable=True,
@@ -60,9 +61,33 @@ class Report(Base):
 
     ai_confidence = Column(Float, nullable=True)
 
-    # AI FAKE DETECTION (derived from media_attachments)
+    # ── AI FAKE DETECTION (derived from media_attachments) ───────────────────
     is_flagged_fake = Column(Boolean, default=False, nullable=False)
-    fake_confidence = Column(Float, nullable=True)
+    fake_confidence = Column(Float,   nullable=True)
+
+    # ── VIDEO / HYBRID ───────────────────────────────────────────────────────
+    report_type = Column(
+        SQLEnum(ReportType, name="reporttype", create_type=True),
+        default=ReportType.image,
+        nullable=False,
+    )
+
+    # Relative path to the stored video file (e.g. /uploads/abc123.webm)
+    video_path = Column(String, nullable=True)
+
+    # True when both crack AND pothole are detected across video frames
+    is_hybrid = Column(Boolean, default=False, nullable=False)
+
+    # The secondary damage type on hybrid reports (e.g. pothole when primary is crack)
+    secondary_damage = Column(
+        SQLEnum(DamageType, name="damagetype_secondary", create_type=True),
+        nullable=True,
+    )
+
+    # Human-readable note produced by resolve_hybrid()
+    # e.g. "Also detected crack in 4 frame(s) with avg confidence 0.71"
+    detection_note = Column(Text, nullable=True)
+    # ─────────────────────────────────────────────────────────────────────────
 
     is_potential_duplicate = Column(Boolean, default=False)
 
@@ -80,6 +105,7 @@ class Report(Base):
     )
 
     decline_reason = Column(String, nullable=True)
+    assigned_to    = Column(String, nullable=True)
 
     view_count = Column(Integer, default=0)
 
@@ -95,7 +121,7 @@ class Report(Base):
         onupdate=func.now(),
     )
 
-    # RELATIONSHIPS
+    # ── RELATIONSHIPS ────────────────────────────────────────────────────────
 
     owner = relationship("User", back_populates="reports")
 
@@ -141,3 +167,8 @@ class Report(Base):
         remote_side="Report.id",
         foreign_keys=[duplicate_of_id],
     )
+    frame_detections = relationship(
+    "FrameDetection",
+    back_populates="report",
+    cascade="all, delete-orphan",
+)

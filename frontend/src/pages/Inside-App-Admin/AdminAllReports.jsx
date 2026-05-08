@@ -4,18 +4,21 @@ import "./AdminAllReports.css";
 import AdminSidebar from "../../components/AdminSidebar.jsx";
 import AdminHeader  from "../../components/AdminHeader.jsx";
 import { getReports, updateReport, deleteReport, addComment } from "../../api/reports";
+import { sendNotification } from "../../api/notifications";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+/* ─── constants ────────────────────────────────────────────────────────────── */
 const BASE_URL    = import.meta.env.VITE_API_URL || "";
 const PAGE_SIZE   = 20;
 const TYPE_OPTIONS   = ["All", "Crack", "Pothole"];
 const STATUS_OPTIONS = ["All", "PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED", "DECLINED"];
 const TEAM_OPTIONS   = ["Unassigned", "Road Team A", "Road Team B", "Maintenance Unit", "Emergency Response"];
 const STATUS_LABELS  = {
-  PENDING: "Pending", VERIFIED: "Verified",
-  IN_PROGRESS: "In Progress", RESOLVED: "Resolved", DECLINED: "Declined",
+  PENDING:     "Pending",
+  VERIFIED:    "Verified",
+  IN_PROGRESS: "In Progress",
+  RESOLVED:    "Resolved",
+  DECLINED:    "Declined",
 };
-// Enforce valid status workflow transitions
 const STATUS_TRANSITIONS = {
   PENDING:     ["VERIFIED", "DECLINED"],
   VERIFIED:    ["IN_PROGRESS", "DECLINED"],
@@ -25,7 +28,15 @@ const STATUS_TRANSITIONS = {
 };
 const STATUS_FLOW_ORDER = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Notification messages sent to reporters on each status change
+const NOTIF_TEMPLATES = {
+  VERIFIED:    (r) => ({ title: "Your report has been verified ✓",       message: `Report ${padId(r.id)} at ${location(r)} has been verified by our team.`,                  type: "success" }),
+  IN_PROGRESS: (r) => ({ title: "Repairs are underway 🔧",               message: `Work has started on the road damage at ${location(r)} that you reported.`,                type: "info"    }),
+  RESOLVED:    (r) => ({ title: "Your report has been resolved ✅",       message: `The road damage at ${location(r)} has been fully repaired. Thank you for reporting!`,     type: "success" }),
+  DECLINED:    (r, reason) => ({ title: "Your report has been declined",  message: reason ? `Your report was declined: ${reason}` : "Your report was reviewed and declined.", type: "warning" }),
+};
+
+/* ─── helpers ──────────────────────────────────────────────────────────────── */
 const toClass  = (s = "") => s.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 const fmtDate  = (iso) => iso ? new Date(iso).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "—";
 const padId    = (id) => `RPT-${String(id).padStart(4, "0")}`;
@@ -35,7 +46,6 @@ const damageType = (r) => r.ai_damage_type ?? r.damage_type ?? "—";
 const severity   = (r) => r.ai_severity    ?? r.severity    ?? "—";
 const location   = (r) => r.location_address ?? r.barangay  ?? "—";
 
-// ML Confidence helpers
 const confVal = (r) => {
   const v = r.ai_confidence ?? r.confidence;
   if (v == null) return null;
@@ -48,40 +58,46 @@ const confColor = (v) => {
   if (v < 80)  return "#f57c00";
   return "#2e7d32";
 };
-
-// Severity sort weight
 const sevWeight = (r) => {
   const map = { critical: 0, "non-critical": 1, low: 2 };
   return map[severity(r).toLowerCase()] ?? 99;
 };
 
-// CSV export
 function exportCSV(rows) {
-  const headers = ["ID","Type","Severity","AI Conf","Status","Location","Street","Barangay","Date"];
+  const headers = ["ID", "Type", "Severity", "AI Conf", "Status", "Location", "Street", "Barangay", "Reporter", "Date"];
   const escape  = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines   = [headers.map(escape).join(","),
+  const lines   = [
+    headers.map(escape).join(","),
     ...rows.map((r) => [
-      padId(r.id), damageType(r), severity(r),
+      padId(r.id),
+      damageType(r),
+      severity(r),
       confVal(r) != null ? `${confVal(r)}%` : "",
-      r.status ?? "", location(r), r.street_name ?? "", r.barangay ?? "",
+      r.status ?? "",
+      location(r),
+      r.street_name ?? "",
+      r.barangay ?? "",
+      r.owner?.full_name ?? "Anonymous",
       r.created_at ? new Date(r.created_at).toLocaleDateString() : "",
     ].map(escape).join(",")),
   ];
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
-  a.href = url; a.download = `reports_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click(); URL.revokeObjectURL(url);
+  a.href = url;
+  a.download = `reports_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/* ─── main component ───────────────────────────────────────────────────────── */
 export default function AdminAllReports() {
   const navigate = useNavigate();
 
-  // ── Search & Filters ──
-  const [search,   setSearch]   = useState("");
-  const [dSearch,  setDSearch]  = useState("");  // debounced
-  const [filters,  setFilters]  = useState({
+  /* filters */
+  const [search,      setSearch]      = useState("");
+  const [dSearch,     setDSearch]     = useState("");
+  const [filters,     setFilters]     = useState({
     type: "All", severity: "All", status: "All", barangay: "All",
     dateFrom: "", dateTo: "", confMin: 0, confMax: 100,
   });
@@ -89,27 +105,33 @@ export default function AdminAllReports() {
   const [criticalOnly,setCriticalOnly]= useState(false);
   const [page,        setPage]        = useState(1);
 
-  // ── Data ──
-  const [reports,  setReports]  = useState([]);
-  const [total,    setTotal]    = useState(0);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState(null);
-  const [barangays,setBarangays]= useState(["All"]);
+  /* data */
+  const [reports,   setReports]   = useState([]);
+  const [total,     setTotal]     = useState(0);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState(null);
+  const [barangays, setBarangays] = useState(["All"]);
 
-  // ── UI state ──
-  const [selectedIds,   setSelectedIds]   = useState(new Set());
-  const [bulkLoading,   setBulkLoading]   = useState(false);
-  const [actionLoading, setActionLoading] = useState({});
-  const [selectedReport,setSelectedReport]= useState(null);
-  const [showFilters,   setShowFilters]   = useState(true);
+  /* UI */
+  const [selectedIds,    setSelectedIds]    = useState(new Set());
+  const [bulkLoading,    setBulkLoading]    = useState(false);
+  const [actionLoading,  setActionLoading]  = useState({});
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [showFilters,    setShowFilters]    = useState(true);
+  const [toast,          setToast]          = useState(null);
 
-  // Debounce search 400ms
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3_500);
+  };
+
+  /* debounce search */
   useEffect(() => {
     const t = setTimeout(() => { setDSearch(search); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
 
-  // ── Fetch & process reports ──
+  /* fetch */
   const fetchReports = useCallback(async () => {
     setLoading(true); setError(null);
     const params = { page, page_size: PAGE_SIZE };
@@ -120,12 +142,11 @@ export default function AdminAllReports() {
     let data = res.data?.results ?? [];
     setTotal(res.data?.total ?? 0);
 
-    // Collect unique barangays from results
     const bSet = new Set(["All"]);
     data.forEach((r) => { if (r.barangay) bSet.add(r.barangay); });
     setBarangays([...bSet]);
 
-    // ── Client-side filtering ──
+    /* client-side filters */
     if (filters.type !== "All")
       data = data.filter((r) => damageType(r).toLowerCase() === filters.type.toLowerCase());
     if (filters.severity !== "All")
@@ -151,17 +172,18 @@ export default function AdminAllReports() {
       data = data.filter((r) =>
         padId(r.id).toLowerCase().includes(q) ||
         (r.street_name ?? "").toLowerCase().includes(q) ||
-        (r.barangay    ?? "").toLowerCase().includes(q) ||
-        (location(r)     .toLowerCase()).includes(q)
+        (r.barangay ?? "").toLowerCase().includes(q) ||
+        location(r).toLowerCase().includes(q) ||
+        (r.owner?.full_name ?? "").toLowerCase().includes(q)
       );
     }
 
-    // ── Sorting ──
+    /* sort */
     const { field, dir } = sort;
     data = [...data].sort((a, b) => {
       let av, bv;
-      if (field === "created_at") { av = new Date(a.created_at || 0); bv = new Date(b.created_at || 0); }
-      else if (field === "severity")   { av = sevWeight(a);    bv = sevWeight(b); }
+      if (field === "created_at")  { av = new Date(a.created_at || 0);  bv = new Date(b.created_at || 0);  }
+      else if (field === "severity")   { av = sevWeight(a);     bv = sevWeight(b);     }
       else if (field === "confidence") { av = confVal(a) ?? -1; bv = confVal(b) ?? -1; }
       else if (field === "status") {
         const o = { PENDING: 0, VERIFIED: 1, IN_PROGRESS: 2, RESOLVED: 3, DECLINED: 4 };
@@ -178,38 +200,66 @@ export default function AdminAllReports() {
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
-  // ── Sort helper ──
+  /* sort */
   const toggleSort = (field) =>
-    setSort((p) => p.field === field ? { field, dir: p.dir === "asc" ? "desc" : "asc" } : { field, dir: "desc" });
+    setSort((p) => p.field === field
+      ? { field, dir: p.dir === "asc" ? "desc" : "asc" }
+      : { field, dir: "desc" }
+    );
 
   const SortIcon = ({ field }) =>
-    sort.field !== field ? <span className="sort-neutral">↕</span>
+    sort.field !== field
+      ? <span className="sort-neutral">↕</span>
       : <span className="sort-active">{sort.dir === "asc" ? "↑" : "↓"}</span>;
 
-  // ── Filter helper ──
-  const setFilter = (k, v) => { setFilters((p) => ({ ...p, [k]: v })); setPage(1); };
+  /* filter helpers */
+  const setFilter    = (k, v) => { setFilters((p) => ({ ...p, [k]: v })); setPage(1); };
   const resetFilters = () => {
     setFilters({ type: "All", severity: "All", status: "All", barangay: "All", dateFrom: "", dateTo: "", confMin: 0, confMax: 100 });
     setSearch(""); setPage(1); setCriticalOnly(false);
   };
 
-  // ── Inline status change ──
+  /* status change + notify */
   const handleStatusChange = async (reportId, newStatus, declineReason = "") => {
     setActionLoading((p) => ({ ...p, [reportId]: true }));
+
     const payload = { status: newStatus };
     if (newStatus === "DECLINED" && declineReason) payload.decline_reason = declineReason;
+
     const res = await updateReport(reportId, payload);
     if (res.success) {
-      setReports((prev) => prev.map((r) =>
-        r.id === reportId ? { ...r, status: newStatus, decline_reason: declineReason || r.decline_reason } : r
-      ));
-      if (selectedReport?.id === reportId) setSelectedReport((p) => ({ ...p, status: newStatus }));
+      setReports((prev) =>
+        prev.map((r) =>
+          r.id === reportId
+            ? { ...r, status: newStatus, decline_reason: declineReason || r.decline_reason }
+            : r
+        )
+      );
+      if (selectedReport?.id === reportId)
+        setSelectedReport((p) => ({ ...p, status: newStatus }));
+
+      // Notify the report owner
+      const report = reports.find((r) => r.id === reportId);
+      if (report?.owner?.id) {
+        const tmplFn = NOTIF_TEMPLATES[newStatus];
+        if (tmplFn) {
+          const notif = newStatus === "DECLINED"
+            ? tmplFn(report, declineReason)
+            : tmplFn(report);
+          await sendNotification({ user_id: report.owner.id, report_id: reportId, ...notif });
+        }
+      }
+
+      showToast(`${padId(reportId)} → ${STATUS_LABELS[newStatus]} ✓`);
+    } else {
+      showToast(res.error || "Update failed.", "error");
     }
+
     setActionLoading((p) => ({ ...p, [reportId]: false }));
     return res;
   };
 
-  // ── Bulk selection ──
+  /* bulk */
   const toggleSelect = (id) =>
     setSelectedIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = () =>
@@ -222,26 +272,26 @@ export default function AdminAllReports() {
     if (action === "delete") {
       await Promise.all(ids.map((id) => deleteReport(id)));
     } else {
-      await Promise.all(ids.map((id) => updateReport(id, { status: action })));
+      await Promise.all(ids.map((id) => handleStatusChange(id, action)));
     }
     setSelectedIds(new Set());
     await fetchReports();
     setBulkLoading(false);
+    showToast(`Bulk action applied to ${ids.length} report(s) ✓`);
   };
 
-  // ── View on map ──
+  /* map nav */
   const viewOnMap = (r, e) => {
     e.stopPropagation();
     navigate("/admin/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } });
   };
 
-  // ── Pagination ──
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageStart = (page - 1) * PAGE_SIZE + 1;
-  const pageEnd   = Math.min(page * PAGE_SIZE, total);
+  /* pagination */
+  const pageCount   = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageStart   = (page - 1) * PAGE_SIZE + 1;
+  const pageEnd     = Math.min(page * PAGE_SIZE, total);
   const allSelected = reports.length > 0 && selectedIds.size === reports.length;
 
-  // Visible page numbers (sliding window of 5)
   const visiblePages = (() => {
     const half  = 2;
     let start   = Math.max(1, page - half);
@@ -250,13 +300,49 @@ export default function AdminAllReports() {
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   })();
 
+  /* stats */
+  const stats = {
+    total:    total,
+    critical: reports.filter((r) => severity(r).toLowerCase() === "critical").length,
+    pending:  reports.filter((r) => r.status === "PENDING").length,
+    resolved: reports.filter((r) => r.status === "RESOLVED").length,
+  };
+
   return (
     <>
       <AdminSidebar />
       <AdminHeader />
 
+      {/* Toast */}
+      {toast && (
+        <div className={`aar-toast aar-toast--${toast.type}`}>
+          {toast.msg}
+        </div>
+      )}
+
       <div className="aar-container">
-        {/* ═══ TOPBAR ═══ */}
+
+        {/* ── Stats ── */}
+        <div className="aar-stats-row">
+          <div className="aar-stat aar-stat--total">
+            <div className="aar-stat-value">{stats.total.toLocaleString()}</div>
+            <div className="aar-stat-label">Total Reports</div>
+          </div>
+          <div className="aar-stat aar-stat--critical">
+            <div className="aar-stat-value">{stats.critical}</div>
+            <div className="aar-stat-label">Critical</div>
+          </div>
+          <div className="aar-stat aar-stat--pending">
+            <div className="aar-stat-value">{stats.pending}</div>
+            <div className="aar-stat-label">Pending</div>
+          </div>
+          <div className="aar-stat aar-stat--resolved">
+            <div className="aar-stat-value">{stats.resolved}</div>
+            <div className="aar-stat-label">Resolved</div>
+          </div>
+        </div>
+
+        {/* ── Topbar ── */}
         <div className="aar-topbar">
           <div className="aar-title-group">
             <h1 className="aar-title">Reports Database</h1>
@@ -265,17 +351,15 @@ export default function AdminAllReports() {
 
           <div className="aar-search-wrap">
             <svg className="search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
             </svg>
             <input
               className="aar-search"
-              placeholder="Search by ID, street, barangay…"
+              placeholder="Search ID, street, barangay, reporter…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            {search && (
-              <button className="search-clear" onClick={() => setSearch("")}>×</button>
-            )}
+            {search && <button className="search-clear" onClick={() => setSearch("")}>×</button>}
           </div>
 
           <div className="aar-topbar-actions">
@@ -283,7 +367,7 @@ export default function AdminAllReports() {
               className={`btn-critical-toggle ${criticalOnly ? "active" : ""}`}
               onClick={() => { setCriticalOnly((p) => !p); setPage(1); }}
             >
-               Critical Only
+              🔴 Critical Only
             </button>
             <button className="btn-filter-toggle" onClick={() => setShowFilters((p) => !p)}>
               ⚙ Filters {showFilters ? "▲" : "▼"}
@@ -294,25 +378,23 @@ export default function AdminAllReports() {
           </div>
         </div>
 
-        {/* ═══ FILTERS PANEL ═══ */}
+        {/* ── Filters Panel ── */}
         <div className={`aar-filters-panel ${showFilters ? "open" : "closed"}`}>
           <div className="aar-filters-grid">
 
-            {/* Type */}
             <div className="filter-group">
               <label>Damage Type</label>
               <div className="filter-btn-row">
                 {TYPE_OPTIONS.map((t) => (
-                  <button key={t}
+                  <button
+                    key={t}
                     className={`flt-btn ${filters.type === t ? "active" : ""}`}
-                    onClick={() => setFilter("type", t)}>
-                    {t}
-                  </button>
+                    onClick={() => setFilter("type", t)}
+                  >{t}</button>
                 ))}
               </div>
             </div>
 
-            {/* Status */}
             <div className="filter-group">
               <label>Status</label>
               <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
@@ -322,7 +404,6 @@ export default function AdminAllReports() {
               </select>
             </div>
 
-            {/* Severity */}
             <div className="filter-group">
               <label>Severity</label>
               <select value={filters.severity} onChange={(e) => setFilter("severity", e.target.value)}>
@@ -333,7 +414,6 @@ export default function AdminAllReports() {
               </select>
             </div>
 
-            {/* Barangay */}
             <div className="filter-group">
               <label>Barangay</label>
               <select value={filters.barangay} onChange={(e) => setFilter("barangay", e.target.value)}>
@@ -343,21 +423,16 @@ export default function AdminAllReports() {
               </select>
             </div>
 
-            {/* Date From */}
             <div className="filter-group">
               <label>Date From</label>
-              <input type="date" value={filters.dateFrom}
-                onChange={(e) => setFilter("dateFrom", e.target.value)} />
+              <input type="date" value={filters.dateFrom} onChange={(e) => setFilter("dateFrom", e.target.value)} />
             </div>
 
-            {/* Date To */}
             <div className="filter-group">
               <label>Date To</label>
-              <input type="date" value={filters.dateTo}
-                onChange={(e) => setFilter("dateTo", e.target.value)} />
+              <input type="date" value={filters.dateTo} onChange={(e) => setFilter("dateTo", e.target.value)} />
             </div>
 
-            {/* AI Confidence range */}
             <div className="filter-group filter-conf-group">
               <label>AI Confidence: <strong>{filters.confMin}%–{filters.confMax}%</strong></label>
               <div className="conf-dual-range">
@@ -377,18 +452,16 @@ export default function AdminAllReports() {
           </div>
         </div>
 
-        {/* ═══ BULK ACTION BAR ═══ */}
+        {/* ── Bulk Bar ── */}
         {selectedIds.size > 0 && (
           <div className="aar-bulk-bar">
-            <span className="bulk-count">
-              <strong>{selectedIds.size}</strong> selected
-            </span>
+            <span className="bulk-count"><strong>{selectedIds.size}</strong> selected</span>
             <div className="bulk-actions">
-              <button onClick={() => bulkAction("VERIFIED")}   disabled={bulkLoading} className="bulk-btn bulk-verify">✓ Verify</button>
-              <button onClick={() => bulkAction("IN_PROGRESS")}disabled={bulkLoading} className="bulk-btn bulk-progress">⚙ In Progress</button>
-              <button onClick={() => bulkAction("RESOLVED")}   disabled={bulkLoading} className="bulk-btn bulk-resolve">✔ Resolve</button>
-              <button onClick={() => bulkAction("DECLINED")}   disabled={bulkLoading} className="bulk-btn bulk-decline">✗ Decline</button>
-              <button onClick={() => bulkAction("delete")}     disabled={bulkLoading} className="bulk-btn bulk-delete">🗑 Delete</button>
+              <button onClick={() => bulkAction("VERIFIED")}    disabled={bulkLoading} className="bulk-btn bulk-verify">✓ Verify</button>
+              <button onClick={() => bulkAction("IN_PROGRESS")} disabled={bulkLoading} className="bulk-btn bulk-progress">⚙ In Progress</button>
+              <button onClick={() => bulkAction("RESOLVED")}    disabled={bulkLoading} className="bulk-btn bulk-resolve">✔ Resolve</button>
+              <button onClick={() => bulkAction("DECLINED")}    disabled={bulkLoading} className="bulk-btn bulk-decline">✗ Decline</button>
+              <button onClick={() => bulkAction("delete")}      disabled={bulkLoading} className="bulk-btn bulk-delete">🗑 Delete</button>
             </div>
             <button className="bulk-cancel" onClick={() => setSelectedIds(new Set())}>✕ Cancel</button>
             {bulkLoading && <span className="bulk-spinner">Processing…</span>}
@@ -402,19 +475,24 @@ export default function AdminAllReports() {
           </div>
         )}
 
-        {/* ═══ TABLE ═══ */}
+        {/* ── Table ── */}
         <div className="aar-table-card">
           <div className="aar-table-scroll">
             <table className="aar-table">
               <thead>
                 <tr>
                   <th className="th-check">
-                    <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                      ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allSelected; }} />
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allSelected; }}
+                    />
                   </th>
                   <th className="th-report sortable" onClick={() => toggleSort("id")}>
                     Report <SortIcon field="id" />
                   </th>
+                  <th className="th-reporter">Reporter</th>
                   <th className="th-thumb">Photo</th>
                   <th className="th-type">Type</th>
                   <th className="th-sev sortable" onClick={() => toggleSort("severity")}>
@@ -437,14 +515,14 @@ export default function AdminAllReports() {
                 {loading ? (
                   [...Array(8)].map((_, i) => (
                     <tr key={i} className="skeleton-row">
-                      {[...Array(9)].map((_, j) => (
+                      {[...Array(10)].map((_, j) => (
                         <td key={j}><div className="skeleton-cell" /></td>
                       ))}
                     </tr>
                   ))
                 ) : reports.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="aar-empty">
+                    <td colSpan="10" className="aar-empty">
                       <div className="empty-state">
                         <span className="empty-icon">📋</span>
                         <p>No reports match your current filters</p>
@@ -454,16 +532,16 @@ export default function AdminAllReports() {
                   </tr>
                 ) : (
                   reports.map((r) => {
-                    const conf       = confVal(r);
-                    const sev        = severity(r);
-                    const isCritical = sev.toLowerCase() === "critical";
-                    const thumb      = r.media_attachments?.[0];
-                    const thumbUrl   = thumb ? mediaUrl(thumb) : null;
-                    const transitions= STATUS_TRANSITIONS[r.status] ?? [];
-                    const isActing   = !!actionLoading[r.id];
-                    const isNew      = r.created_at && (Date.now() - new Date(r.created_at)) < 86_400_000;
-                    const lowConf    = conf !== null && conf < 50;
-                    const isSelected = selectedIds.has(r.id);
+                    const conf        = confVal(r);
+                    const sev         = severity(r);
+                    const isCritical  = sev.toLowerCase() === "critical";
+                    const thumb       = r.media_attachments?.[0];
+                    const thumbUrl    = thumb ? mediaUrl(thumb) : null;
+                    const transitions = STATUS_TRANSITIONS[r.status] ?? [];
+                    const isActing    = !!actionLoading[r.id];
+                    const isNew       = r.created_at && (Date.now() - new Date(r.created_at)) < 86_400_000;
+                    const lowConf     = conf !== null && conf < 50;
+                    const isSelected  = selectedIds.has(r.id);
 
                     return (
                       <tr
@@ -476,15 +554,20 @@ export default function AdminAllReports() {
                           <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(r.id)} />
                         </td>
 
-                        {/* Report ID + location + flags */}
+                        {/* Report ID */}
                         <td className="td-report">
                           <span className="report-id">{padId(r.id)}</span>
                           <span className="report-loc" title={location(r)}>{location(r)}</span>
                           <div className="report-flags">
-                            {isNew   && <span className="flag flag-new">NEW</span>}
-                            {lowConf && <span className="flag flag-review">⚠ Low AI</span>}
+                            {isNew      && <span className="flag flag-new">NEW</span>}
+                            {lowConf    && <span className="flag flag-review">⚠ Low AI</span>}
                             {isCritical && <span className="flag flag-critical">🔴</span>}
                           </div>
+                        </td>
+
+                        {/* Reporter */}
+                        <td className="td-reporter">
+                          <span className="reporter-name">{r.owner?.full_name ?? "—"}</span>
                         </td>
 
                         {/* Thumbnail */}
@@ -516,10 +599,7 @@ export default function AdminAllReports() {
                             <div className="conf-display">
                               <span className="conf-pct" style={{ color: confColor(conf) }}>{conf}%</span>
                               <div className="conf-bar-track">
-                                <div
-                                  className="conf-bar-fill"
-                                  style={{ width: `${conf}%`, background: confColor(conf) }}
-                                />
+                                <div className="conf-bar-fill" style={{ width: `${conf}%`, background: confColor(conf) }} />
                               </div>
                             </div>
                           ) : <span className="conf-na">—</span>}
@@ -537,7 +617,7 @@ export default function AdminAllReports() {
                           {r.created_at ? new Date(r.created_at).toLocaleDateString("en-PH") : "—"}
                         </td>
 
-                        {/* Inline Actions */}
+                        {/* Actions */}
                         <td className="td-actions" onClick={(e) => e.stopPropagation()}>
                           <div className="inline-actions">
                             {transitions.length > 0 && (
@@ -555,20 +635,8 @@ export default function AdminAllReports() {
                                 ))}
                               </select>
                             )}
-                            <button
-                              className="act-map-btn"
-                              onClick={(e) => viewOnMap(r, e)}
-                              title="View on Map"
-                            >
-                              📍
-                            </button>
-                            <button
-                              className="act-detail-btn"
-                              onClick={() => setSelectedReport(r)}
-                              title="View Details"
-                            >
-                              ↗
-                            </button>
+                            <button className="act-map-btn"    onClick={(e) => viewOnMap(r, e)} title="View on Map">📍</button>
+                            <button className="act-detail-btn" onClick={() => setSelectedReport(r)} title="View Details">↗</button>
                             {isActing && <span className="act-spinner">⟳</span>}
                           </div>
                         </td>
@@ -581,27 +649,27 @@ export default function AdminAllReports() {
           </div>
         </div>
 
-        {/* ═══ PAGINATION ═══ */}
+        {/* ── Pagination ── */}
         <div className="aar-pagination">
           <span className="page-info">
             Showing <strong>{total ? pageStart : 0}–{pageEnd}</strong> of <strong>{total.toLocaleString()}</strong> reports
           </span>
           <div className="page-controls">
-            <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)} title="First">«</button>
-            <button className="page-btn" disabled={page === 1} onClick={() => setPage((p) => p - 1)} title="Previous">‹</button>
+            <button className="page-btn" disabled={page === 1}         onClick={() => setPage(1)}              title="First">«</button>
+            <button className="page-btn" disabled={page === 1}         onClick={() => setPage((p) => p - 1)}   title="Previous">‹</button>
             {visiblePages.map((p) => (
               <button key={p} className={`page-btn ${page === p ? "page-active" : ""}`} onClick={() => setPage(p)}>
                 {p}
               </button>
             ))}
-            <button className="page-btn" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)} title="Next">›</button>
-            <button className="page-btn" disabled={page >= pageCount} onClick={() => setPage(pageCount)} title="Last">»</button>
+            <button className="page-btn" disabled={page >= pageCount}  onClick={() => setPage((p) => p + 1)}   title="Next">›</button>
+            <button className="page-btn" disabled={page >= pageCount}  onClick={() => setPage(pageCount)}      title="Last">»</button>
           </div>
           <span className="page-size-info">Page {page} of {pageCount}</span>
         </div>
       </div>
 
-      {/* ═══ MODAL ═══ */}
+      {/* ── Detail Modal ── */}
       {selectedReport && (
         <ReportModal
           report={selectedReport}
@@ -615,30 +683,35 @@ export default function AdminAllReports() {
   );
 }
 
-// ─── Enhanced Report Modal ────────────────────────────────────────────────────
+/* ────────────────────────────────────────────────────────────────────────────
+   REPORT DETAIL MODAL
+──────────────────────────────────────────────────────────────────────────── */
 function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navigate }) {
-  const [r, setR]             = useState(initial);
-  const [activeTab, setTab]   = useState("details");
-  const [comments, setComments] = useState([]);
-  const [newNote,  setNewNote]  = useState("");
-  const [assignedTo, setAssigned] = useState(initial.assigned_to ?? "Unassigned");
+  const [r,             setR]             = useState(initial);
+  const [activeTab,     setTab]           = useState("details");
+  const [comments,      setComments]      = useState([]);
+  const [newNote,       setNewNote]       = useState("");
+  const [assignedTo,    setAssigned]      = useState(initial.assigned_to ?? "Unassigned");
   const [declineReason, setDeclineReason] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [imgErrors, setImgErrors]   = useState({});
-  const [noteLoading, setNoteLoading] = useState(false);
+  const [submitting,    setSubmitting]    = useState(false);
+  const [imgErrors,     setImgErrors]     = useState({});
+  const [noteLoading,   setNoteLoading]   = useState(false);
+  const [msgSubject,    setMsgSubject]    = useState(`Regarding ${padId(initial.id)}`);
+  const [msgBody,       setMsgBody]       = useState("");
+  const [msgType,       setMsgType]       = useState("info");
+  const [msgSending,    setMsgSending]    = useState(false);
+  const [msgSent,       setMsgSent]       = useState(false);
 
   const transitions = STATUS_TRANSITIONS[r.status] ?? [];
   const attachments = r.media_attachments ?? [];
   const conf        = confVal(r);
 
-  // Escape key to close
   useEffect(() => {
     const fn = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", fn);
     return () => document.removeEventListener("keydown", fn);
   }, [onClose]);
 
-  // Fetch comments on mount
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     fetch(`${BASE_URL}/api/v1/reports/${r.id}/comments`, {
@@ -667,26 +740,48 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
     if (!newNote.trim()) return;
     setNoteLoading(true);
     const res = await addComment(r.id, newNote.trim());
-    if (res.success) {
-      setComments((p) => [...p, res.data]);
-      setNewNote("");
-    }
+    if (res.success) { setComments((p) => [...p, res.data]); setNewNote(""); }
     setNoteLoading(false);
   };
 
   const doAssign = async () => {
     setSubmitting(true);
     await updateReport(r.id, { assigned_to: assignedTo });
+    setR((p) => ({ ...p, assigned_to: assignedTo }));
     setSubmitting(false);
   };
 
+  const doSendMessage = async () => {
+    if (!r.owner?.id || !msgBody.trim()) return;
+    setMsgSending(true);
+    await sendNotification({
+      user_id:   r.owner.id,
+      report_id: r.id,
+      title:     msgSubject,
+      message:   msgBody,
+      type:      msgType,
+    });
+    setMsgSending(false);
+    setMsgSent(true);
+    setTimeout(() => setMsgSent(false), 3_000);
+    setMsgBody("");
+  };
+
   const flowIndex = STATUS_FLOW_ORDER.indexOf(r.status);
+
+  const TABS = [
+    { id: "details", label: "Details",  badge: null              },
+    { id: "media",   label: "Media",    badge: attachments.length },
+    { id: "notes",   label: "Notes",    badge: comments.length    },
+    { id: "actions", label: "Actions",  badge: transitions.length },
+    { id: "message", label: "Message",  badge: null              },
+  ];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
 
-        {/* Modal Header */}
+        {/* Header */}
         <div className="modal-hdr">
           <div className="modal-hdr-left">
             <span className="modal-id">{padId(r.id)}</span>
@@ -704,15 +799,12 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
 
         {/* Tabs */}
         <div className="modal-tabs">
-          {[
-            { id: "details", label: "Details",  icon: "📋" },
-            { id: "media",   label: "Media",    icon: "🖼", badge: attachments.length },
-            { id: "notes",   label: "Notes",    icon: "📝", badge: comments.length },
-            { id: "actions", label: "Actions",  icon: "⚙", badge: transitions.length },
-          ].map(({ id, label, icon, badge }) => (
-            <button key={id} className={`tab-btn ${activeTab === id ? "active" : ""}`}
-              onClick={() => setTab(id)}>
-              <span className="tab-icon">{icon}</span>
+          {TABS.map(({ id, label, badge }) => (
+            <button
+              key={id}
+              className={`tab-btn ${activeTab === id ? "active" : ""}`}
+              onClick={() => setTab(id)}
+            >
               {label}
               {badge > 0 && <span className="tab-badge">{badge}</span>}
             </button>
@@ -722,18 +814,19 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
         {/* Tab Content */}
         <div className="modal-content-area">
 
-          {/* ── DETAILS TAB ── */}
+          {/* ── DETAILS ── */}
           {activeTab === "details" && (
             <div className="tab-pane">
               <div className="detail-grid">
                 <div className="detail-card">
                   <h5 className="detail-card-title">👤 Reporter</h5>
-                  <div className="detail-row"><span>Name</span><strong>{r.owner?.full_name ?? "Anonymous"}</strong></div>
+                  <div className="detail-row"><span>Name</span>   <strong>{r.owner?.full_name ?? "Anonymous"}</strong></div>
                   <div className="detail-row"><span>Contact</span><strong>{r.owner?.phone ?? "—"}</strong></div>
+                  <div className="detail-row"><span>Email</span>  <strong>{r.owner?.email ?? "—"}</strong></div>
                 </div>
                 <div className="detail-card">
                   <h5 className="detail-card-title">🛣 Damage Info</h5>
-                  <div className="detail-row"><span>Type</span><strong>{damageType(r)}</strong></div>
+                  <div className="detail-row"><span>Type</span>   <strong>{damageType(r)}</strong></div>
                   <div className="detail-row">
                     <span>Severity</span>
                     <span className={`sev-pill ${toClass(severity(r))}`}>{severity(r)}</span>
@@ -747,14 +840,14 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                 </div>
                 <div className="detail-card">
                   <h5 className="detail-card-title">📍 Location</h5>
-                  <div className="detail-row"><span>Address</span><strong>{r.location_address ?? "—"}</strong></div>
-                  <div className="detail-row"><span>Street</span><strong>{r.street_name ?? "—"}</strong></div>
+                  <div className="detail-row"><span>Address</span> <strong>{r.location_address ?? "—"}</strong></div>
+                  <div className="detail-row"><span>Street</span>  <strong>{r.street_name ?? "—"}</strong></div>
                   <div className="detail-row"><span>Barangay</span><strong>{r.barangay ?? "—"}</strong></div>
                 </div>
                 <div className="detail-card">
                   <h5 className="detail-card-title">📅 Timeline</h5>
                   <div className="detail-row"><span>Submitted</span><strong>{fmtDate(r.created_at)}</strong></div>
-                  <div className="detail-row"><span>Updated</span><strong>{fmtDate(r.updated_at)}</strong></div>
+                  <div className="detail-row"><span>Updated</span>  <strong>{fmtDate(r.updated_at)}</strong></div>
                 </div>
               </div>
 
@@ -785,26 +878,25 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
               </div>
 
               <div className="modal-map-link">
-                <button className="btn-view-map"
-                  onClick={() => navigate("/admin/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } })}>
+                <button
+                  className="btn-view-map"
+                  onClick={() => navigate("/admin/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } })}
+                >
                   📍 View on Map
                 </button>
               </div>
             </div>
           )}
 
-          {/* ── MEDIA TAB ── */}
+          {/* ── MEDIA ── */}
           {activeTab === "media" && (
             <div className="tab-pane media-pane">
               {attachments.length === 0 ? (
-                <div className="no-media-state">
-                  <span>🖼</span>
-                  <p>No media attachments for this report</p>
-                </div>
+                <div className="no-media-state"><span>🖼</span><p>No media attachments for this report</p></div>
               ) : (
                 <div className="media-grid">
                   {attachments.map((att, i) => {
-                    const url = imgErrors[i] ? null : mediaUrl(att);
+                    const url   = imgErrors[i] ? null : mediaUrl(att);
                     const label = i === 0 ? "📸 Damage Photo"
                       : (i === 1 && r.status === "RESOLVED") ? "✅ Repair Proof"
                       : `📎 Attachment ${i + 1}`;
@@ -814,8 +906,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                         {url ? (
                           att.media_type === "video"
                             ? <video src={url} controls className="media-display" />
-                            : <img src={url} alt={label}
-                                className="media-display"
+                            : <img src={url} alt={label} className="media-display"
                                 onError={() => setImgErrors((p) => ({ ...p, [i]: true }))} />
                         ) : (
                           <div className="media-unavail">Media unavailable</div>
@@ -828,15 +919,12 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
-          {/* ── NOTES TAB ── */}
+          {/* ── NOTES ── */}
           {activeTab === "notes" && (
             <div className="tab-pane notes-pane">
               <div className="notes-timeline">
                 {comments.length === 0 ? (
-                  <div className="no-notes">
-                    <span>📝</span>
-                    <p>No admin notes yet. Be the first to add one.</p>
-                  </div>
+                  <div className="no-notes"><span>📝</span><p>No admin notes yet. Be the first to add one.</p></div>
                 ) : (
                   comments.map((c, i) => (
                     <div key={c.id ?? i} className="note-entry">
@@ -863,8 +951,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                 />
                 <div className="notes-compose-actions">
                   <span className="compose-hint">Ctrl+Enter to submit</span>
-                  <button className="btn-add-note" onClick={doAddNote}
-                    disabled={noteLoading || !newNote.trim()}>
+                  <button className="btn-add-note" onClick={doAddNote} disabled={noteLoading || !newNote.trim()}>
                     {noteLoading ? "Adding…" : "Add Note"}
                   </button>
                 </div>
@@ -872,20 +959,18 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
-          {/* ── ACTIONS TAB ── */}
+          {/* ── ACTIONS ── */}
           {activeTab === "actions" && (
             <div className="tab-pane actions-pane">
-              {/* Status workflow visualizer */}
               <div className="workflow-section">
                 <h5>Status Workflow</h5>
                 <div className="workflow-track">
                   {STATUS_FLOW_ORDER.map((s, i) => {
                     const isDone    = flowIndex > i;
                     const isCurrent = flowIndex === i;
-                    const isDeclined= r.status === "DECLINED";
                     return (
                       <React.Fragment key={s}>
-                        <div className={`workflow-node ${isDone ? "done" : ""} ${isCurrent ? "current" : ""} ${isDeclined && i === 0 ? "declined-start" : ""}`}>
+                        <div className={`workflow-node ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}>
                           <div className="wf-dot">{isDone ? "✓" : i + 1}</div>
                           <span className="wf-label">{STATUS_LABELS[s]}</span>
                         </div>
@@ -904,6 +989,9 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
               {transitions.length > 0 ? (
                 <div className="action-section">
                   <h5>Change Status</h5>
+                  <p className="action-note">
+                    📬 The reporter will receive an in-app notification for every status change.
+                  </p>
                   {transitions.includes("DECLINED") && (
                     <div className="decline-reason-input">
                       <label>Decline Reason <span className="required">*</span></label>
@@ -917,7 +1005,8 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                   )}
                   <div className="status-action-btns">
                     {transitions.map((t) => (
-                      <button key={t}
+                      <button
+                        key={t}
                         className={`status-action-btn action-${toClass(t)}`}
                         onClick={() => doStatusChange(t)}
                         disabled={submitting || (t === "DECLINED" && !declineReason.trim())}
@@ -935,6 +1024,80 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
               )}
             </div>
           )}
+
+          {/* ── MESSAGE ── */}
+          {activeTab === "message" && (
+            <div className="tab-pane message-pane">
+              {!r.owner?.id ? (
+                <div className="no-notes">
+                  <span>📬</span>
+                  <p>This report has no associated reporter account — cannot send a notification.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="msg-reporter-info">
+                    <strong>To:</strong> {r.owner?.full_name ?? "Reporter"}
+                    {r.owner?.phone && <span> · {r.owner.phone}</span>}
+                  </div>
+
+                  <div className="msg-quick-replies">
+                    {[
+                      { label: "Under review",         text: "Your report is currently under review. We will update you soon." },
+                      { label: "Need more details",    text: "Thank you for your report. Could you provide a clearer photo or more details about the location?" },
+                      { label: "Scheduled for repair", text: "Your report has been reviewed and scheduled for repair. Thank you for helping us keep roads safe!" },
+                      { label: "Already resolved",     text: "The issue you reported has already been addressed. Thank you for your vigilance!" },
+                    ].map((qr) => (
+                      <button key={qr.label} className="msg-quick-btn" onClick={() => setMsgBody(qr.text)}>
+                        {qr.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="msg-type-row">
+                    {["info", "success", "warning", "error"].map((t) => (
+                      <button
+                        key={t}
+                        className={`msg-type-btn msg-type-btn--${t} ${msgType === t ? "active" : ""}`}
+                        onClick={() => setMsgType(t)}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+
+                  <label className="msg-label">Subject / Title</label>
+                  <input
+                    className="msg-input"
+                    value={msgSubject}
+                    onChange={(e) => setMsgSubject(e.target.value)}
+                    placeholder="Notification title…"
+                  />
+
+                  <label className="msg-label">Message</label>
+                  <textarea
+                    className="msg-textarea"
+                    value={msgBody}
+                    onChange={(e) => setMsgBody(e.target.value)}
+                    rows={5}
+                    placeholder="Write your message to the reporter…"
+                  />
+
+                  {msgSent && (
+                    <div className="msg-sent-banner">✓ Notification sent successfully!</div>
+                  )}
+
+                  <button
+                    className="btn-send-msg"
+                    onClick={doSendMessage}
+                    disabled={msgSending || !msgBody.trim() || !msgSubject.trim()}
+                  >
+                    {msgSending ? "Sending…" : "✉ Send Notification"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </div>

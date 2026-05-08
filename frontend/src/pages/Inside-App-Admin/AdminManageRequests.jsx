@@ -63,7 +63,7 @@ export default function AdminManageRequests() {
   /* ── confirm ── */
   const handleConfirm = async (id) => {
     setActionLoading(id + "-confirm");
-    const res = await updateReport(id, { status: "IN_PROGRESS" });
+    const res = await updateReport(id, { status: "VERIFIED" });
     if (res.success) {
       setReports((prev) => prev.filter((r) => r.id !== id));
       if (selectedReport?.id === id) setSelected(null);
@@ -381,6 +381,27 @@ function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessag
     </div>
   );
 }
+// Move these BEFORE handleVerify/handleStart/handleAssign/handleCancel:
+const [patching, setPatching] = useState(new Set());
+
+const patchStatus = async (id, status, extra={}) => {
+  if (patching.has(id)) return false;
+  setPatching(prev => new Set(prev).add(id));
+  const res = await updateReport(id, { status, ...extra });
+  if (res.success) setReports(prev => prev.map(r => r.id===id ? {...r, status:status.toLowerCase(),...extra} : r));
+  setPatching(prev => { const n = new Set(prev); n.delete(id); return n; });
+  return res.success;
+};
+
+// Then these come after:
+const handleVerify   = id => patchStatus(id,"VERIFIED");
+const handleStart    = id => patchStatus(id,"IN_PROGRESS");
+const handleAssign   = async (id, teamOrWorker) => { await patchStatus(id,"ASSIGNED",{assigned_to:teamOrWorker.name}); setAssignReport(null); };
+const handleCancel   = async (id, reason) => { await patchStatus(id,"REJECTED",{rejection_reason:reason}); setCancelReport(null); };
+const handleCompleteSuccess = id => { setReports(prev=>prev.map(r=>r.id===id?{...r,status:"resolved"}:r)); setCompleteReport(null); };
+
+const selectedIds = [...selected];
+const bulkPatch = async (status) => { await Promise.all(selectedIds.map(id=>patchStatus(id,status))); setSelected(new Set()); setBulkMode(null); };
 
 /* ═══════════════════════════════════════════════════════
    CONFIRM ACTION DIALOG

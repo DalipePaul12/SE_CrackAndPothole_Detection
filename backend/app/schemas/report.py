@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pydantic import Field, field_validator
 
-from app.models.enums import DamageType, ReportStatus, SeverityLevel
+from app.models.enums import DamageType, ReportStatus, ReportType, SeverityLevel
 from app.schemas.base import AppBaseModel
 from app.schemas.media_attachment import MediaAttachmentResponse
 from app.schemas.user import UserPublic
@@ -15,18 +15,30 @@ from app.schemas.user import UserPublic
 
 
 class ReportCreate(AppBaseModel):
-    latitude: float = Field(..., ge=-90.0, le=90.0)
-    longitude: float = Field(..., ge=-180.0, le=180.0)
-    barangay: Optional[str] = Field(None, max_length=100)
-    street_name: Optional[str] = Field(None, max_length=200)
-    description: Optional[str] = Field(None, max_length=1000)
+    # ── Location ──────────────────────────────────────────────────────────────
+    latitude:    float          = Field(..., ge=-90.0,   le=90.0)
+    longitude:   float          = Field(..., ge=-180.0,  le=180.0)
+    barangay:    Optional[str]  = Field(None, max_length=100)
+    street_name: Optional[str]  = Field(None, max_length=200)
+    description: Optional[str]  = Field(None, max_length=1000)
 
-    ai_damage_type: Optional[DamageType] = None
-    ai_severity: Optional[SeverityLevel] = None
-    ai_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
-    is_flagged_fake: bool = False
+    # ── ML results ────────────────────────────────────────────────────────────
+    ai_damage_type: Optional[DamageType]    = None
+    ai_severity:    Optional[SeverityLevel] = None
+    ai_confidence:  Optional[float]         = Field(None, ge=0.0, le=1.0)
+
+    # ── AI fake detection ─────────────────────────────────────────────────────
+    is_flagged_fake: bool           = False
     fake_confidence: Optional[float] = Field(0.0, ge=0.0, le=1.0)
 
+    # ── Video / hybrid ────────────────────────────────────────────────────────
+    report_type:      ReportType         = ReportType.image
+    video_path:       Optional[str]      = None
+    is_hybrid:        bool               = False
+    secondary_damage: Optional[DamageType] = None
+    detection_note:   Optional[str]      = Field(None, max_length=500)
+
+    # ── Philippine coordinate validation ──────────────────────────────────────
     @field_validator("latitude")
     @classmethod
     def valid_ph_latitude(cls, v: float) -> float:
@@ -43,36 +55,49 @@ class ReportCreate(AppBaseModel):
 
 
 class ReportUpdate(AppBaseModel):
-    status: Optional[ReportStatus] = None
-    decline_reason: Optional[str] = Field(None, max_length=500)
-    barangay: Optional[str] = Field(None, max_length=100)
-    street_name: Optional[str] = Field(None, max_length=200)
+    status:         Optional[ReportStatus] = None
+    decline_reason:   Optional[str]        = Field(None, max_length=500)
+    rejection_reason: Optional[str]        = Field(None, max_length=500)
+    barangay:       Optional[str]          = Field(None, max_length=100)
+    street_name:    Optional[str]          = Field(None, max_length=200)
+    assigned_to:    Optional[str]          = Field(None, max_length=200)
 
 
 class ReportResponse(AppBaseModel):
-    id: int
+    id:    int
     owner: Optional[UserPublic] = None
 
-    latitude: float
-    longitude: float
-    barangay: Optional[str] = None
+    # ── Location ──────────────────────────────────────────────────────────────
+    latitude:    float
+    longitude:   float
+    barangay:    Optional[str] = None
     street_name: Optional[str] = None
     description: Optional[str] = None
-    image_url: Optional[str] = None
+    image_url:   Optional[str] = None
 
-    ai_damage_type: Optional[DamageType] = None
-    ai_severity: Optional[SeverityLevel] = None
-    ai_confidence: Optional[float] = None
+    # ── ML results ────────────────────────────────────────────────────────────
+    ai_damage_type: Optional[DamageType]    = None
+    ai_severity:    Optional[SeverityLevel] = None
+    ai_confidence:  Optional[float]         = None
 
-    is_flagged_fake: bool
-    fake_confidence: float
+    # ── AI fake detection ─────────────────────────────────────────────────────
+    is_flagged_fake:      bool
+    fake_confidence:      float | None = None
     is_potential_duplicate: bool
 
-    status: ReportStatus
+    # ── Video / hybrid ────────────────────────────────────────────────────────
+    report_type:      ReportType            = ReportType.image
+    video_path:       Optional[str]         = None
+    is_hybrid:        bool                  = False
+    secondary_damage: Optional[DamageType]  = None
+    detection_note:   Optional[str]         = None
+
+    # ── Status ────────────────────────────────────────────────────────────────
+    status:         ReportStatus
     decline_reason: Optional[str] = None
 
     upvote_count: int = 0
-    view_count: int
+    view_count:   int
 
     created_at: datetime
     updated_at: datetime
@@ -83,7 +108,7 @@ class ReportResponse(AppBaseModel):
 
 
 class ReportListResponse(AppBaseModel):
-    total: int
-    page: int
+    total:     int
+    page:      int
     page_size: int
-    results: List[ReportResponse]
+    results:   List[ReportResponse]

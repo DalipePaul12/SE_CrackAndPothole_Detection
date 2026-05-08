@@ -25,6 +25,15 @@ class TokenReuseError(Exception):
     pass
 
 
+def _ensure_utc(dt: datetime) -> datetime:
+    """Ensure a datetime is timezone-aware (UTC). Fixes naive datetimes from DB."""
+    if dt is None:
+        return dt
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 # unified password hashing via passlib
 def hash_password(plain: str) -> str:
     return get_password_hash(plain)
@@ -100,7 +109,8 @@ async def rotate_refresh_token(
     if db_token.is_revoked:
         raise TokenReuseError("Token reuse detected")
 
-    if db_token.expires_at < datetime.now(timezone.utc):
+    # FIX: ensure timezone-aware comparison to avoid TypeError with naive datetimes
+    if _ensure_utc(db_token.expires_at) < datetime.now(timezone.utc):
         raise ValueError("Refresh token expired")
 
     db_token.is_revoked = True
@@ -219,7 +229,8 @@ async def verify_otp(
     if not db_otp:
         raise ValueError("No active OTP")
 
-    if db_otp.expires_at < datetime.now(timezone.utc):
+    # FIX: ensure timezone-aware comparison to avoid TypeError with naive datetimes
+    if _ensure_utc(db_otp.expires_at) < datetime.now(timezone.utc):
         raise ValueError("OTP expired")
 
     if db_otp.attempt_count >= settings.OTP_MAX_ATTEMPTS:

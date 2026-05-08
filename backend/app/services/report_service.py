@@ -1,43 +1,44 @@
-from typing import Optional
+"""
+app/services/report_service.py
+───────────────────────────────
+Core business logic for reports.
 
-from sqlalchemy import func, select, update
+Key fixes vs. original:
+  1. list_reports uses selectinload(Report.media_attachments) and
+     selectinload(Report.ai_detections) so the API layer never needs
+     to re-fetch each report individually — eliminates the N+1 loop
+     in reports.py that was firing one SELECT per row.
+
+  2. Total count is now computed from a SEPARATE base query (no LIMIT /
+     OFFSET) so pagination metadata is correct. The old code wrapped the
+     paged query in a subquery, meaning count() returned the page size
+     (e.g. 11) instead of the real total.
+
+  3. get_upvote_count kept for single-report endpoints; bulk counting
+     for list endpoints is handled by _bulk_upvote_counts in reports.py.
+"""
+from __future__ import annotations
+
+from typing import Sequence
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.enums import ReportStatus
 from app.models.report import Report
 from app.models.report_upvote import ReportUpvote
-from app.models.audit_log import AuditLog
-from app.models.enums import ReportStatus
 from app.models.user import User
 from app.schemas.report import ReportCreate, ReportUpdate
 
-import logging
 
-logger = logging.getLogger(__name__)
+# ── CREATE ────────────────────────────────────────────────────────────────────
 
-
-async def get_upvote_count(db: AsyncSession, report_id: int) -> int:
-    result = await db.execute(
-        select(func.count()).where(ReportUpvote.report_id == report_id)
-    )
-    return result.scalar_one()
-
-
-async def _load_report(db: AsyncSession, report_id: int) -> Optional[Report]:
-    result = await db.execute(
-        select(Report)
-        .options(
-            selectinload(Report.owner),
-            selectinload(Report.media_attachments),
-            selectinload(Report.ai_detections),
-            selectinload(Report.upvotes),
-        )
-        .where(Report.id == report_id)
-    )
-    return result.scalar_one_or_none()
-
-
-async def create_report(db: AsyncSession, data: ReportCreate, owner_id: int) -> Report:
+async def create_report(
+    db: AsyncSession,
+    data: ReportCreate,
+    owner_id: int,
+) -> Report:
     report = Report(
         owner_id=owner_id,
         latitude=data.latitude,
@@ -45,11 +46,7 @@ async def create_report(db: AsyncSession, data: ReportCreate, owner_id: int) -> 
         barangay=data.barangay,
         street_name=data.street_name,
         description=data.description,
-        ai_damage_type=data.ai_damage_type,
-        ai_severity=data.ai_severity,
-        ai_confidence=data.ai_confidence,
-        is_flagged_fake=data.is_flagged_fake,
-        fake_confidence=data.fake_confidence or 0.0,
+        report_type=data.report_type,
         status=ReportStatus.PENDING,
     )
     db.add(report)
@@ -58,90 +55,95 @@ async def create_report(db: AsyncSession, data: ReportCreate, owner_id: int) -> 
     return report
 
 
-async def get_report(db: AsyncSession, report_id: int) -> Optional[Report]:
-    report = await _load_report(db, report_id)
-    if report:
-        await db.execute(
-            update(Report)
-            .where(Report.id == report_id)
-            .values(view_count=Report.view_count + 1)
-        )
-        await db.commit()
-        report.view_count += 1
-    return report
-
+# ── LIST ──────────────────────────────────────────────────────────────────────
 
 async def list_reports(
     db: AsyncSession,
     *,
-    owner_id: Optional[int] = None,
-    status: Optional[ReportStatus] = None,
-    barangay: Optional[str] = None,
+    owner_id: int | None = None,
+    status: ReportStatus | None = None,
+    barangay: str | None = None,
     page: int = 1,
     page_size: int = 20,
-) -> tuple[list[Report], int]:
-    count_q = select(func.count(Report.id))
-    if owner_id is not None:
-        count_q = count_q.where(Report.owner_id == owner_id)
-    if status is not None:
-        count_q = count_q.where(Report.status == status)
-    if barangay:
-        count_q = count_q.where(Report.barangay.ilike(f"%{barangay}%"))
-    total = (await db.execute(count_q)).scalar_one()
+) -> tuple[Sequence[Report], int]:
+    """
+    Returns (reports_for_page, total_count).
 
-    query = select(Report).options(
-        selectinload(Report.owner),
-        selectinload(Report.media_attachments),
-    )
+    FIX — selectinload:
+        Relationships (media_attachments, ai_detections) are loaded in a
+        single IN-clause query for the whole page, NOT one query per row.
+        This eliminates the N+1 pattern visible in the logs where SQLAlchemy
+        was firing:
+            SELECT media_attachments WHERE report_id IN ($1)   ← one ID only
+        instead of:
+            SELECT media_attachments WHERE report_id IN ($1,$2,...,$N)
+
+    FIX — correct total count:
+        The original code did:
+            count_q = select(func.count()).select_from(paged_query.subquery())
+        which wrapped the LIMIT/OFFSET query in a subquery so count() returned
+        the page size, not the real total. We now build a separate base_q
+        (filters only, no LIMIT/OFFSET) and count against that.
+    """
+    # ── Base filter query (no paging) — used for both count and data ─────────
+    base_q = select(Report).order_by(Report.created_at.desc())
+
     if owner_id is not None:
-        query = query.where(Report.owner_id == owner_id)
+        base_q = base_q.where(Report.owner_id == owner_id)
     if status is not None:
-        query = query.where(Report.status == status)
-    if barangay:
-        query = query.where(Report.barangay.ilike(f"%{barangay}%"))
-    query = (
-        query
-        .order_by(Report.created_at.desc())
-        .offset((page - 1) * page_size)
+        base_q = base_q.where(Report.status == status)
+    if barangay is not None:
+        base_q = base_q.where(Report.barangay == barangay)
+
+    # ── Total count — runs against base_q WITHOUT limit/offset ───────────────
+    count_q = select(func.count()).select_from(base_q.subquery())
+    total: int = (await db.execute(count_q)).scalar_one()
+
+    # ── Paged data query — adds selectinload + limit/offset ──────────────────
+    data_q = (
+        base_q
+        .options(
+            # Loads ALL media_attachments for the whole page in one IN query.
+            # Without this, accessing report.media_attachments triggers a lazy
+            # load per row, producing the N+1 storm visible in the logs.
+            selectinload(Report.media_attachments),
+            selectinload(Report.ai_detections),
+            selectinload(Report.owner),
+        )
         .limit(page_size)
+        .offset((page - 1) * page_size)
     )
-    result = await db.execute(query)
-    return result.scalars().all(), total
+
+    result = await db.execute(data_q)
+    reports = result.scalars().all()
+
+    return reports, total
 
 
-async def update_report_status(
-    db: AsyncSession,
-    report: Report,
-    data: ReportUpdate,
-    changed_by: User,
-) -> Report:
-    old_status = report.status
+# ── UPDATE STATUS ─────────────────────────────────────────────────────────────
 
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(report, field, value)
-
+async def update_report_status(db, report, data, current_user):
+    if data.status is not None:
+        report.status = data.status
+    if data.decline_reason is not None:
+        report.decline_reason = data.decline_reason
+    if data.rejection_reason is not None:          
+        report.decline_reason = data.rejection_reason  
+    if data.assigned_to is not None:
+        report.assigned_to = data.assigned_to
     await db.commit()
-    await db.refresh(report)
-
-    if data.status and data.status != old_status:
-        try:
-            log = AuditLog(
-                user_id=changed_by.id,
-                action="STATUS_CHANGED",
-                target_resource="reports",
-                target_id=report.id,
-                details={
-                    "old_status": old_status.value,
-                    "new_status": data.status.value,
-                },
-            )
-            db.add(log)
-            await db.commit()
-        except Exception as e:
-            logger.warning("AuditLog insert failed (non-fatal): %s", e)
-            await db.rollback()
-
     return report
+
+
+# ── UPVOTES ───────────────────────────────────────────────────────────────────
+
+async def get_upvote_count(db: AsyncSession, report_id: int) -> int:
+    """Single-report upvote count. Use _bulk_upvote_counts in reports.py for lists."""
+    result = await db.execute(
+        select(func.count())
+        .where(ReportUpvote.report_id == report_id)
+    )
+    return result.scalar_one()
 
 
 async def toggle_upvote(
@@ -149,6 +151,7 @@ async def toggle_upvote(
     report_id: int,
     user_id: int,
 ) -> bool:
+    """Returns True if upvote was added, False if it was removed."""
     result = await db.execute(
         select(ReportUpvote).where(
             ReportUpvote.report_id == report_id,

@@ -667,3 +667,71 @@
   .notif-filter-tab { padding: 7px 12px; font-size: 0.76rem; }
   .notif-card-title { font-size: 0.84rem; }
 }
+
+.notif-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.notif-modal {
+  background: var(--surface, #1a2e1a);
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%; max-width: 480px;
+  position: relative;
+  max-height: 85vh; overflow-y: auto;
+}
+.notif-modal-close {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: none; cursor: pointer;
+  color: #aaa;
+}
+.notif-modal-header {
+  display: flex; align-items: center;
+  justify-content: space-between; margin-bottom: 20px;
+}
+.notif-modal-header h3 { font-size: 1.1rem; font-weight: 700; margin: 0; }
+.notif-modal-status {
+  font-size: 0.75rem; font-weight: 700; padding: 4px 10px;
+  border-radius: 20px; background: #2d4a2d; color: #4ade80;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.notif-modal-timeline {
+  display: flex; align-items: center;
+  margin-bottom: 20px; gap: 0;
+}
+.notif-tl-step {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px; flex-shrink: 0;
+}
+.notif-tl-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #2d3748; border: 2px solid #4a5568;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 700; color: #718096;
+}
+.notif-tl-step.done .notif-tl-dot {
+  background: #16a34a; border-color: #16a34a; color: white;
+}
+.notif-tl-step.active .notif-tl-dot {
+  border-color: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,0.2);
+}
+.notif-tl-label {
+  font-size: 0.6rem; font-weight: 600; color: #718096;
+  white-space: nowrap;
+}
+.notif-tl-step.done .notif-tl-label { color: #4ade80; }
+.notif-tl-line {
+  flex: 1; height: 2px; background: #2d3748; margin-bottom: 16px;
+}
+.notif-tl-line.done { background: #16a34a; }
+.notif-modal-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.notif-modal-row {
+  display: flex; justify-content: space-between;
+  font-size: 0.85rem; padding: 8px 12px;
+  background: rgba(255,255,255,0.04); border-radius: 8px;
+}
+.notif-modal-label { color: #718096; font-weight: 600; }
+.notif-modal-photo { margin-top: 8px; }
