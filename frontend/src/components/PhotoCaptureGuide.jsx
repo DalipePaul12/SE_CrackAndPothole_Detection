@@ -1,16 +1,4 @@
-/**
- * PhotoCaptureGuide.jsx — Enhanced Pre-Report Checklist Modal
- *
- * Changes vs. previous version:
- *  - "Don't show again" removed entirely
- *  - "Select All" button for instant one-tap completion
- *  - Dynamic animated progress bar (ring + bar)
- *  - Polished completion success state with confetti burst
- *  - Syncs with global ThemeContext (light/dark) via CSS variables
- *  - Smooth staggered item animations, micro-interactions on each row
- *  - Fully responsive (desktop + mobile)
- *  - Accessible: ARIA roles, keyboard nav, focus trap
- */
+
 
 import React, {
   useState, useRef, useEffect, useCallback, useMemo,
@@ -24,42 +12,36 @@ import "./PhotoCaptureGuide.css";
 const CHECKLIST = [
   {
     id: "lighting",
-    emoji: "☀️",
     label: "Good lighting",
     detail: "Use daylight or a well-lit area — avoid shadows over the damage",
     color: "amber",
   },
   {
     id: "distance",
-    emoji: "📏",
     label: "Proper distance (~1–3 m)",
     detail: "Stand close enough for the damage to fill most of the frame",
     color: "blue",
   },
   {
     id: "framing",
-    emoji: "🖼️",
     label: "Full damage visible",
     detail: "Capture the entire damaged section with some surrounding road",
     color: "teal",
   },
   {
     id: "steady",
-    emoji: "📷",
     label: "Steady, sharp image",
     detail: "Hold your device still — blurry photos reduce AI accuracy",
     color: "purple",
   },
   {
     id: "clear",
-    emoji: "🚧",
     label: "No obstructions",
     detail: "No vehicles or people blocking the damage area",
     color: "coral",
   },
   {
     id: "gps",
-    emoji: "📍",
     label: "GPS location enabled",
     detail: "Allow location access so your report is pinned correctly on the map",
     color: "green",

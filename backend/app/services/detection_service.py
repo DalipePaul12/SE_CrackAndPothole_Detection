@@ -138,8 +138,7 @@ def analyze_image(image_path: str) -> dict:
                 result["damage_type"] = damage_detected
                 result["confidence"]  = round(highest_conf, 2)
 
-                # Map to SeverityLevel enum values — only "critical" | "low"
-                result["severity"] = "critical" if highest_conf > 0.80 else "low"
+                result["severity"] = "critical" if highest_conf > 0.80 else "non-critical"
 
                 unique_types   = list(set(detected_types))
                 result["reason"] = f"Detected: {', '.join(unique_types)}"
@@ -219,12 +218,12 @@ def resolve_hybrid(frame_results: list[dict]) -> dict:
         if is_hybrid else None
     )
 
-    # Severity — only "critical" | "low" to match SeverityLevel enum
+    # Severity — only "critical" | "non-critical" to match SeverityLevel enum
     total_detections = sum(len(c) for c in scores.values())
     all_confs        = [c for confs in scores.values() for c in confs]
     avg_conf         = sum(all_confs) / len(all_confs)
 
-    severity = "critical" if (avg_conf >= 0.80 or total_detections >= 10) else "low"
+    severity = "critical" if (avg_conf >= 0.80 or total_detections >= 10) else "non-critical"
 
     crack_frames   = [r for r in frame_results if r.get("damage_type") == "crack"]
     pothole_frames = [r for r in frame_results if r.get("damage_type") == "pothole"]

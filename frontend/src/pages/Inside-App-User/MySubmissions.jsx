@@ -19,8 +19,7 @@ const mediaUrl  = (att) => att?.file_url ? `${BASE_URL}${att.file_url}` : null;
 
 const STATUS_LABEL  = { PENDING: "Pending", IN_PROGRESS: "In Progress", VERIFIED: "Verified", RESOLVED: "Resolved", DECLINED: "Declined" };
 const STATUS_STEPS  = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
-const SEVERITY_ORDER = { critical: 4, high: 3, moderate: 2, low: 1, "non-critical": 0 };
-
+const SEVERITY_ORDER = { critical: 1, "non-critical": 0 };
 /* ──────────────────────────────────────────────────────────
    STATUS PROGRESS BAR
 ────────────────────────────────────────────────────────── */
@@ -893,7 +892,7 @@ function MySubmissions() {
               <div className="sub-filter-group">
                 <label className="sub-filter-label">Severity</label>
                 <div className="sub-filter-chips">
-                  {["All", "low", "moderate", "high", "critical"].map((s) => (
+                  {["All","non-critical", "critical"].map((s) => (
                     <button
                       key={s}
                       className={`sub-chip ${sevFilter === s ? "chip-active" : ""} ${s !== "All" ? `sev-${s}` : ""}`}

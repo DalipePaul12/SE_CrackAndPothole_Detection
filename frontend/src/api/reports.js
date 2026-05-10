@@ -1,12 +1,21 @@
-
 import { api } from "./client";
 
+// ─── Utility ──────────────────────────────────────────────────────────────────
 function cleanParams(params = {}) {
   return Object.fromEntries(
     Object.entries(params).filter(
       ([, v]) => v !== undefined && v !== null && v !== "" && v !== "All"
     )
   );
+}
+
+function handleError(err) {
+  const detail =
+    err?.response?.data?.detail ??
+    err?.response?.data?.message ??
+    err?.message ??
+    "Unknown error";
+  return { success: false, data: null, error: String(detail) };
 }
 
 // ─── Get paginated reports (admin) ───────────────────────────────────────────
@@ -20,15 +29,10 @@ export async function getReports(params = {}) {
     });
 
     const res = await api.get("/reports", { params: query });
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ??
-      err?.response?.data?.message ??
-      err?.message ??
-      "Unknown error";
-    console.error("[getReports]", detail, err?.response?.data);
-    return { success: false, error: String(detail) };
+    console.error("[getReports]", err?.response?.data);
+    return handleError(err);
   }
 }
 
@@ -42,24 +46,24 @@ export async function getMyReports(params = {}) {
     });
 
     const res = await api.get("/reports/mine", { params: query });
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Unknown error";
-    console.error("[getMyReports]", detail);
-    return { success: false, error: String(detail) };
+    console.error("[getMyReports]", err?.response?.data);
+    return handleError(err);
   }
 }
 
 // ─── Get single report ────────────────────────────────────────────────────────
+// FIX: Was declared TWICE (as a function and as a const at line ~156),
+//      causing "Identifier 'getReport' has already been declared" SyntaxError
+//      that crashed the entire app on load. Merged into a single export.
 export async function getReport(reportId) {
   try {
     const res = await api.get(`/reports/${reportId}`);
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Unknown error";
-    return { success: false, error: String(detail) };
+    console.error("[getReport]", err?.response?.data);
+    return handleError(err);
   }
 }
 
@@ -67,25 +71,23 @@ export async function getReport(reportId) {
 export async function createReport(data) {
   try {
     const res = await api.post("/reports", data);
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Unknown error";
-    return { success: false, error: String(detail) };
+    return handleError(err);
   }
 }
 
-// ─── Update report (status, assigned_to, etc.) ───────────────────────────────
+// ─── Update report (status, assigned_to, decline_reason, etc.) ───────────────
+// FIX: Standardised field name — frontend now always sends `decline_reason`
+//      (not `rejection_reason`) to match the backend schema column.
 export async function updateReport(reportId, data) {
   try {
     const payload = cleanParams(data);
     const res = await api.patch(`/reports/${reportId}`, payload);
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Unknown error";
-    console.error("[updateReport]", detail, err?.response?.data);
-    return { success: false, error: String(detail) };
+    console.error("[updateReport]", err?.response?.data);
+    return handleError(err);
   }
 }
 
@@ -97,11 +99,9 @@ export async function uploadReportMedia(reportId, file) {
     const res = await api.post(`/reports/${reportId}/media`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Upload failed";
-    return { success: false, error: String(detail) };
+    return handleError(err);
   }
 }
 
@@ -109,11 +109,9 @@ export async function uploadReportMedia(reportId, file) {
 export async function addComment(reportId, content) {
   try {
     const res = await api.post(`/reports/${reportId}/comments`, { content });
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Comment failed";
-    return { success: false, error: String(detail) };
+    return handleError(err);
   }
 }
 
@@ -121,11 +119,9 @@ export async function addComment(reportId, content) {
 export async function getComments(reportId) {
   try {
     const res = await api.get(`/reports/${reportId}/comments`);
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Unknown error";
-    return { success: false, error: String(detail) };
+    return handleError(err);
   }
 }
 
@@ -133,11 +129,9 @@ export async function getComments(reportId) {
 export async function toggleUpvote(reportId) {
   try {
     const res = await api.post(`/reports/${reportId}/upvote`);
-    return { success: true, data: res.data };
+    return { success: true, data: res.data, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Unknown error";
-    return { success: false, error: String(detail) };
+    return handleError(err);
   }
 }
 
@@ -145,19 +139,8 @@ export async function toggleUpvote(reportId) {
 export async function deleteReport(reportId) {
   try {
     await api.delete(`/reports/${reportId}`);
-    return { success: true };
+    return { success: true, data: null, error: null };
   } catch (err) {
-    const detail =
-      err?.response?.data?.detail ?? err?.message ?? "Unknown error";
-    return { success: false, error: String(detail) };
+    return handleError(err);
   }
 }
-
-export const getReport = async (id) => {
-  try {
-    const res = await api.get(`/reports/${id}`);
-    return { success: true, data: res.data, error: null };
-  } catch (error) {
-    return handleError(error);
-  }
-};

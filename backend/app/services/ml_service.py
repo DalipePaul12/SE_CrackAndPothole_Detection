@@ -147,31 +147,18 @@ def _blur_conf_weight(blur: float) -> float:
 
 def _compute_severity(boxes: list[dict], image_w: int, image_h: int) -> str:
     if not boxes or image_w * image_h == 0:
-        return "low"
+        return "non-critical"
     max_ratio = max(
         (b.get("width", 0) * b.get("height", 0)) / (image_w * image_h) for b in boxes
     )
-    if max_ratio >= 0.20:
-        return "critical"
-    if max_ratio >= 0.10:
-        return "high"
-    if max_ratio >= 0.04:
-        return "moderate"
-    return "low"
+    return "critical" if max_ratio >= 0.10 else "non-critical"
 
 
 def _severity_from_bbox_norm(bbox: list[float]) -> str:
     if not bbox or len(bbox) < 4:
-        return "low"
+        return "non-critical"
     area = max(0.0, (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]))
-    if area >= 0.20:
-        return "critical"
-    if area >= 0.10:
-        return "high"
-    if area >= 0.04:
-        return "moderate"
-    return "low"
-
+    return "critical" if area >= 0.10 else "non-critical"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Distance feedback from normalised bounding box

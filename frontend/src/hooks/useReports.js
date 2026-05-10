@@ -3,20 +3,55 @@ import { getReports, getMyReports } from "../api/reports";
 
 const PAGE_SIZE = 15;
 
-export function useReports({ mine = false, status = null, barangay = null } = {}) {
-  // Hooks must always be declared in the same order — never conditionally
-  const [reports, setReports] = useState([]);   // hook 1
-  const [loading, setLoading] = useState(true); // hook 2
-  const [error,   setError]   = useState(null); // hook 3
-  const [page,    setPage]    = useState(1);    // hook 4
-  const [total,   setTotal]   = useState(0);    // hook 5
+// ── Module-level cache (survives re-renders, clears on hard reload) ──
+const _cache = new Map();
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
-  // hook 6 — must come after all useState calls, never move this up
+function cacheKey(mine, status, barangay, page) {
+  return JSON.stringify({ mine, status, barangay, page });
+}
+
+function cacheGet(key) {
+  const entry = _cache.get(key);
+  if (entry && Date.now() - entry.ts < CACHE_TTL_MS) return entry.value;
+  return null;
+}
+
+function cacheSet(key, value) {
+  _cache.set(key, { ts: Date.now(), value });
+}
+
+export function invalidateReportsCache() {
+  _cache.clear();
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────
+export function useReports({ mine = false, status = null, barangay = null } = {}) {
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+  const [page,    setPage]    = useState(1);
+  const [total,   setTotal]   = useState(0);
+
   const abortRef = useRef(false);
 
-  // hook 7
-  const fetchReports = useCallback(async () => {
+  const fetchReports = useCallback(async ({ force = false } = {}) => {
     abortRef.current = false;
+
+    const key = cacheKey(mine, status, barangay, page);
+
+    // ── Cache hit — return instantly, no API call ──
+    if (!force) {
+      const cached = cacheGet(key);
+      if (cached) {
+        setReports(cached.reports);
+        setTotal(cached.total);
+        setLoading(false);
+        setError(null);
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
 
@@ -37,8 +72,14 @@ export function useReports({ mine = false, status = null, barangay = null } = {}
         setTotal(0);
       } else {
         const body = res.data;
-        setReports(Array.isArray(body?.results) ? body.results : []);
-        setTotal(typeof body?.total === "number" ? body.total : 0);
+        const reports = Array.isArray(body?.results) ? body.results : [];
+        const total   = typeof body?.total === "number" ? body.total : 0;
+
+        setReports(reports);
+        setTotal(total);
+
+        // ── Store in cache ──
+        cacheSet(key, { reports, total });
       }
     } catch (err) {
       if (!abortRef.current) {
@@ -51,13 +92,13 @@ export function useReports({ mine = false, status = null, barangay = null } = {}
     }
   }, [mine, page, status, barangay]);
 
-  // hook 8
   useEffect(() => {
     fetchReports();
-    return () => {
-      abortRef.current = true;
-    };
+    return () => { abortRef.current = true; };
   }, [fetchReports]);
 
-  return { reports, loading, error, page, setPage, total, refetch: fetchReports };
+  // refetch() → force bypass cache (e.g. after creating/updating a report)
+  const refetch = useCallback(() => fetchReports({ force: true }), [fetchReports]);
+
+  return { reports, loading, error, page, setPage, total, refetch };
 }

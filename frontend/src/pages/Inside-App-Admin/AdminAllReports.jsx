@@ -59,7 +59,7 @@ const confColor = (v) => {
   return "#2e7d32";
 };
 const sevWeight = (r) => {
-  const map = { critical: 0, "non-critical": 1, low: 2 };
+  const map = { critical: 0, "non-critical": 1};
   return map[severity(r).toLowerCase()] ?? 99;
 };
 
@@ -410,7 +410,6 @@ export default function AdminAllReports() {
                 <option value="All">All Severity</option>
                 <option value="critical">Critical</option>
                 <option value="non-critical">Non-Critical</option>
-                <option value="low">Low</option>
               </select>
             </div>
 

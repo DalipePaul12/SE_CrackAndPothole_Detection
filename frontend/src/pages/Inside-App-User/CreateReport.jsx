@@ -1,11 +1,14 @@
 /**
- * CreateReport.jsx — Merged with RealtimeDetection + PhotoCaptureGuide
- *                  + DetectionOverlay integrated across all three modes
- *                  + Detection Filmstrip for video analysis results
+ * CreateReport.jsx — Redesigned layout
+ *   • Segmentation masks (not bounding boxes) for uploaded image/video
+ *   • Bounding boxes retained only for live camera
+ *   • Collapsible AIAnalysisSummary to prevent right-panel scroll
+ *   • Gallery-style DetectionFilmstrip with full-size lightbox
+ *   • Improved spacing, padding, and visual hierarchy
  */
 
 import React, {
-  useState, useRef, useEffect, useCallback,
+  useState, useRef, useEffect, useCallback, useMemo,
 } from "react";
 import ReactDOM from "react-dom";
 import "./CreateReport.css";
@@ -13,7 +16,9 @@ import {
   FaCamera, FaVideo, FaMapMarkerAlt, FaRegTrashAlt,
   FaTimes, FaExclamationCircle, FaCheckCircle,
   FaSpinner, FaExclamationTriangle, FaRedo, FaStop,
-  FaMicrophone, FaMicrophoneSlash, FaFilm,
+  FaMicrophone, FaMicrophoneSlash, FaFilm, FaShieldAlt,
+  FaBolt, FaLayerGroup, FaChevronDown, FaChevronUp,
+  FaExpand,
 } from "react-icons/fa";
 import { MdOutlineLocationOn, MdFiberManualRecord, MdRadar } from "react-icons/md";
 import { useUser } from "../../hooks/useUser";
@@ -108,72 +113,358 @@ function distanceFeedback(bbox) {
   return { ok: true, text: `~${est} m — good framing`, area };
 }
 
-// ─── Detection Filmstrip component ───────────────────────────────────────────
+// ─── Segmentation Mask (replaces bounding boxes for uploaded media) ───────────
+
+function SegmentationMask({ boxes, imageSize, label }) {
+  if (!boxes || boxes.length === 0 || !imageSize.width) return null;
+
+  const maskColor = label === "crack"
+    ? { fill: "rgba(59,130,246,0.22)", glow: "#3b82f6" }
+    : { fill: "rgba(249,115,22,0.22)", glow: "#f97316" };
+
+  const filterId = `seg-glow-${label ?? "default"}`;
+
+  return (
+    <svg
+      className="seg-mask-svg"
+      viewBox={`0 0 ${imageSize.width} ${imageSize.height}`}
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <defs>
+        <filter id={filterId} x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+          <feColorMatrix
+            in="blur"
+            type="matrix"
+            values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7"
+            result="mask"
+          />
+          <feComposite in="SourceGraphic" in2="mask" operator="atop" />
+        </filter>
+        <filter id={`${filterId}-edge`}>
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      {boxes.map((b, i) => {
+        const x  = (b.x_norm ?? 0) * imageSize.width;
+        const y  = (b.y_norm ?? 0) * imageSize.height;
+        const bw = (b.w_norm ?? 0) * imageSize.width;
+        const bh = (b.h_norm ?? 0) * imageSize.height;
+
+        return (
+          <g key={i}>
+            {/* Soft filled region */}
+            <rect
+              x={x} y={y} width={bw} height={bh}
+              fill={maskColor.fill}
+              rx="6" ry="6"
+              filter={`url(#${filterId}-edge)`}
+            />
+            {/* Pulse border */}
+            <rect
+              x={x} y={y} width={bw} height={bh}
+              fill="none"
+              stroke={maskColor.glow}
+              strokeWidth="1.5"
+              strokeDasharray="6 3"
+              rx="6" ry="6"
+              opacity="0.7"
+              className="seg-dash-anim"
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ─── Gallery Filmstrip with lightbox ─────────────────────────────────────────
 
 function DetectionFilmstrip({ snapshots }) {
-  const [selected, setSelected] = useState(null);
+  const [lightbox, setLightbox] = useState(null);
 
   if (!snapshots || snapshots.length === 0) return null;
 
   return (
-    <div className="filmstrip-wrapper">
-      <div className="filmstrip-header">
-        <FaFilm className="filmstrip-icon" aria-hidden="true" />
-        <span>Detection Filmstrip</span>
-        <span className="filmstrip-count">{snapshots.length} frame{snapshots.length !== 1 ? "s" : ""}</span>
-      </div>
+    <>
+      <div className="filmstrip-wrapper">
+        <div className="filmstrip-header">
+          <FaFilm className="filmstrip-icon" aria-hidden="true" />
+          <span>Detection Frames</span>
+          <span className="filmstrip-count">
+            {snapshots.length} frame{snapshots.length !== 1 ? "s" : ""}
+          </span>
+        </div>
 
-      <div className="filmstrip-scroll">
-        {snapshots.map((snap, i) => (
-          <button
-            key={i}
-            className={`filmstrip-thumb${selected === i ? " selected" : ""}`}
-            onClick={() => setSelected(selected === i ? null : i)}
-            aria-label={`Frame ${snap.frame}: ${snap.label} at ${Math.round(snap.confidence * 100)}% confidence`}
-          >
-            <img
-              src={`data:image/jpeg;base64,${snap.image_b64}`}
-              alt={`${snap.label} detection frame ${snap.frame}`}
-              className="filmstrip-thumb-img"
-            />
-            <div className={`filmstrip-badge filmstrip-badge-${snap.label}`}>
-              {snap.label} · {Math.round(snap.confidence * 100)}%
-            </div>
-            <div className="filmstrip-frame-num">#{snap.frame}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* Expanded view */}
-      {selected !== null && snapshots[selected] && (
-        <div className="filmstrip-expanded">
-          <div className="filmstrip-expanded-header">
-            <span className={`filmstrip-expanded-label filmstrip-badge-${snapshots[selected].label}`}>
-              {snapshots[selected].label.toUpperCase()} DETECTED
-            </span>
-            <span className="filmstrip-expanded-conf">
-              {Math.round(snapshots[selected].confidence * 100)}% confidence · frame #{snapshots[selected].frame}
-            </span>
+        <div className="filmstrip-gallery">
+          {snapshots.map((snap, i) => (
             <button
-              className="filmstrip-expanded-close"
-              onClick={() => setSelected(null)}
-              aria-label="Close expanded view"
+              key={i}
+              className="filmstrip-card"
+              onClick={() => setLightbox(i)}
+              aria-label={`Frame ${snap.frame}: ${snap.label} at ${Math.round(snap.confidence * 100)}%`}
+            >
+              <div className="filmstrip-card-img-wrap">
+                <img
+                  src={`data:image/jpeg;base64,${snap.image_b64}`}
+                  alt={`${snap.label} frame ${snap.frame}`}
+                  className="filmstrip-card-img"
+                />
+                <div className="filmstrip-card-expand">
+                  <FaExpand />
+                </div>
+              </div>
+              <div className="filmstrip-card-meta">
+                <span className={`filmstrip-card-type type-${snap.label}`}>
+                  {snap.label.toUpperCase()}
+                </span>
+                <span className="filmstrip-card-conf">
+                  {Math.round(snap.confidence * 100)}%
+                </span>
+                <span className="filmstrip-card-frame">#{snap.frame}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Lightbox */}
+      {lightbox !== null && snapshots[lightbox] && ReactDOM.createPortal(
+        <div
+          className="filmstrip-lightbox"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="filmstrip-lb-inner" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="filmstrip-lb-close"
+              onClick={() => setLightbox(null)}
+              aria-label="Close"
             >
               <FaTimes />
             </button>
+            <div className="filmstrip-lb-meta">
+              <span className={`filmstrip-card-type type-${snapshots[lightbox].label}`}>
+                {snapshots[lightbox].label.toUpperCase()}
+              </span>
+              <span className="filmstrip-lb-conf">
+                {Math.round(snapshots[lightbox].confidence * 100)}% confidence
+              </span>
+              <span className="filmstrip-lb-frame">Frame #{snapshots[lightbox].frame}</span>
+            </div>
+            <img
+              src={`data:image/jpeg;base64,${snapshots[lightbox].image_b64}`}
+              alt="Expanded detection frame"
+              className="filmstrip-lb-img"
+            />
+            {/* Navigation */}
+            <div className="filmstrip-lb-nav">
+              <button
+                className="filmstrip-lb-btn"
+                onClick={() => setLightbox((p) => Math.max(0, p - 1))}
+                disabled={lightbox === 0}
+              >
+                ← Prev
+              </button>
+              <span className="filmstrip-lb-pos">{lightbox + 1} / {snapshots.length}</span>
+              <button
+                className="filmstrip-lb-btn"
+                onClick={() => setLightbox((p) => Math.min(snapshots.length - 1, p + 1))}
+                disabled={lightbox === snapshots.length - 1}
+              >
+                Next →
+              </button>
+            </div>
           </div>
-          <img
-            src={`data:image/jpeg;base64,${snapshots[selected].image_b64}`}
-            alt={`${snapshots[selected].label} detection expanded`}
-            className="filmstrip-expanded-img"
-          />
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ─── Compact AI Analysis Summary (collapsible) ───────────────────────────────
+
+function AIAnalysisSummary({
+  damageType, severity, aiConfidence, coords,
+  barangay, file, analysisComplete, imageType, isAnalyzing,
+}) {
+  const [expanded, setExpanded] = useState(true);
+
+  const riskScore = useMemo(() => {
+    if (!analysisComplete || !damageType || aiConfidence == null) return null;
+    let score = aiConfidence * 100;
+    if (severity === "CRITICAL")  score = Math.min(100, score * 1.30);
+    if (damageType === "POTHOLE") score = Math.min(100, score * 1.10);
+    return Math.round(score);
+  }, [damageType, severity, aiConfidence, analysisComplete]);
+
+  const riskLevel = riskScore == null ? null
+    : riskScore >= 70 ? "high"
+    : riskScore >= 40 ? "medium"
+    : "low";
+
+  const RISK_LABELS = { high: "HIGH RISK", medium: "MODERATE", low: "LOW RISK" };
+  const RISK_COLORS = { high: "#ef4444",   medium: "#f59e0b",  low: "#22c55e"  };
+
+  const checks = [
+    { label: "Media uploaded",        ok: !!file,                                        warn: false },
+    { label: "GPS acquired",          ok: !!coords,                                      warn: false },
+    { label: "Street selected",       ok: !!barangay,                                    warn: false },
+    { label: "Damage detected",       ok: analysisComplete && !!damageType,              warn: analysisComplete && !damageType },
+    { label: imageType === "AI-GENERATED" ? "Flagged — admin review" : "Authenticity verified",
+      ok: imageType === "REAL", warn: imageType === "AI-GENERATED" },
+  ];
+
+  const readyCount = checks.filter((c) => c.ok).length;
+  const readyPct   = Math.round((readyCount / checks.length) * 100);
+  const allReady   = readyCount === checks.length;
+
+  if (!isAnalyzing && !file) return null;
+
+  return (
+    <div className="ais-card">
+      <button
+        className="ais-header"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <div className="ais-header-left">
+          <FaBolt className="ais-header-icon" aria-hidden="true" />
+          <span className="ais-header-title">AI Analysis Summary</span>
+        </div>
+        <div className="ais-header-right">
+          {isAnalyzing ? (
+            <div className="ais-header-badge ais-badge-scanning">
+              <FaSpinner className="spin-icon" aria-hidden="true" /> Scanning
+            </div>
+          ) : allReady ? (
+            <div className="ais-header-badge ais-badge-ready">Ready</div>
+          ) : (
+            <div className="ais-header-badge ais-badge-pending">{readyCount}/{checks.length}</div>
+          )}
+          {riskScore != null && (
+            <span className="ais-risk-chip" style={{ color: RISK_COLORS[riskLevel] }}>
+              {riskScore}/100
+            </span>
+          )}
+          <span className="ais-toggle-icon">
+            {expanded ? <FaChevronUp /> : <FaChevronDown />}
+          </span>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="ais-body">
+          {/* Compact metrics row */}
+          <div className="ais-metrics-row">
+            {[
+              {
+                label: "Type",
+                value: damageType ?? (isAnalyzing ? "…" : "—"),
+                cls: damageType === "CRACK" ? "val-crack" : damageType === "POTHOLE" ? "val-pothole" : "",
+              },
+              {
+                label: "Severity",
+                value: severity ?? (isAnalyzing ? "…" : "—"),
+                cls: severity === "CRITICAL" ? "val-critical" : severity === "NON-CRITICAL" ? "val-safe" : "",
+              },
+              {
+                label: "Conf.",
+                value: aiConfidence != null ? `${Math.round(aiConfidence * 100)}%` : (isAnalyzing ? "…" : "—"),
+                cls: aiConfidence >= 0.7 ? "val-safe" : aiConfidence >= 0.4 ? "val-warn" : "",
+              },
+              {
+                label: "Auth",
+                value: imageType ?? (isAnalyzing ? "…" : "—"),
+                cls: imageType === "REAL" ? "val-safe" : imageType === "AI-GENERATED" ? "val-critical" : "",
+              },
+            ].map(({ label, value, cls }) => (
+              <div key={label} className="ais-metric-compact">
+                <span className="ais-metric-label">{label}</span>
+                <span className={`ais-metric-value ${cls}`}>{value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Risk meter (compact) */}
+          {riskScore != null && (
+            <div className="ais-risk-compact">
+              <div className="ais-risk-row">
+                <span className="ais-risk-label">
+                  <FaShieldAlt style={{ marginRight: 4 }} aria-hidden="true" />
+                  Risk
+                </span>
+                <span className="ais-risk-value" style={{ color: RISK_COLORS[riskLevel] }}>
+                  {riskScore}/100 · {RISK_LABELS[riskLevel]}
+                </span>
+              </div>
+              <div className="ais-risk-track">
+                <div
+                  className="ais-risk-fill"
+                  style={{
+                    width: `${riskScore}%`,
+                    background: riskLevel === "high"
+                      ? "linear-gradient(90deg,#f59e0b,#ef4444)"
+                      : riskLevel === "medium"
+                      ? "linear-gradient(90deg,#22c55e,#f59e0b)"
+                      : "linear-gradient(90deg,#22c55e,#86efac)",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Readiness */}
+          <div className="ais-readiness-compact">
+            <div className="ais-readiness-row">
+              <span className="ais-readiness-label">
+                <FaLayerGroup style={{ marginRight: 4 }} aria-hidden="true" />
+                Readiness
+              </span>
+              <span className="ais-readiness-pct" style={{ color: allReady ? "#22c55e" : "var(--cr-text-muted)" }}>
+                {readyPct}%
+              </span>
+            </div>
+            <div className="ais-readiness-track">
+              <div
+                className="ais-readiness-fill"
+                style={{
+                  width: `${readyPct}%`,
+                  background: allReady ? "#22c55e" : "var(--cr-primary)",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Checklist — 2-column compact */}
+          <div className="ais-checklist-compact">
+            {checks.map(({ label, ok, warn }) => {
+              const dot = ok ? "#22c55e" : warn ? "#f59e0b" : "var(--cr-border)";
+              return (
+                <div key={label} className={`ais-check-item-compact ${ok ? "ais-ok" : warn ? "ais-warn" : "ais-pend"}`}>
+                  <span className="ais-check-dot" style={{ background: dot }} />
+                  <span className="ais-check-label">{label}</span>
+                  {ok   && <FaCheckCircle  style={{ color: "#22c55e", fontSize: 9, flexShrink: 0 }} />}
+                  {warn && <FaExclamationTriangle style={{ color: "#f59e0b", fontSize: 9, flexShrink: 0 }} />}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Sub-components (realtime) ────────────────────────────────────────────────
 
 function RdConfidenceBar({ confidence }) {
   const pct = Math.round((confidence ?? 0) * 100);
@@ -260,13 +551,11 @@ function CreateReport({ onClose }) {
   const [rdLogEntries,    setRdLogEntries]    = useState([]);
   const [rdNotification,  setRdNotification]  = useState(null);
 
-  // Overlay state
   const [predictionResult,    setPredictionResult]    = useState(null);
   const [previewSize,         setPreviewSize]         = useState({ width: 0, height: 0 });
   const [viewfinderSize,      setViewfinderSize]      = useState({ width: 0, height: 0 });
   const [rdVideoSize,         setRdVideoSize]         = useState({ width: 0, height: 0 });
 
-  // ── FILMSTRIP state ─────────────────────────────────────────────────────────
   const [detectionSnapshots, setDetectionSnapshots] = useState([]);
 
   const [isAnalyzing,      setIsAnalyzing]      = useState(false);
@@ -697,13 +986,11 @@ function CreateReport({ onClose }) {
         setHfStatus("skipped");
         setImageType("REAL");
 
-        // ── FILMSTRIP: collect snapshots from analytics ──────────────────────
         const snapshots = result.data?.analytics?.detection_snapshots ?? [];
         setDetectionSnapshots(snapshots);
 
         const prediction = result.data?.prediction;
 
-        // Extract hybrid metadata from video pipeline
         setIsHybrid(result.data?.is_hybrid ?? false);
         setSecondaryDamage(result.data?.secondary_damage ?? null);
         setDetectionNote(result.data?.detection_note ?? null);
@@ -825,7 +1112,6 @@ function CreateReport({ onClose }) {
         ai_confidence:    aiConfidence ?? 0.0,
         is_flagged_fake:  is_flagged,
         fake_confidence:  is_flagged ? 0.9 : 0.0,
-        // ── Video / hybrid fields ──────────────────────────────
         report_type:      isVideo ? "video" : "image",
         is_hybrid:        isHybrid,
         secondary_damage: secondaryDamage ?? null,
@@ -856,16 +1142,7 @@ function CreateReport({ onClose }) {
   const rdPred         = rdPrediction;
   const rdSevStyle     = rdPred ? getSeverityStyle(rdPred.severity) : null;
 
-  const previewOverlayDetections = (predictionResult?.boxes ?? []).map((b) => ({
-    label:      b.label,
-    confidence: b.confidence,
-    severity:   predictionResult.severity,
-    x_norm:     b.x_norm,
-    y_norm:     b.y_norm,
-    w_norm:     b.w_norm,
-    h_norm:     b.h_norm,
-  }));
-
+  // Live camera overlay — keep bounding boxes
   const viewfinderOverlayDetections = (liveDetection.detected && liveDetection.boxes?.length)
     ? liveDetection.boxes.map((b) => ({
         label:      b.label,
@@ -887,6 +1164,10 @@ function CreateReport({ onClose }) {
     w_norm:     b.w_norm,
     h_norm:     b.h_norm,
   }));
+
+  // Uploaded image/video: segmentation mask boxes (NOT DetectionOverlay)
+  const maskBoxes = predictionResult?.boxes ?? [];
+  const maskLabel = predictionResult?.label ?? null;
 
   const switchTab = useCallback((id) => {
     clearMedia();
@@ -1118,7 +1399,6 @@ function CreateReport({ onClose }) {
               ) : (
                 <div
                   className={`camera-viewport${isRecording ? " recording" : ""}`}
-                  style={{ position: "relative" }}
                 >
                   <video
                     ref={videoRef}
@@ -1149,6 +1429,7 @@ function CreateReport({ onClose }) {
                     </div>
                   )}
 
+                  {/* Live viewfinder KEEPS bounding boxes */}
                   {cameraActive && viewfinderSize.width > 0 && (
                     <DetectionOverlay
                       mode="realtime"
@@ -1222,7 +1503,7 @@ function CreateReport({ onClose }) {
               onKeyDown={(e) => e.key === "Enter" && !preview && fileRef.current.click()}
             >
               {preview ? (
-                <div className="preview-container" style={{ position: "relative" }}>
+                <div className="preview-container">
                   {activeTab === "video" || (file && isVideoFile(file))
                     ? (
                       <video
@@ -1251,23 +1532,45 @@ function CreateReport({ onClose }) {
                       />
                     )}
 
-                  {analysisComplete && previewSize.width > 0 && previewOverlayDetections.length > 0 && (
-                    <DetectionOverlay
-                      mode="image"
-                      detections={previewOverlayDetections}
-                      width={previewSize.width}
-                      height={previewSize.height}
-                      finalResult={{
-                        detected:   !!predictionResult && predictionResult.label !== "none",
-                        prediction: predictionResult,
-                      }}
+                  {/* Segmentation mask for uploaded image (NOT bounding boxes) */}
+                  {analysisComplete && previewSize.width > 0 && maskBoxes.length > 0 && !isVideoFile(file) && (
+                    <SegmentationMask
+                      boxes={maskBoxes}
+                      imageSize={previewSize}
+                      label={maskLabel}
                     />
+                  )}
+
+                  {/* Analysis result badge overlay */}
+                  {analysisComplete && damageType && (
+                    <div className="preview-result-badge">
+                      <span className={`preview-badge-type type-${maskLabel}`}>
+                        {damageType}
+                      </span>
+                      {severity && (
+                        <span className={`preview-badge-sev sev-${severity?.toLowerCase()}`}>
+                          {severity}
+                        </span>
+                      )}
+                      {aiConfidence && (
+                        <span className="preview-badge-conf">
+                          {Math.round(aiConfidence * 100)}%
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   {!isSubmitting && !isAnalyzing && (
                     <button className="trash-btn" onClick={clearMedia} aria-label="Remove file">
                       <FaRegTrashAlt aria-hidden="true" />
                     </button>
+                  )}
+
+                  {isAnalyzing && (
+                    <div className="preview-analyzing-overlay" aria-live="polite">
+                      <FaSpinner className="spin-icon" aria-hidden="true" />
+                      <span>{analysisProgress || "Analyzing…"}</span>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -1391,11 +1694,13 @@ function CreateReport({ onClose }) {
 
         {/* ══ RIGHT PANEL ══ */}
         <div className="snap-right">
+
+          {/* Damage type + Severity — compact 2-col */}
           <div className="top-classifications">
             <div className="class-group">
               <label id="damage-type-label">
-                DAMAGE TYPE (AI CLASSIFIED)
-                {isAnalyzing && <FaSpinner className="spin-icon" aria-hidden="true" style={{ marginLeft: 6 }} />}
+                DAMAGE TYPE
+                {isAnalyzing && <FaSpinner className="spin-icon" aria-hidden="true" style={{ marginLeft: 5 }} />}
               </label>
               <div className="classification-buttons" role="group" aria-labelledby="damage-type-label">
                 <button className={`class-btn ${damageType === "POTHOLE" ? "active-pothole" : ""}`}
@@ -1406,8 +1711,8 @@ function CreateReport({ onClose }) {
             </div>
             <div className="class-group">
               <label id="severity-label">
-                SEVERITY (AI CLASSIFIED)
-                {isAnalyzing && <FaSpinner className="spin-icon" aria-hidden="true" style={{ marginLeft: 6 }} />}
+                SEVERITY
+                {isAnalyzing && <FaSpinner className="spin-icon" aria-hidden="true" style={{ marginLeft: 5 }} />}
               </label>
               <div className="classification-buttons" role="group" aria-labelledby="severity-label">
                 <button className={`class-btn ${severity === "NON-CRITICAL" ? "active-non-critical" : ""}`}
@@ -1418,6 +1723,7 @@ function CreateReport({ onClose }) {
             </div>
           </div>
 
+          {/* Location block */}
           <div className="snap-location-block">
             <div className="snap-location-header">
               <label>LOCATION &amp; BARANGAY</label>
@@ -1432,7 +1738,8 @@ function CreateReport({ onClose }) {
                 readOnly placeholder="Fetching location…" aria-label="GPS coordinates (auto-detected)" />
               <div className="input-icon-right" aria-hidden="true"><FaMapMarkerAlt /></div>
             </div>
-            <div className="snap-form-row" style={{ marginTop: 8 }}>
+            {/* City + Street inline */}
+            <div className="snap-form-row" style={{ marginTop: 6 }}>
               <div className="snap-form-group half">
                 <label htmlFor="city-input">CITY</label>
                 <input id="city-input" type="text" value={city} onChange={(e) => setCity(e.target.value)} disabled={isSubmitting} />
@@ -1446,10 +1753,11 @@ function CreateReport({ onClose }) {
             </div>
           </div>
 
+          {/* Reporter + Barangay */}
           <div className="snap-form-row">
             <div className="snap-form-group half">
               <label htmlFor="reporter-name">REPORTER'S NAME</label>
-              <input id="reporter-name" type="text" placeholder="Enter your name"
+              <input id="reporter-name" type="text" placeholder="Your name"
                 value={reporterName} onChange={(e) => setReporterName(e.target.value)} disabled={isSubmitting} />
             </div>
             <div className="snap-form-group half">
@@ -1464,13 +1772,28 @@ function CreateReport({ onClose }) {
             </div>
           </div>
 
+          {/* Collapsible AI Analysis Summary */}
+          <AIAnalysisSummary
+            damageType={damageType}
+            severity={severity}
+            aiConfidence={aiConfidence}
+            coords={coords}
+            barangay={barangay}
+            file={file}
+            analysisComplete={analysisComplete}
+            imageType={imageType}
+            isAnalyzing={isAnalyzing}
+          />
+
+          {/* Additional info */}
           <div className="snap-form-group">
             <label htmlFor="additional-info">ADDITIONAL INFORMATION</label>
-            <textarea id="additional-info" rows="3" maxLength={1000}
+            <textarea id="additional-info" rows="2" maxLength={1000}
               placeholder="Describe the damage (e.g., traffic impact, depth, visibility risk)"
               value={additionalInfo} onChange={(e) => setAdditionalInfo(e.target.value)} disabled={isSubmitting} />
           </div>
 
+          {/* Messages */}
           {formError && (
             <div className="error-message" role="alert">
               <FaExclamationCircle aria-hidden="true" style={{ marginRight: 6 }} />{formError}
@@ -1482,6 +1805,7 @@ function CreateReport({ onClose }) {
             </div>
           )}
 
+          {/* Actions */}
           <div className="snap-actions">
             <button className="btn-discard" onClick={() => setShowDiscardModal(true)}
               disabled={isSubmitting || isAnalyzing}>Discard</button>

@@ -855,3 +855,47 @@ body.dark .no-image {
     width: 100%;
   }
 }
+
+/* ── Add these to the bottom of AllReports.css ── */
+
+/* Modal content background — most critical fix */
+body.dark .modal-content {
+  background: var(--card);        /* #132a1c */
+  color: var(--text);             /* #d8f3dc */
+  border-color: var(--border);    /* #1f4a2e */
+}
+
+/* Info cards inside modal */
+body.dark .reporter-info,
+body.dark .info-card,
+body.dark .location-info {
+  background: var(--bg-secondary); /* #0a1910 */
+  border-color: var(--border);
+}
+
+/* Row labels and values */
+body.dark .info-row strong {
+  color: var(--text-muted);       /* #5a8a6e */
+}
+
+body.dark .info-row span {
+  color: var(--text);             /* #d8f3dc */
+}
+
+/* Media/image container */
+body.dark .modal-media {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+/* No image placeholder */
+body.dark .no-image {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+/* Modal title */
+body.dark .modal-title {
+  color: var(--primary);          /* #52b788 */
+}

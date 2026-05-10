@@ -8,14 +8,21 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { getReports } from "../../api/reports";
 import { useTheme } from "../Contexts/ThemeContext";
+import { useMapReports } from "../../hooks/useMapReports";
 import {
   MapPin, AlertTriangle, Clock, CheckCircle2,
   BarChart2, Layers, Search, X, Maximize2,
   Navigation, SlidersHorizontal, ChevronDown,
   Flame, Circle as CircleIcon, Map,
 } from "lucide-react";
+
+// ─── Image helper ──────────────────────────────────────────────────────────────
+const BASE_URL = import.meta.env.VITE_API_URL || "";
+const getThumb = (r) => {
+  const url = r?.media_attachments?.[0]?.file_url;
+  return url ? `${BASE_URL}${url}` : null;
+};
 
 // ─── Fix Leaflet default icon URLs ────────────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -189,9 +196,6 @@ export default function MapView() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
-  const [reports,      setReports]      = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState(null);
   const [viewMode,     setViewMode]     = useState("markers");
   const [tileKey,      setTileKey]      = useState("street");
   const [filterSev,    setFilterSev]    = useState("All");
@@ -205,24 +209,7 @@ export default function MapView() {
   const [filtersOpen,  setFiltersOpen]  = useState(false);
   const [sidebarOpen,  setSidebarOpen]  = useState(false);
 
-  // Fetch reports
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await getReports({ page: 1, page_size: 100 });
-        if (res?.success) {
-          const body = res.data;
-          setReports(Array.isArray(body) ? body : Array.isArray(body?.results) ? body.results : []);
-        } else {
-          setError(res?.error || "Could not load reports.");
-        }
-      } catch {
-        setError("Could not load reports. Check your connection.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+const { reports, loading, error, refetch } = useMapReports();
 
   // Derived state
   const safe   = Array.isArray(reports) ? reports : [];
@@ -247,10 +234,10 @@ export default function MapView() {
   });
 
   const counts = {
-    critical:  mapped.filter((r) => (r.ai_severity || "").toLowerCase() === "critical").length,
+    critical:    mapped.filter((r) => (r.ai_severity || "").toLowerCase() === "critical").length,
     nonCritical: mapped.filter((r) => (r.ai_severity || "").toLowerCase() === "non_critical").length,
-    inProgress: mapped.filter((r) => r.status === "IN_PROGRESS").length,
-    resolved:   mapped.filter((r) => r.status === "RESOLVED").length,
+    inProgress:  mapped.filter((r) => r.status === "IN_PROGRESS").length,
+    resolved:    mapped.filter((r) => r.status === "RESOLVED").length,
   };
 
   const openPanel = useCallback((r) => {
@@ -265,11 +252,6 @@ export default function MapView() {
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <>
-      {/*
-        AppHeader and Sidebar sit OUTSIDE mv-root so they don't
-        affect the content column's height/width calculations.
-        They should be position:fixed in their own CSS.
-      */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <AppHeader onMenuToggle={() => setSidebarOpen((p) => !p)} />
 
@@ -281,10 +263,9 @@ export default function MapView() {
         />
       )}
 
-      {/* ── Main content column ── */}
       <div data-theme={theme} className="mv-root">
 
-        {/* ── Top bar: title + stat pills ── */}
+        {/* ── Top bar ── */}
         <header className="mv-topbar">
           <div className="mv-topbar-left">
             <div className="mv-page-icon" aria-hidden="true">
@@ -325,11 +306,9 @@ export default function MapView() {
           </div>
         </header>
 
-        {/* ── Controls bar: search + view mode + tile + filters ── */}
+        {/* ── Controls bar ── */}
         <div className="mv-controls">
           <div className="mv-controls-row">
-
-            {/* Search */}
             <div className="mv-search-wrap">
               <Search className="mv-search-icon" size={14} strokeWidth={2} aria-hidden="true" />
               <input
@@ -346,7 +325,6 @@ export default function MapView() {
               )}
             </div>
 
-            {/* View mode */}
             <div className="mv-seg-group" role="group" aria-label="View mode">
               {VIEW_MODES.map(({ key, label, icon }) => (
                 <button
@@ -360,7 +338,6 @@ export default function MapView() {
               ))}
             </div>
 
-            {/* Tile style */}
             <div className="mv-seg-group mv-tile-group" role="group" aria-label="Map style">
               {Object.entries(TILES).map(([k, v]) => (
                 <button
@@ -374,7 +351,6 @@ export default function MapView() {
               ))}
             </div>
 
-            {/* Right side: result count + filter toggle */}
             <div className="mv-controls-right">
               <span className="mv-result-count" aria-live="polite">
                 <strong>{filtered.length}</strong>{" "}
@@ -396,7 +372,6 @@ export default function MapView() {
             </div>
           </div>
 
-          {/* Collapsible filter drawer */}
           <div
             id="mv-filter-drawer"
             className={`mv-filter-drawer${filtersOpen ? " mv-filter-drawer--open" : ""}`}
@@ -405,11 +380,7 @@ export default function MapView() {
             <div className="mv-filter-inner">
               <label className="mv-filter-label">
                 <span>Severity</span>
-                <select
-                  className="mv-select"
-                  value={filterSev}
-                  onChange={(e) => setFilterSev(e.target.value)}
-                >
+                <select className="mv-select" value={filterSev} onChange={(e) => setFilterSev(e.target.value)}>
                   <option value="All">All Severity</option>
                   <option value="critical">Critical</option>
                   <option value="non_critical">Non-Critical</option>
@@ -417,11 +388,7 @@ export default function MapView() {
               </label>
               <label className="mv-filter-label">
                 <span>Status</span>
-                <select
-                  className="mv-select"
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                >
+                <select className="mv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                   <option value="All">All Status</option>
                   <option value="PENDING">Pending</option>
                   <option value="VERIFIED">Verified</option>
@@ -432,11 +399,7 @@ export default function MapView() {
               </label>
               <label className="mv-filter-label">
                 <span>Damage</span>
-                <select
-                  className="mv-select"
-                  value={filterDmg}
-                  onChange={(e) => setFilterDmg(e.target.value)}
-                >
+                <select className="mv-select" value={filterDmg} onChange={(e) => setFilterDmg(e.target.value)}>
                   <option value="All">All Damage</option>
                   <option value="pothole">Pothole</option>
                   <option value="crack">Crack</option>
@@ -452,7 +415,7 @@ export default function MapView() {
           </div>
         </div>
 
-        {/* ── Body: map + slide-in panel ── */}
+        {/* ── Body: map + panel ── */}
         <div className="mv-body">
           <div className={`mv-map-wrap${panelOpen ? " mv-map-wrap--panel" : ""}`}>
 
@@ -465,9 +428,7 @@ export default function MapView() {
               <div className="mv-state-view mv-state-view--error">
                 <AlertTriangle size={36} strokeWidth={1.5} aria-hidden="true" />
                 <p>{error}</p>
-                <button className="mv-retry-btn" onClick={() => window.location.reload()}>
-                  Retry
-                </button>
+                <button className="mv-retry-btn" onClick={refetch}>Retry</button>
               </div>
             ) : (
               <MapContainer
@@ -490,60 +451,62 @@ export default function MapView() {
                 {viewMode === "heat"    && <HeatmapLayer reports={filtered} />}
                 {viewMode === "density" && <DensityLayer reports={filtered} />}
 
-                {viewMode === "markers" && filtered.map((r) => (
-                  <Marker
-                    key={r.id}
-                    position={[parseFloat(r.latitude), parseFloat(r.longitude)]}
-                    icon={getIcon(r)}
-                    eventHandlers={{ click: () => openPanel(r) }}
-                  >
-                    <Popup className="mv-popup-wrap">
-                      <div className="mv-popup">
-                        <div className="mv-popup-head">
-                          <span className="mv-popup-id">#{r.id}</span>
-                          <span
-                            className="mv-popup-sev"
-                            style={{ background: getSevColor(r.ai_severity) }}
-                          >
-                            {r.ai_severity || "Unknown"}
-                          </span>
-                        </div>
-                        {r.image_url && (
-                          <button
-                            className="mv-popup-img-btn"
-                            onClick={() => setLightbox(r.image_url)}
-                          >
-                            <img src={r.image_url} alt="Report evidence" />
-                            <span className="mv-popup-img-overlay">View Photo</span>
-                          </button>
-                        )}
-                        <div className="mv-popup-body">
-                          <div className="mv-popup-row">
-                            <span>Location</span>
-                            <span>{r.barangay || r.street_name || "—"}</span>
-                          </div>
-                          <div className="mv-popup-row">
-                            <span>Damage</span>
-                            <span>{r.ai_damage_type || "—"}</span>
-                          </div>
-                          <div className="mv-popup-row">
-                            <span>Status</span>
-                            <span className={`mv-badge mv-badge--${(r.status || "").toLowerCase().replace("_", "-")}`}>
-                              {STATUS_LABEL[r.status] || r.status || "—"}
+                {viewMode === "markers" && filtered.map((r) => {
+                  const thumb = getThumb(r); // ✅ fixed
+                  return (
+                    <Marker
+                      key={r.id}
+                      position={[parseFloat(r.latitude), parseFloat(r.longitude)]}
+                      icon={getIcon(r)}
+                      eventHandlers={{ click: () => openPanel(r) }}
+                    >
+                      <Popup className="mv-popup-wrap">
+                        <div className="mv-popup">
+                          <div className="mv-popup-head">
+                            <span className="mv-popup-id">#{r.id}</span>
+                            <span
+                              className="mv-popup-sev"
+                              style={{ background: getSevColor(r.ai_severity) }}
+                            >
+                              {r.ai_severity || "Unknown"}
                             </span>
                           </div>
+                          {thumb && ( // ✅ fixed
+                            <button
+                              className="mv-popup-img-btn"
+                              onClick={() => setLightbox(thumb)}
+                            >
+                              <img src={thumb} alt="Report evidence" />
+                              <span className="mv-popup-img-overlay">View Photo</span>
+                            </button>
+                          )}
+                          <div className="mv-popup-body">
+                            <div className="mv-popup-row">
+                              <span>Location</span>
+                              <span>{r.barangay || r.street_name || "—"}</span>
+                            </div>
+                            <div className="mv-popup-row">
+                              <span>Damage</span>
+                              <span>{r.ai_damage_type || "—"}</span>
+                            </div>
+                            <div className="mv-popup-row">
+                              <span>Status</span>
+                              <span className={`mv-badge mv-badge--${(r.status || "").toLowerCase().replace("_", "-")}`}>
+                                {STATUS_LABEL[r.status] || r.status || "—"}
+                              </span>
+                            </div>
+                          </div>
+                          <button className="mv-popup-cta" onClick={() => openPanel(r)}>
+                            View Details
+                          </button>
                         </div>
-                        <button className="mv-popup-cta" onClick={() => openPanel(r)}>
-                          View Details
-                        </button>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                      </Popup>
+                    </Marker>
+                  );
+                })}
               </MapContainer>
             )}
 
-            {/* Legend */}
             {!loading && !error && (
               <div className="mv-legend" aria-label="Severity legend">
                 <p className="mv-legend-title">Severity</p>
@@ -567,102 +530,105 @@ export default function MapView() {
           >
             <div className="mv-panel-drag" aria-hidden="true" />
 
-            {selected && (
-              <>
-                <div className="mv-panel-head">
-                  <div className="mv-panel-title-group">
-                    <h2 className="mv-panel-id">Report #{selected.id}</h2>
-                    <p className="mv-panel-loc">
-                      {selected.barangay || selected.street_name || "Malabon City"}
-                    </p>
+            {selected && (() => {
+              const selectedThumb = getThumb(selected); // ✅ fixed
+              return (
+                <>
+                  <div className="mv-panel-head">
+                    <div className="mv-panel-title-group">
+                      <h2 className="mv-panel-id">Report #{selected.id}</h2>
+                      <p className="mv-panel-loc">
+                        {selected.barangay || selected.street_name || "Malabon City"}
+                      </p>
+                    </div>
+                    <button
+                      className="mv-panel-close"
+                      onClick={() => setPanelOpen(false)}
+                      aria-label="Close panel"
+                    >
+                      <X size={15} strokeWidth={2.5} />
+                    </button>
                   </div>
-                  <button
-                    className="mv-panel-close"
-                    onClick={() => setPanelOpen(false)}
-                    aria-label="Close panel"
-                  >
-                    <X size={15} strokeWidth={2.5} />
-                  </button>
-                </div>
 
-                {selected.image_url && (
-                  <button
-                    className="mv-panel-photo"
-                    onClick={() => setLightbox(selected.image_url)}
-                    aria-label="Expand photo"
-                  >
-                    <img src={selected.image_url} alt="Report evidence" />
-                    <span className="mv-panel-photo-overlay">
-                      <Maximize2 size={16} color="#fff" strokeWidth={2} aria-hidden="true" />
-                      <span>Expand</span>
-                    </span>
-                  </button>
-                )}
-
-                <div className="mv-panel-badges">
-                  <span
-                    className="mv-sev-chip"
-                    style={{
-                      background:   getSevColor(selected.ai_severity) + "18",
-                      color:        getSevColor(selected.ai_severity),
-                      borderColor:  getSevColor(selected.ai_severity) + "40",
-                    }}
-                  >
-                    {selected.ai_severity || "Unknown"}
-                  </span>
-                  <span className={`mv-badge mv-badge--${(selected.status || "").toLowerCase().replace("_", "-")}`}>
-                    {STATUS_LABEL[selected.status] || selected.status || "—"}
-                  </span>
-                </div>
-
-                <div className="mv-panel-info">
-                  {[
-                    ["Damage Type", selected.ai_damage_type || "—"],
-                    ["Reporter",    selected.reporter_name  || "—"],
-                    ["Barangay",    selected.barangay       || "—"],
-                    ["Coordinates", selected.latitude
-                      ? `${parseFloat(selected.latitude).toFixed(5)}, ${parseFloat(selected.longitude).toFixed(5)}`
-                      : "—"],
-                    ["Submitted", selected.created_at
-                      ? new Date(selected.created_at).toLocaleDateString("en-PH", {
-                          year: "numeric", month: "long", day: "numeric",
-                        })
-                      : "—"],
-                  ].map(([label, value]) => (
-                    <div className="mv-info-row" key={label}>
-                      <span className="mv-info-label">{label}</span>
-                      <span className="mv-info-value">{value}</span>
-                    </div>
-                  ))}
-
-                  {selected.description && (
-                    <div className="mv-info-desc">
-                      <span className="mv-info-label">Description</span>
-                      <p>{selected.description}</p>
-                    </div>
+                  {selectedThumb && ( // ✅ fixed
+                    <button
+                      className="mv-panel-photo"
+                      onClick={() => setLightbox(selectedThumb)}
+                      aria-label="Expand photo"
+                    >
+                      <img src={selectedThumb} alt="Report evidence" />
+                      <span className="mv-panel-photo-overlay">
+                        <Maximize2 size={16} color="#fff" strokeWidth={2} aria-hidden="true" />
+                        <span>Expand</span>
+                      </span>
+                    </button>
                   )}
-                </div>
 
-                <div className="mv-panel-actions">
-                  <button
-                    className="mv-fly-btn"
-                    onClick={() =>
-                      setFlyTarget([
-                        parseFloat(selected.latitude),
-                        parseFloat(selected.longitude),
-                      ])
-                    }
-                  >
-                    <Navigation size={14} strokeWidth={2.2} aria-hidden="true" />
-                    Fly to Location
-                  </button>
-                </div>
-              </>
-            )}
+                  <div className="mv-panel-badges">
+                    <span
+                      className="mv-sev-chip"
+                      style={{
+                        background:  getSevColor(selected.ai_severity) + "18",
+                        color:       getSevColor(selected.ai_severity),
+                        borderColor: getSevColor(selected.ai_severity) + "40",
+                      }}
+                    >
+                      {selected.ai_severity || "Unknown"}
+                    </span>
+                    <span className={`mv-badge mv-badge--${(selected.status || "").toLowerCase().replace("_", "-")}`}>
+                      {STATUS_LABEL[selected.status] || selected.status || "—"}
+                    </span>
+                  </div>
+
+                  <div className="mv-panel-info">
+                    {[
+                      ["Damage Type", selected.ai_damage_type || "—"],
+                      ["Reporter",    selected.owner?.full_name || "—"],
+                      ["Barangay",    selected.barangay || "—"],
+                      ["Coordinates", selected.latitude
+                        ? `${parseFloat(selected.latitude).toFixed(5)}, ${parseFloat(selected.longitude).toFixed(5)}`
+                        : "—"],
+                      ["Submitted", selected.created_at
+                        ? new Date(selected.created_at).toLocaleDateString("en-PH", {
+                            year: "numeric", month: "long", day: "numeric",
+                          })
+                        : "—"],
+                    ].map(([label, value]) => (
+                      <div className="mv-info-row" key={label}>
+                        <span className="mv-info-label">{label}</span>
+                        <span className="mv-info-value">{value}</span>
+                      </div>
+                    ))}
+
+                    {selected.description && (
+                      <div className="mv-info-desc">
+                        <span className="mv-info-label">Description</span>
+                        <p>{selected.description}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mv-panel-actions">
+                    <button
+                      className="mv-fly-btn"
+                      onClick={() =>
+                        setFlyTarget([
+                          parseFloat(selected.latitude),
+                          parseFloat(selected.longitude),
+                        ])
+                      }
+                    >
+                      <Navigation size={14} strokeWidth={2.2} aria-hidden="true" />
+                      Fly to Location
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </aside>
         </div>
 
-        {/* ── Bottom strip: recent reports ── */}
+        {/* ── Bottom strip ── */}
         <section className="mv-strip" aria-label="Recent reports">
           <div className="mv-strip-label">
             <span>Reports</span>
@@ -671,42 +637,44 @@ export default function MapView() {
             {filtered.length === 0 && !loading ? (
               <div className="mv-strip-empty">No reports match current filters.</div>
             ) : (
-              filtered.slice(0, 20).map((r) => (
-                <button
-                  key={r.id}
-                  className="mv-strip-card"
-                  onClick={() => openPanel(r)}
-                  role="listitem"
-                  aria-label={`Report #${r.id} in ${r.barangay || "unknown location"}`}
-                >
-                  {r.image_url ? (
-                    <img src={r.image_url} alt="" className="mv-strip-thumb" aria-hidden="true" />
-                  ) : (
-                    <div className="mv-strip-thumb mv-strip-thumb--empty" aria-hidden="true">
-                      <MapPin size={14} />
+              filtered.slice(0, 20).map((r) => {
+                const thumb = getThumb(r); // ✅ fixed
+                return (
+                  <button
+                    key={r.id}
+                    className="mv-strip-card"
+                    onClick={() => openPanel(r)}
+                    role="listitem"
+                    aria-label={`Report #${r.id} in ${r.barangay || "unknown location"}`}
+                  >
+                    {thumb ? ( // ✅ fixed
+                      <img src={thumb} alt="" className="mv-strip-thumb" aria-hidden="true" />
+                    ) : (
+                      <div className="mv-strip-thumb mv-strip-thumb--empty" aria-hidden="true">
+                        <MapPin size={14} />
+                      </div>
+                    )}
+                    <div className="mv-strip-info">
+                      <span className="mv-strip-id">#{r.id}</span>
+                      <span className="mv-strip-loc">{r.barangay || "—"}</span>
+                      <span
+                        className="mv-strip-sev"
+                        style={{
+                          background: getSevColor(r.ai_severity) + "18",
+                          color:      getSevColor(r.ai_severity),
+                        }}
+                      >
+                        {r.ai_severity || "—"}
+                      </span>
                     </div>
-                  )}
-                  <div className="mv-strip-info">
-                    <span className="mv-strip-id">#{r.id}</span>
-                    <span className="mv-strip-loc">{r.barangay || "—"}</span>
-                    <span
-                      className="mv-strip-sev"
-                      style={{
-                        background: getSevColor(r.ai_severity) + "18",
-                        color:      getSevColor(r.ai_severity),
-                      }}
-                    >
-                      {r.ai_severity || "—"}
-                    </span>
-                  </div>
-                </button>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
         </section>
       </div>
 
-      {/* Lightbox (portal-level, outside mv-root) */}
       {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
     </>
   );

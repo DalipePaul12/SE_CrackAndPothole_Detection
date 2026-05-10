@@ -241,7 +241,11 @@ function AllReports() {
   const [selectedReport, setSelectedReport] = useState(null);
 
   const { reports, loading, error, page, setPage, total, refetch } =
-    useReports({ mine: false, ...activeFilters });
+  useReports({
+    mine:     false,
+    status:   activeFilters.status   ?? null,
+    barangay: activeFilters.barangay ?? null,
+  });
 
   const applyFilters = useCallback(() => {
     setPage(1);
@@ -285,7 +289,7 @@ function AllReports() {
         <div className="allreports-filters">
           <div className="allreports-header">
             <Database size={18} style={{ color: "var(--primary)", flexShrink: 0 }} />
-            <h2>All Reports Database</h2>
+            <h2>All Reports</h2>
             <span className="report-count">{total} total</span>
           </div>
 
@@ -318,7 +322,7 @@ function AllReports() {
                   onChange={(e) => setFilters((f) => ({ ...f, severity: e.target.value }))}
                 >
                   <option value="All">All Severity</option>
-                  <option value="low">Low</option>
+                  <option value="non-critical">Non-Critical</option>
                   <option value="critical">Critical</option>
                 </select>
                 <ChevronDown size={15} className="select-icon" />
