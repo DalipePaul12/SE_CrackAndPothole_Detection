@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdminAllReports.css";
 import AdminSidebar from "../../components/AdminSidebar.jsx";
@@ -106,6 +106,7 @@ export default function AdminAllReports() {
   const [page,        setPage]        = useState(1);
 
   /* data */
+  const [rawReports, setRawReports] = useState([]);
   const [reports,   setReports]   = useState([]);
   const [total,     setTotal]     = useState(0);
   const [loading,   setLoading]   = useState(true);
@@ -132,71 +133,83 @@ export default function AdminAllReports() {
   }, [search]);
 
   /* fetch */
-  const fetchReports = useCallback(async () => {
-    setLoading(true); setError(null);
-    const params = { page, page_size: PAGE_SIZE };
-    if (filters.status !== "All") params.status = filters.status;
-    const res = await getReports(params);
-    if (!res.success) { setError(res.error); setLoading(false); return; }
+// Fetches from server — only re-runs when page or server-side status changes
+const fetchReports = useCallback(async () => {
+  setLoading(true);
+  setError(null);
+  const params = { page, page_size: PAGE_SIZE };
+  if (filters.status !== "All") params.status = filters.status;
 
-    let data = res.data?.results ?? [];
-    setTotal(res.data?.total ?? 0);
-
-    const bSet = new Set(["All"]);
-    data.forEach((r) => { if (r.barangay) bSet.add(r.barangay); });
-    setBarangays([...bSet]);
-
-    /* client-side filters */
-    if (filters.type !== "All")
-      data = data.filter((r) => damageType(r).toLowerCase() === filters.type.toLowerCase());
-    if (filters.severity !== "All")
-      data = data.filter((r) => severity(r).toLowerCase() === filters.severity.toLowerCase());
-    if (criticalOnly)
-      data = data.filter((r) => severity(r).toLowerCase() === "critical");
-    if (filters.barangay !== "All")
-      data = data.filter((r) => r.barangay === filters.barangay);
-    if (filters.dateFrom) {
-      const from = new Date(filters.dateFrom);
-      data = data.filter((r) => r.created_at && new Date(r.created_at) >= from);
-    }
-    if (filters.dateTo) {
-      const to = new Date(filters.dateTo); to.setHours(23, 59, 59);
-      data = data.filter((r) => r.created_at && new Date(r.created_at) <= to);
-    }
-    data = data.filter((r) => {
-      const c = confVal(r);
-      return c === null || (c >= filters.confMin && c <= filters.confMax);
-    });
-    if (dSearch) {
-      const q = dSearch.toLowerCase();
-      data = data.filter((r) =>
-        padId(r.id).toLowerCase().includes(q) ||
-        (r.street_name ?? "").toLowerCase().includes(q) ||
-        (r.barangay ?? "").toLowerCase().includes(q) ||
-        location(r).toLowerCase().includes(q) ||
-        (r.owner?.full_name ?? "").toLowerCase().includes(q)
-      );
-    }
-
-    /* sort */
-    const { field, dir } = sort;
-    data = [...data].sort((a, b) => {
-      let av, bv;
-      if (field === "created_at")  { av = new Date(a.created_at || 0);  bv = new Date(b.created_at || 0);  }
-      else if (field === "severity")   { av = sevWeight(a);     bv = sevWeight(b);     }
-      else if (field === "confidence") { av = confVal(a) ?? -1; bv = confVal(b) ?? -1; }
-      else if (field === "status") {
-        const o = { PENDING: 0, VERIFIED: 1, IN_PROGRESS: 2, RESOLVED: 3, DECLINED: 4 };
-        av = o[a.status] ?? 99; bv = o[b.status] ?? 99;
-      } else { av = a[field] ?? ""; bv = b[field] ?? ""; }
-      if (av < bv) return dir === "asc" ? -1 : 1;
-      if (av > bv) return dir === "asc" ?  1 : -1;
-      return 0;
-    });
-
-    setReports(data);
+  const res = await getReports(params);
+  if (!res.success) {
+    setError(res.error);
     setLoading(false);
-  }, [filters, dSearch, sort, criticalOnly, page]);
+    return;
+  }
+
+  const data = res.data?.results ?? [];
+  setTotal(res.data?.total ?? 0);
+  setRawReports(data);
+
+  const bSet = new Set(["All"]);
+  data.forEach((r) => { if (r.barangay) bSet.add(r.barangay); });
+  setBarangays([...bSet]);
+
+  setLoading(false);
+}, [page, filters.status]);
+
+// Client-side filtering + sorting — runs instantly, never triggers a fetch
+useEffect(() => {
+  let data = [...rawReports];
+
+  if (filters.type !== "All")
+    data = data.filter((r) => damageType(r).toLowerCase() === filters.type.toLowerCase());
+  if (filters.severity !== "All")
+    data = data.filter((r) => severity(r).toLowerCase() === filters.severity.toLowerCase());
+  if (criticalOnly)
+    data = data.filter((r) => severity(r).toLowerCase() === "critical");
+  if (filters.barangay !== "All")
+    data = data.filter((r) => r.barangay === filters.barangay);
+  if (filters.dateFrom) {
+    const from = new Date(filters.dateFrom);
+    data = data.filter((r) => r.created_at && new Date(r.created_at) >= from);
+  }
+  if (filters.dateTo) {
+    const to = new Date(filters.dateTo); to.setHours(23, 59, 59);
+    data = data.filter((r) => r.created_at && new Date(r.created_at) <= to);
+  }
+  data = data.filter((r) => {
+    const c = confVal(r);
+    return c === null || (c >= filters.confMin && c <= filters.confMax);
+  });
+  if (dSearch) {
+    const q = dSearch.toLowerCase();
+    data = data.filter((r) =>
+      padId(r.id).toLowerCase().includes(q) ||
+      (r.street_name ?? "").toLowerCase().includes(q) ||
+      (r.barangay ?? "").toLowerCase().includes(q) ||
+      location(r).toLowerCase().includes(q) ||
+      (r.owner?.full_name ?? "").toLowerCase().includes(q)
+    );
+  }
+
+  const { field, dir } = sort;
+  data = [...data].sort((a, b) => {
+    let av, bv;
+    if (field === "created_at")      { av = new Date(a.created_at || 0); bv = new Date(b.created_at || 0); }
+    else if (field === "severity")   { av = sevWeight(a);     bv = sevWeight(b);     }
+    else if (field === "confidence") { av = confVal(a) ?? -1; bv = confVal(b) ?? -1; }
+    else if (field === "status") {
+      const o = { PENDING: 0, VERIFIED: 1, IN_PROGRESS: 2, RESOLVED: 3, DECLINED: 4 };
+      av = o[a.status] ?? 99; bv = o[b.status] ?? 99;
+    } else { av = a[field] ?? ""; bv = b[field] ?? ""; }
+    if (av < bv) return dir === "asc" ? -1 : 1;
+    if (av > bv) return dir === "asc" ?  1 : -1;
+    return 0;
+  });
+
+  setReports(data);
+}, [rawReports, filters, dSearch, sort, criticalOnly]);
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
@@ -228,7 +241,7 @@ export default function AdminAllReports() {
 
     const res = await updateReport(reportId, payload);
     if (res.success) {
-      setReports((prev) =>
+      setRawReports((prev) =>
         prev.map((r) =>
           r.id === reportId
             ? { ...r, status: newStatus, decline_reason: declineReason || r.decline_reason }
@@ -303,9 +316,9 @@ export default function AdminAllReports() {
   /* stats */
   const stats = {
     total:    total,
-    critical: reports.filter((r) => severity(r).toLowerCase() === "critical").length,
-    pending:  reports.filter((r) => r.status === "PENDING").length,
-    resolved: reports.filter((r) => r.status === "RESOLVED").length,
+    critical: rawReports.filter((r) => severity(r).toLowerCase() === "critical").length,
+    pending:  rawReports.filter((r) => r.status === "PENDING").length,
+    resolved: rawReports.filter((r) => r.status === "RESOLVED").length,
   };
 
   return (
@@ -681,7 +694,6 @@ export default function AdminAllReports() {
     </>
   );
 }
-
 /* ────────────────────────────────────────────────────────────────────────────
    REPORT DETAIL MODAL
 ──────────────────────────────────────────────────────────────────────────── */
@@ -695,11 +707,10 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const [submitting,    setSubmitting]    = useState(false);
   const [imgErrors,     setImgErrors]     = useState({});
   const [noteLoading,   setNoteLoading]   = useState(false);
-  const [msgSubject,    setMsgSubject]    = useState(`Regarding ${padId(initial.id)}`);
-  const [msgBody,       setMsgBody]       = useState("");
-  const [msgType,       setMsgType]       = useState("info");
-  const [msgSending,    setMsgSending]    = useState(false);
-  const [msgSent,       setMsgSent]       = useState(false);
+  const [updates,       setUpdates]       = useState([]);
+  const [updatesLoading, setUpdatesLoading] = useState(false);
+  const [updateSent,    setUpdateSent]    = useState(false);
+  const [customMsg,     setCustomMsg]     = useState("");
 
   const transitions = STATUS_TRANSITIONS[r.status] ?? [];
   const attachments = r.media_attachments ?? [];
@@ -736,12 +747,34 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   };
 
   const doAddNote = async () => {
-    if (!newNote.trim()) return;
-    setNoteLoading(true);
-    const res = await addComment(r.id, newNote.trim());
-    if (res.success) { setComments((p) => [...p, res.data]); setNewNote(""); }
-    setNoteLoading(false);
-  };
+  if (!newNote.trim()) return;
+  setNoteLoading(true);
+  const trimmed = newNote.trim();
+  try {
+    const res = await addComment(r.id, trimmed);
+    // addComment may return { success, data } OR just the comment object directly
+    const comment = res?.data ?? res;
+    if (comment?.id || res?.success) {
+      setComments((p) => [...p, comment]);
+      setNewNote("");
+    }
+    // Send notification regardless of response shape — comment was saved if we got here
+    if (r.owner?.id) {
+      await sendNotification({
+        user_id:   r.owner.id,
+        report_id: r.id,
+        title:     `Admin message on your report ${padId(r.id)}`,
+        message:   trimmed.length > 120 ? trimmed.slice(0, 117) + "…" : trimmed,
+        type:      "comment",
+      });
+    } else {
+      console.warn("doAddNote: r.owner?.id is missing, cannot notify reporter", r);
+    }
+  } catch (e) {
+    console.error("doAddNote failed:", e);
+  }
+  setNoteLoading(false);
+};
 
   const doAssign = async () => {
     setSubmitting(true);
@@ -749,22 +782,43 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
     setR((p) => ({ ...p, assigned_to: assignedTo }));
     setSubmitting(false);
   };
+const loadUpdates = useCallback(async () => {
+    setUpdatesLoading(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(`${BASE_URL}/api/v1/notifications/?report_id=${r.id}&visible_to_user=true`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setUpdates(Array.isArray(data) ? data : (data?.results ?? []));
+    } catch {
+      setUpdates([]);
+    } finally {
+      setUpdatesLoading(false);
+    }
+  }, [r.id]);
 
-  const doSendMessage = async () => {
-    if (!r.owner?.id || !msgBody.trim()) return;
-    setMsgSending(true);
+  useEffect(() => {
+    if (activeTab === "message") loadUpdates();
+  }, [activeTab, loadUpdates]);
+
+  const doSendUpdate = async (title, message, type = "info") => {
+    if (!r.owner?.id) return;
+    setUpdatesLoading(true);
     await sendNotification({
       user_id:   r.owner.id,
       report_id: r.id,
-      title:     msgSubject,
-      message:   msgBody,
-      type:      msgType,
+      title,
+      message,
+      type,
     });
-    setMsgSending(false);
-    setMsgSent(true);
-    setTimeout(() => setMsgSent(false), 3_000);
-    setMsgBody("");
+    setCustomMsg("");
+    setUpdateSent(true);
+    setTimeout(() => setUpdateSent(false), 3000);
+    await loadUpdates();
+    setUpdatesLoading(false);
   };
+
 
   const flowIndex = STATUS_FLOW_ORDER.indexOf(r.status);
 
@@ -773,7 +827,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
     { id: "media",   label: "Media",    badge: attachments.length },
     { id: "notes",   label: "Notes",    badge: comments.length    },
     { id: "actions", label: "Actions",  badge: transitions.length },
-    { id: "message", label: "Message",  badge: null              },
+    { id: "message", label: "Updates",  badge: updates.length > 0 ? updates.length : null },
   ];
 
   return (
@@ -1025,73 +1079,97 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
           )}
 
           {/* ── MESSAGE ── */}
+{/* ── UPDATES ── */}
           {activeTab === "message" && (
             <div className="tab-pane message-pane">
               {!r.owner?.id ? (
                 <div className="no-notes">
-                  <span>📬</span>
-                  <p>This report has no associated reporter account — cannot send a notification.</p>
+                  <span>📭</span>
+                  <p>This report has no linked reporter account. Updates cannot be sent.</p>
                 </div>
               ) : (
                 <>
                   <div className="msg-reporter-info">
-                    <strong>To:</strong> {r.owner?.full_name ?? "Reporter"}
-                    {r.owner?.phone && <span> · {r.owner.phone}</span>}
+                    <strong>Sending to:</strong> {r.owner?.full_name ?? "Reporter"}
+                    {r.owner?.email && <span style={{ color: "var(--subtext)", marginLeft: 6 }}>{r.owner.email}</span>}
                   </div>
 
+                  {/* Quick-send template buttons */}
+                  <p className="msg-label" style={{ marginBottom: 8 }}>Quick updates</p>
                   <div className="msg-quick-replies">
                     {[
-                      { label: "Under review",         text: "Your report is currently under review. We will update you soon." },
-                      { label: "Need more details",    text: "Thank you for your report. Could you provide a clearer photo or more details about the location?" },
-                      { label: "Scheduled for repair", text: "Your report has been reviewed and scheduled for repair. Thank you for helping us keep roads safe!" },
-                      { label: "Already resolved",     text: "The issue you reported has already been addressed. Thank you for your vigilance!" },
-                    ].map((qr) => (
-                      <button key={qr.label} className="msg-quick-btn" onClick={() => setMsgBody(qr.text)}>
-                        {qr.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="msg-type-row">
-                    {["info", "success", "warning", "error"].map((t) => (
+                      { label: "✅ Under Review",          title: "Your report is under review",             text: "Your report is currently being reviewed by our team. We will update you shortly.", type: "info"    },
+                      { label: "📷 Need Clearer Photo",    title: "Additional information needed",            text: "Thank you for your report. Could you please provide a clearer photo of the damage?", type: "warning" },
+                      { label: "🔧 Scheduled for Repair",  title: "Repair has been scheduled",               text: "Your report has been reviewed and a repair has been scheduled. Thank you!", type: "info"    },
+                      { label: "✔ Repair Complete",        title: "Road damage has been repaired",           text: "The damage you reported has been fully repaired. Thank you for helping keep our roads safe!", type: "success" },
+                      { label: "📋 Duplicate Report",      title: "Your report is a duplicate",              text: "This damage has already been reported and is being addressed. Thank you for your vigilance!", type: "warning" },
+                    ].map((tpl) => (
                       <button
-                        key={t}
-                        className={`msg-type-btn msg-type-btn--${t} ${msgType === t ? "active" : ""}`}
-                        onClick={() => setMsgType(t)}
+                        key={tpl.label}
+                        className="msg-quick-btn"
+                        disabled={updatesLoading}
+                        onClick={() => doSendUpdate(tpl.title, tpl.text, tpl.type)}
                       >
-                        {t}
+                        {tpl.label}
                       </button>
                     ))}
                   </div>
 
-                  <label className="msg-label">Subject / Title</label>
-                  <input
-                    className="msg-input"
-                    value={msgSubject}
-                    onChange={(e) => setMsgSubject(e.target.value)}
-                    placeholder="Notification title…"
-                  />
+                  {/* Custom message */}
+                  <label className="msg-label" style={{ marginTop: 14 }}>Custom message (optional)</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                    <textarea
+                      className="msg-textarea"
+                      value={customMsg}
+                      onChange={(e) => setCustomMsg(e.target.value)}
+                      rows={3}
+                      maxLength={300}
+                      placeholder="Write a custom update for the reporter…"
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      className="btn-send-msg"
+                      style={{ flexShrink: 0, height: "fit-content" }}
+                      onClick={() => doSendUpdate(`Update on ${padId(r.id)}`, customMsg, "info")}
+                      disabled={updatesLoading || !customMsg.trim()}
+                    >
+                      {updatesLoading ? "Sending…" : "✉ Send"}
+                    </button>
+                  </div>
 
-                  <label className="msg-label">Message</label>
-                  <textarea
-                    className="msg-textarea"
-                    value={msgBody}
-                    onChange={(e) => setMsgBody(e.target.value)}
-                    rows={5}
-                    placeholder="Write your message to the reporter…"
-                  />
-
-                  {msgSent && (
-                    <div className="msg-sent-banner">✓ Notification sent successfully!</div>
+                  {updateSent && (
+                    <div className="msg-sent-banner">✓ Update sent to reporter successfully!</div>
                   )}
 
-                  <button
-                    className="btn-send-msg"
-                    onClick={doSendMessage}
-                    disabled={msgSending || !msgBody.trim() || !msgSubject.trim()}
-                  >
-                    {msgSending ? "Sending…" : "✉ Send Notification"}
-                  </button>
+                  {/* Update history */}
+                  <div style={{ marginTop: 20 }}>
+                    <p className="msg-label">Update history ({updates.length})</p>
+                    {updatesLoading ? (
+                      <p style={{ color: "var(--subtext)", fontSize: "0.84rem" }}>Loading…</p>
+                    ) : updates.length === 0 ? (
+                      <div className="no-notes" style={{ padding: "16px 0" }}>
+                        <span>📭</span>
+                        <p>No updates sent yet for this report.</p>
+                      </div>
+                    ) : (
+                      <div className="notes-timeline">
+                        {updates.map((u, i) => (
+                          <div key={u.id ?? i} className="note-entry">
+                            <div className="note-line" />
+                            <div className="note-dot" />
+                            <div className="note-body">
+                              <div className="note-meta">
+                                <span className="note-author">Admin → {r.owner?.full_name ?? "Reporter"}</span>
+                                <span className="note-date">{fmtDate(u.created_at)}</span>
+                              </div>
+                              <p className="note-text" style={{ fontWeight: 600 }}>{u.title}</p>
+                              <p className="note-text">{u.message}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>

@@ -1864,7 +1864,7 @@ body.dark {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .snap-close-icon { position: fixed; top: 8px; right: 8px; width: 30px; height: 30px; font-size: 13px; z-index: 9999; }
+  .snap-close-icon { position: fixed; top: 12px; right: 12px; width: 40px; height: 40px; font-size: 16px; z-index: 9999; padding: 0; }
   .snap-left  { padding: 16px 14px 14px; }
   .snap-left h2 { font-size: 17px; margin-bottom: 9px; }
   .snap-right { padding: 14px; }
@@ -1906,6 +1906,7 @@ body.dark {
 }
 
 @media (max-width: 430px) {
+  .snap-close-icon { top: 10px; right: 10px; width: 38px; height: 38px; font-size: 15px; }
   .snap-left  { padding: 14px 11px 12px; }
   .snap-right { padding: 12px 11px; }
   .snap-left h2 { font-size: 16px; }
@@ -1922,6 +1923,7 @@ body.dark {
 }
 
 @media (max-width: 380px) {
+  .snap-close-icon { top: 28px; right: 10px; width: 30px; height: 30px; font-size: 14px; }
   .snap-left  { padding: 12px 10px 10px; }
   .snap-right { padding: 10px; }
   .snap-left h2 { font-size: 15px; margin-bottom: 7px; }

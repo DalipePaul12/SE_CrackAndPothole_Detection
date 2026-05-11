@@ -4,7 +4,7 @@ import "./AdminManageRequests.css";
 import AdminSidebar from "../../components/AdminSidebar.jsx";
 import AdminHeader  from "../../components/AdminHeader.jsx";
 import { getReports, updateReport } from "../../api/reports";
-
+import { sendNotification } from "../../api/notifications";
 /* ─── Field helpers ──────────────────────────────────────────────────────────*/
 const damageType = (r) => r.ai_damage_type ?? r.damage_type ?? "—";
 const severity   = (r) => r.ai_severity    ?? r.severity    ?? "—";
@@ -49,7 +49,6 @@ export default function AdminManageRequests() {
   //      scope between components, causing a "Rules of Hooks" violation crash.
   const [patching, setPatching] = useState(new Set());
 
-  const BASE = import.meta.env.VITE_API_URL || "";
 
   /* ── toast helper ── */
   const showToast = (msg, type = "success") => {
@@ -175,28 +174,21 @@ export default function AdminManageRequests() {
   };
 
   /* ── message ── */
-  const handleSendMessage = async (report, subject, body) => {
-    const token = localStorage.getItem("access_token");
-    try {
-      await fetch(`${BASE}/api/v1/notifications/send`, {
-        method: "POST",
-        headers: {
-          Authorization:  `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          recipient_id: report.owner?.id,
-          subject,
-          body,
-          report_id: report.id,
-        }),
-      });
-      showToast(`Message sent to ${report.owner?.full_name ?? "reporter"} ✉️`);
-    } catch {
-      showToast("Message sent (offline mode).", "info");
-    }
-    setMessageDialog(null);
-  };
+    const handleSendMessage = async (report, subject, body) => {
+        try {
+          await sendNotification({
+            user_id:   report.owner?.id,
+            report_id: report.id,
+            title:     subject,
+            message:   body,
+            type:      "info",
+          });
+          showToast(`Message sent to ${report.owner?.full_name ?? "reporter"} ✉️`);
+        } catch {
+          showToast("Failed to send message.", "error");
+        }
+        setMessageDialog(null);
+      };
 
   /* ── render ── */
   return (
@@ -238,8 +230,7 @@ export default function AdminManageRequests() {
                   onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
                 >
                   <option value="All">All Severity</option>
-                  <option value="low">Low</option>
-                  <option value="moderate">Moderate</option>
+                  <option value="non-critical">Non-Critical</option>
                   <option value="critical">Critical</option>
                 </select>
               </div>

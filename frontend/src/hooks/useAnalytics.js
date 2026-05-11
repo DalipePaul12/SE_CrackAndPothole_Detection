@@ -4,16 +4,35 @@ import {
   getDamageTypeStats,
   getReportStatusStats,
   getMonthlyReports,
-  getHotspots,          // FIX: was getBarangayRanking → export removed from analytics.js
+  getHotspots,
   getSeverityStats,
 } from "../api/analytics";
 
-const CACHE_TTL_MS = 90_000;
+// ─────────────────────────────────────────────────────────────────────────────
+// useAnalytics.js  —  FIXED
+//
+// PROBLEM SEEN IN SCREENSHOT:
+//   A citizen user was seeing the AdminDashboard layout because Dashboard.jsx
+//   was reading role from stale localStorage before AuthContext resolved.
+//   The analytics hook was also firing /analytics/hotspots which is admin-only
+//   → 403 → the "Failed to load" banner appeared for citizens too.
+//
+// FIXES:
+//   1. Accept `role` param so the hook knows which endpoints to call.
+//   2. Citizens skip hotspots (admin-only) — prevents the 403 banner.
+//   3. Cache keyed by role so admin and citizen caches don't collide.
+//   4. Proper token check before firing (same pattern as useReports).
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { tokenStorage } from "../api/client";
+
+const CACHE_TTL_MS = 90_000; // 90 seconds
 const _cache = new Map();
 
 function cacheGet(key) {
   const entry = _cache.get(key);
   if (entry && Date.now() - entry.ts < CACHE_TTL_MS) return entry.value;
+  _cache.delete(key);
   return null;
 }
 
@@ -32,15 +51,25 @@ function unwrap(settled, fallback) {
   return res.data ?? fallback;
 }
 
-export function useAnalytics() {
-  const [summary, setSummary]                 = useState(null);
-  const [damageStats, setDamageStats]         = useState([]);
-  const [statusStats, setStatusStats]         = useState([]);
-  const [monthlyData, setMonthlyData]         = useState([]);
-  const [barangayRanking, setBarangayRanking] = useState([]);
-  const [severityStats, setSeverityStats]     = useState([]);
-  const [loading, setLoading]                 = useState(true);
-  const [error, setError]                     = useState(null);
+function _label(str) {
+  if (!str) return "";
+  return str
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// role: "admin" | "contractor" | "citizen" (default "citizen")
+export function useAnalytics({ role = "citizen" } = {}) {
+  const isAdmin = role === "admin" || role === "contractor";
+
+  const [summary,         setSummary]         = useState(null);
+  const [damageStats,     setDamageStats]      = useState([]);
+  const [statusStats,     setStatusStats]      = useState([]);
+  const [monthlyData,     setMonthlyData]      = useState([]);
+  const [barangayRanking, setBarangayRanking]  = useState([]);
+  const [severityStats,   setSeverityStats]    = useState([]);
+  const [loading,         setLoading]          = useState(true);
+  const [error,           setError]            = useState(null);
 
   const abortRef = useRef(false);
 
@@ -48,7 +77,16 @@ export function useAnalytics() {
     abortRef.current = false;
 
     const fetchAll = async () => {
-      const cached = cacheGet("analytics_all");
+      // ✅ Don't fetch if no token — prevents 403 cascade
+      const token = tokenStorage.getAccess();
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      const cacheKey = `analytics_${role}`;
+      const cached   = cacheGet(cacheKey);
+
       if (cached) {
         setSummary(cached.summary);
         setDamageStats(cached.damageStats);
@@ -63,18 +101,31 @@ export function useAnalytics() {
       setLoading(true);
       setError(null);
 
+      // ✅ Citizens skip hotspots (admin-only endpoint → 403)
+      const requests = isAdmin
+        ? [
+            getDashboardSummary(),
+            getDamageTypeStats(),
+            getReportStatusStats(),
+            getMonthlyReports(),
+            getHotspots(),      // admin only
+            getSeverityStats(),
+          ]
+        : [
+            getDashboardSummary(),
+            getDamageTypeStats(),
+            getReportStatusStats(),
+            getMonthlyReports(),
+            Promise.resolve({ success: true, data: [] }), // placeholder for hotspots
+            getSeverityStats(),
+          ];
+
       const [sumR, dmgR, statR, monthR, bgyR, sevR] =
-        await Promise.allSettled([
-          getDashboardSummary(),
-          getDamageTypeStats(),
-          getReportStatusStats(),
-          getMonthlyReports(),
-          getHotspots(),        // FIX: was getBarangayRanking()
-          getSeverityStats(),
-        ]);
+        await Promise.allSettled(requests);
 
       if (abortRef.current) return;
 
+      // ── Unpack each result ───────────────────────────────────────────────
       const summaryData = unwrap(sumR, null);
       setSummary(summaryData);
 
@@ -98,33 +149,41 @@ export function useAnalytics() {
         : [];
       setMonthlyData(monthlyArr);
 
-      setBarangayRanking(unwrap(bgyR, []));
+      // hotspots: only set for admins, citizens get empty array (no 403)
+      setBarangayRanking(isAdmin ? unwrap(bgyR, []) : []);
 
       const sevRaw = unwrap(sevR, {});
-      setSeverityStats(
-        Object.entries(sevRaw).map(([name, value]) => ({ name: _label(name), value }))
-      );
+      const sevArr = Object.entries(sevRaw).map(([name, value]) => ({
+        name: _label(name),
+        value,
+      }));
+      setSeverityStats(sevArr);
 
-      const failedCount = [sumR, dmgR, statR, monthR, bgyR, sevR].filter(
+      // ── Error reporting: only count real failures (not skipped endpoints) ─
+      const relevantResults = isAdmin
+        ? [sumR, dmgR, statR, monthR, bgyR, sevR]
+        : [sumR, dmgR, statR, monthR, sevR]; // exclude hotspot placeholder
+
+      const failedCount = relevantResults.filter(
         (r) => r.status === "rejected" || !r.value?.success
       ).length;
 
-      if (failedCount === 6) {
+      if (failedCount === relevantResults.length) {
         setError("Failed to load dashboard analytics. Please refresh.");
       } else if (failedCount > 0) {
         setError(`${failedCount} analytics section(s) could not be loaded.`);
+      } else {
+        setError(null);
       }
 
-      cacheSet("analytics_all", {
-        summary: summaryData,
-        damageStats: dmgArr,
-        statusStats: statArr,
-        monthlyData: monthlyArr,
-        barangayRanking: unwrap(bgyR, []),
-        severityStats: Object.entries(unwrap(sevR, {})).map(([name, value]) => ({
-          name: _label(name),
-          value,
-        })),
+      // Cache with role-scoped key
+      cacheSet(`analytics_${role}`, {
+        summary:         summaryData,
+        damageStats:     dmgArr,
+        statusStats:     statArr,
+        monthlyData:     monthlyArr,
+        barangayRanking: isAdmin ? unwrap(bgyR, []) : [],
+        severityStats:   sevArr,
       });
 
       setLoading(false);
@@ -135,7 +194,7 @@ export function useAnalytics() {
     return () => {
       abortRef.current = true;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [role, isAdmin]); // re-fetch if role changes (e.g. after login)
 
   return {
     summary,
@@ -147,10 +206,4 @@ export function useAnalytics() {
     loading,
     error,
   };
-}
-
-function _label(str) {
-  return str
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
 }

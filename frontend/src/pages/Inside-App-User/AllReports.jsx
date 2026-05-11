@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";          // ← top-level import, not require()
+import { createPortal } from "react-dom";
 import {
   AlertTriangle, ChevronLeft, ChevronRight, X,
   ChevronDown, ImageOff, MapPin, Calendar,
   Activity, Shield, TrendingUp, Database,
 } from "lucide-react";
 import "./AllReports.css";
-import Sidebar from "../../components/Sidebar.jsx";
-import AppHeader from "../../components/AppHeader.jsx";
+import Sidebar    from "../../components/Sidebar.jsx";
+import AppHeader  from "../../components/AppHeader.jsx";
 import { useReports } from "../../hooks/useReports";
+// NOTE: useAuthContext import removed — AllReports does not use `user` at all.
+// If you need user data here later, add:
+//   import { useAuthContext } from "../Contexts/AuthContext";
+// and call it INSIDE the AllReports() function body.
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
@@ -24,7 +28,7 @@ const getImageUrl = (report) => {
 };
 
 /* ── Pagination ──────────────────────────────────────────────── */
-function Pagination({ page, setPage, total, pageSize = 15 }) {
+function Pagination({ page, setPage, total, pageSize = 10 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
   return (
@@ -52,37 +56,16 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
   );
 }
 
-/* ══════════════════════════════════════════════════════════════
-   Report Modal
-   ─────────────────────────────────────────────────────────────
-   Rendered via createPortal(…, document.body).
-
-   WHY THIS FIXES DARK MODE:
-   Previously the modal was a child of .allreports-container.
-   CSS variables resolve based on where an element sits in the
-   DOM — if a parent had a hardcoded background, variables like
-   --card would still evaluate correctly BUT a stale paint from
-   a parent's background-color could bleed through.
-
-   More critically: some bundler/scoping setups cause :root vars
-   to win over body.dark vars when the modal is deeply nested.
-
-   By portaling into <body> directly, .modal-overlay becomes an
-   immediate child of <body class="dark">, so body.dark { --card }
-   is always the closest matching rule — #132a1c in dark mode,
-   #ffffff in light mode. No extra CSS overrides required.
-══════════════════════════════════════════════════════════════ */
+/* ── Report Modal ────────────────────────────────────────────── */
 function ReportModal({ report, onClose }) {
   const imageUrl = getImageUrl(report);
   const [imgError, setImgError] = useState(false);
 
-  // Lock scroll while open
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
 
-  // Escape key
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
@@ -99,7 +82,6 @@ function ReportModal({ report, onClose }) {
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
 
-        {/* Close */}
         <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
           <X size={18} />
         </button>
@@ -111,7 +93,6 @@ function ReportModal({ report, onClose }) {
           {/* ── Left column ── */}
           <div className="modal-left">
 
-            {/* ID card */}
             <div className="reporter-info">
               <div className="info-row">
                 <strong>Report ID</strong>
@@ -125,7 +106,6 @@ function ReportModal({ report, onClose }) {
               )}
             </div>
 
-            {/* Damage info */}
             <div className="info-card">
               <div className="info-row">
                 <strong>Damage Type</strong>
@@ -171,7 +151,6 @@ function ReportModal({ report, onClose }) {
               )}
             </div>
 
-            {/* Location */}
             <div className="location-info">
               <div className="info-row">
                 <strong>Barangay</strong>
@@ -195,7 +174,6 @@ function ReportModal({ report, onClose }) {
               </div>
             </div>
 
-            {/* AI fake flag */}
             {report.is_flagged_fake && (
               <div className="ai-flag-badge" role="alert">
                 <AlertTriangle size={15} />
@@ -229,23 +207,26 @@ function ReportModal({ report, onClose }) {
         </div>
       </div>
     </div>,
-    document.body   // ← portal: body.dark is always the ancestor
+    document.body
   );
 }
 
 /* ── Main Component ──────────────────────────────────────────── */
 function AllReports() {
+  // ✅ If you need user data, call hooks HERE — inside the component body:
+  // const { user } = useAuthContext();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filters, setFilters] = useState({ type: "All", severity: "All", status: "All" });
   const [activeFilters, setActiveFilters] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
 
   const { reports, loading, error, page, setPage, total, refetch } =
-  useReports({
-    mine:     false,
-    status:   activeFilters.status   ?? null,
-    barangay: activeFilters.barangay ?? null,
-  });
+    useReports({
+      mine:     false,
+      status:   activeFilters.status   ?? null,
+      barangay: activeFilters.barangay ?? null,
+    });
 
   const applyFilters = useCallback(() => {
     setPage(1);
@@ -258,11 +239,12 @@ function AllReports() {
     setPage(1);
   }, [setPage]);
 
+  // Client-side type + severity filter (status is server-side via activeFilters)
   const filteredReports = reports.filter((r) => {
     const type     = r.ai_damage_type ?? "";
-    const severity = r.ai_severity ?? "";
+    const severity = r.ai_severity    ?? "";
     return (
-      (filters.type === "All" || type.toLowerCase() === filters.type.toLowerCase()) &&
+      (filters.type     === "All" || type.toLowerCase()     === filters.type.toLowerCase()) &&
       (filters.severity === "All" || severity.toLowerCase() === filters.severity.toLowerCase())
     );
   });
@@ -454,11 +436,10 @@ function AllReports() {
         </div>
 
         {!loading && (
-          <Pagination page={page} setPage={setPage} total={total} pageSize={15} />
+          <Pagination page={page} setPage={setPage} total={total} pageSize={10} />
         )}
       </div>
 
-      {/* Portal into document.body — dark mode variables resolve correctly */}
       {selectedReport && (
         <ReportModal report={selectedReport} onClose={closeModal} />
       )}

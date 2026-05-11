@@ -34,10 +34,13 @@ function Toast({ toasts, removeToast }) {
   return (
     <div className="toast-container">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.type} ${t.hiding ? "hiding" : ""}`}>
+        <div
+          key={t.id}
+          className={`toast toast-${t.type} ${t.hiding ? "hiding" : ""}`}
+        >
           {t.type === "success" && <FaCheckCircle />}
-          {t.type === "error"   && <BiError />}
-          {t.type === "info"    && <FaStar />}
+          {t.type === "error" && <BiError />}
+          {t.type === "info" && <FaStar />}
           <span>{t.message}</span>
           <button className="toast-close" onClick={() => removeToast(t.id)}>
             <FaTimes />
@@ -59,7 +62,10 @@ function ConfidenceBar({ value }) {
         <span>{pct}%</span>
       </div>
       <div className="confidence-bar">
-        <div className={`confidence-bar-fill ${cls}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`confidence-bar-fill ${cls}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -100,7 +106,8 @@ function StatusTimeline({ report }) {
             : STAGES.indexOf(currentStage);
         const isStepActive = index <= stopIndex;
         const isLineActive = index < stopIndex;
-        const isDeclined   = report.status === "DECLINED" && stage === "Reviewing";
+        const isDeclined =
+          report.status === "DECLINED" && stage === "Reviewing";
         return (
           <div
             key={stage}
@@ -108,7 +115,9 @@ function StatusTimeline({ report }) {
           >
             <div className="timeline-icon">{getStageIcon(stage)}</div>
             {index !== STAGES.length - 1 && (
-              <div className={`timeline-line ${isLineActive ? "active" : ""} ${isDeclined ? "declined" : ""}`} />
+              <div
+                className={`timeline-line ${isLineActive ? "active" : ""} ${isDeclined ? "declined" : ""}`}
+              />
             )}
             <p>{stage}</p>
           </div>
@@ -126,64 +135,91 @@ function ReportDetailModal({ report, onClose, BASE_URL }) {
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className="modal-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div className="modal-box report-detail-modal">
-        <button className="modal-close" onClick={onClose}><FaTimes /></button>
-        <h3 className="modal-title">
-          <FaSearch /> Report #{report.id} — Full Details
-        </h3>
-
-        {imageUrl && (
-          <img
-            src={imageUrl}
-            alt={`Report #${report.id}`}
-            className="modal-report-img"
-            onError={(e) => { e.currentTarget.style.display = "none"; }}
-          />
-        )}
-
-        <div className="modal-detail-grid">
-          <div className="modal-detail-row">
-            <span className="modal-detail-label">Date / Time</span>
-            <span>{report.created_at ? new Date(report.created_at).toLocaleString() : "—"}</span>
-          </div>
-          <div className="modal-detail-row">
-            <span className="modal-detail-label">Location</span>
-            <span>{report.barangay || report.street_name || `${report.latitude}, ${report.longitude}`}</span>
-          </div>
-          <div className="modal-detail-row">
-            <span className="modal-detail-label">Description</span>
-            <span>{report.description || "—"}</span>
-          </div>
-          <div className="modal-detail-row">
-            <span className="modal-detail-label">Damage Type</span>
-            <span className={`damage ${(report.ai_damage_type || "").toLowerCase()}`}>
-              {report.ai_damage_type || "Pending"}
-            </span>
-          </div>
-          <div className="modal-detail-row">
-            <span className="modal-detail-label">Severity</span>
-            <span className={`severity ${(report.ai_severity || "").toLowerCase()}`}>
-              {report.ai_severity || "Pending"}
-            </span>
-          </div>
-          {report.ai_confidence != null && (
-            <div className="modal-detail-row full-width">
-              <span className="modal-detail-label">AI Confidence</span>
-              <div style={{ flex: 1 }}>
-                <ConfidenceBar value={report.ai_confidence} />
-              </div>
-            </div>
-          )}
+        {/* Fixed header — never scrolls */}
+        <div className="modal-header-band">
+          <h3 className="modal-title">
+            <FaSearch />
+            Report #{report.id}
+          </h3>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
+            <FaTimes />
+          </button>
         </div>
 
-        <div className="modal-timeline-section">
-          <h4 className="modal-timeline-title">Status Timeline</h4>
-          <StatusTimeline report={report} />
+        {/* Scrollable content */}
+        <div className="modal-scroll-body">
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt={`Report #${report.id}`}
+              className="modal-report-img"
+              onError={(e) => { e.currentTarget.style.display = "none"; }}
+            />
+          )}
+
+          <div className="modal-body">
+            <div className="modal-detail-grid">
+              <div className="modal-detail-cell">
+                <span className="modal-detail-label">Date / Time</span>
+                <span className="modal-detail-value">
+                  {report.created_at ? new Date(report.created_at).toLocaleString() : "—"}
+                </span>
+              </div>
+
+              <div className="modal-detail-cell">
+                <span className="modal-detail-label">Location</span>
+                <span className="modal-detail-value">
+                  {report.barangay || report.street_name || `${report.latitude}, ${report.longitude}`}
+                </span>
+              </div>
+
+              <div className="modal-detail-cell">
+                <span className="modal-detail-label">Damage Type</span>
+                <span className={`modal-detail-value damage ${(report.ai_damage_type || "").toLowerCase()}`}>
+                  {report.ai_damage_type || "Pending"}
+                </span>
+              </div>
+
+              <div className="modal-detail-cell">
+                <span className="modal-detail-label">Severity</span>
+                <span className={`modal-detail-value severity ${(report.ai_severity || "").toLowerCase().replace(" ", "-")}`}>
+                  {report.ai_severity || "Pending"}
+                </span>
+              </div>
+
+              {report.ai_confidence != null && (
+                <div className="modal-detail-cell full">
+                  <span className="modal-detail-label">AI Confidence</span>
+                  <div style={{ marginTop: "4px" }}>
+                    <ConfidenceBar value={report.ai_confidence} />
+                  </div>
+                </div>
+              )}
+
+              {report.description && (
+                <div className="modal-detail-cell full">
+                  <span className="modal-detail-label">Description</span>
+                  <span className="modal-detail-value">{report.description}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-timeline-section">
+              <p className="modal-timeline-title">Status Timeline</p>
+              <StatusTimeline report={report} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -200,53 +236,60 @@ function ReputationModal({ score, onClose }) {
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className="modal-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div className="modal-box rep-modal">
-        <button className="modal-close" onClick={onClose}><FaTimes /></button>
-        <h3 className="modal-title"><FaStar /> Reputation Breakdown</h3>
-
-        <div className="rep-progress-wrap">
-          <div className="rep-progress-meta">
-            <span>Progress to next level</span>
-            <strong>{score} / {nextLevel} pts</strong>
-          </div>
-          <div className="rep-progress-track">
-            <div className="rep-progress-fill" style={{ width: `${pct}%` }} />
-          </div>
+        <div className="modal-header-band">
+          <h3 className="modal-title">
+            <FaStar /> Reputation Score
+          </h3>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
+            <FaTimes />
+          </button>
         </div>
 
-        <div className="rep-rows">
-          <div className="rep-row">
-            <div className="rep-row-left">
-              <FaPaperPlane className="rep-icon" />
-              <span>Reports Submitted</span>
+        <div className="modal-scroll-body">
+          <div className="modal-body">
+            <div className="rep-progress-wrap">
+              <div className="rep-progress-meta">
+                <span>Progress to next level</span>
+                <strong>{score} / {nextLevel} pts</strong>
+              </div>
+              <div className="rep-progress-track">
+                <div className="rep-progress-fill" style={{ width: `${pct}%` }} />
+              </div>
             </div>
-            <strong className="rep-points">+{submitted} pts</strong>
-          </div>
-          <div className="rep-row">
-            <div className="rep-row-left">
-              <FaCheckCircle className="rep-icon" />
-              <span>Resolved Reports</span>
+
+            <div className="rep-rows">
+              <div className="rep-row">
+                <div className="rep-row-left"><FaPaperPlane className="rep-icon" /><span>Reports Submitted</span></div>
+                <strong className="rep-points">+{submitted} pts</strong>
+              </div>
+              <div className="rep-row">
+                <div className="rep-row-left"><FaCheckCircle className="rep-icon" /><span>Resolved Reports</span></div>
+                <strong className="rep-points">+{resolved} pts</strong>
+              </div>
+              <div className="rep-row">
+                <div className="rep-row-left"><FaStar className="rep-icon" /><span>Bonus Points</span></div>
+                <strong className="rep-points">+{bonus} pts</strong>
+              </div>
+              <div className="rep-row rep-total">
+                <span>Total Score</span>
+                <strong className="rep-total-pts">{score} pts</strong>
+              </div>
             </div>
-            <strong className="rep-points">+{resolved} pts</strong>
-          </div>
-          <div className="rep-row">
-            <div className="rep-row-left">
-              <FaStar className="rep-icon" />
-              <span>Bonus Points</span>
-            </div>
-            <strong className="rep-points">+{bonus} pts</strong>
-          </div>
-          <div className="rep-row rep-total">
-            <span>Total Score</span>
-            <strong className="rep-total-pts">{score} pts</strong>
+
+            <p className="rep-hint">Keep submitting and resolving reports to earn more points and level up!</p>
           </div>
         </div>
-        <p className="rep-hint">Keep submitting and resolving reports to earn more points!</p>
       </div>
     </div>
   );
@@ -259,8 +302,8 @@ function MyProfile() {
 
   // UI state
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [activeTab, setActiveTab]     = useState("feed");
+  const [showConfirm, setShowConfirm]   = useState(false);
+  const [activeTab, setActiveTab]       = useState("feed");
 
   // Feed state
   const [reportFilter, setReportFilter] = useState("all");
@@ -268,14 +311,14 @@ function MyProfile() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Settings form state
-  const [formData, setFormData]   = useState(null);
-  const [saveError, setSaveError] = useState("");
+  const [formData, setFormData]     = useState(null);
+  const [saveError, setSaveError]   = useState("");
   const [formErrors, setFormErrors] = useState({});
 
   // Password state
-  const [pwData, setPwData]   = useState({ current: "", newPw: "", confirm: "" });
+  const [pwData, setPwData]     = useState({ current: "", newPw: "", confirm: "" });
   const [pwErrors, setPwErrors] = useState({});
-  const [showPw, setShowPw]   = useState({ current: false, newPw: false, confirm: false });
+  const [showPw, setShowPw]     = useState({ current: false, newPw: false, confirm: false });
 
   // Avatar upload state
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -294,22 +337,38 @@ function MyProfile() {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type, hiding: false }]);
     setTimeout(() => {
-      setToasts((prev) => prev.map((t) => t.id === id ? { ...t, hiding: true } : t));
-      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 300);
+      setToasts((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, hiding: true } : t))
+      );
+      setTimeout(
+        () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+        300
+      );
     }, 3000);
   };
-  const removeToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+  const removeToast = (id) =>
+    setToasts((prev) => prev.filter((t) => t.id !== id));
 
   /* Derived report list */
   const filteredReports = (() => {
     let list = [...reports];
-    if (reportFilter === "pending")          list = list.filter((r) => r.status === "PENDING");
-    else if (reportFilter === "in_progress") list = list.filter((r) => r.status === "IN_PROGRESS");
-    else if (reportFilter === "resolved")    list = list.filter((r) => r.status === "RESOLVED");
+    if (reportFilter === "pending")
+      list = list.filter((r) => r.status === "PENDING");
+    else if (reportFilter === "in_progress")
+      list = list.filter((r) => r.status === "IN_PROGRESS");
+    else if (reportFilter === "resolved")
+      list = list.filter((r) => r.status === "RESOLVED");
+
     const sevOrder = { CRITICAL: 0, "NON-CRITICAL": 1 };
-    if (sortOption === "oldest")        list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    else if (sortOption === "severity") list.sort((a, b) => (sevOrder[(a.ai_severity || "").toUpperCase()] ?? 2) - (sevOrder[(b.ai_severity || "").toUpperCase()] ?? 2));
-    else                                list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    if (sortOption === "oldest")
+      list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    else if (sortOption === "severity")
+      list.sort(
+        (a, b) =>
+          (sevOrder[(a.ai_severity || "").toUpperCase()] ?? 2) -
+          (sevOrder[(b.ai_severity || "").toUpperCase()] ?? 2)
+      );
+    else list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     return list;
   })();
 
@@ -330,7 +389,7 @@ function MyProfile() {
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      showToast("File too large. Maximum size is 5MB.", "error");
+      showToast("File too large. Maximum size is 5 MB.", "error");
       return;
     }
     const reader = new FileReader();
@@ -386,10 +445,14 @@ function MyProfile() {
   /* ─── Change Password ─── */
   const handleChangePassword = async () => {
     const errors = {};
-    if (!pwData.current)               errors.current = "Current password is required.";
-    if (!pwData.newPw)                 errors.newPw   = "New password is required.";
-    else if (pwData.newPw.length < 8)  errors.newPw   = "Password must be at least 8 characters.";
-    if (pwData.newPw !== pwData.confirm) errors.confirm = "Passwords do not match.";
+    if (!pwData.current)
+      errors.current = "Current password is required.";
+    if (!pwData.newPw)
+      errors.newPw = "New password is required.";
+    else if (pwData.newPw.length < 8)
+      errors.newPw = "Password must be at least 8 characters.";
+    if (pwData.newPw !== pwData.confirm)
+      errors.confirm = "Passwords do not match.";
     setPwErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
@@ -398,14 +461,20 @@ function MyProfile() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ current_password: pwData.current, new_password: pwData.newPw }),
+        body: JSON.stringify({
+          current_password: pwData.current,
+          new_password:     pwData.newPw,
+        }),
       });
       if (!res.ok) throw new Error();
       setPwData({ current: "", newPw: "", confirm: "" });
       setPwErrors({});
       showToast("Password changed successfully!", "success");
     } catch {
-      showToast("Failed to change password. Check your current password.", "error");
+      showToast(
+        "Failed to change password. Check your current password.",
+        "error"
+      );
     }
   };
 
@@ -422,12 +491,13 @@ function MyProfile() {
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <AppHeader onMenuClick={() => setSidebarOpen(true)} />
         <div className="myprofile-container">
-          <p className="loading-text">Loading profile...</p>
+          <p className="loading-text">Loading profile…</p>
         </div>
       </>
     );
 
-  const profilePicSrc = avatarPreview || profile?.profile_picture_url || "/snap.jpg";
+  const profilePicSrc =
+    avatarPreview || profile?.profile_picture_url || "/snap.jpg";
 
   return (
     <>
@@ -448,7 +518,11 @@ function MyProfile() {
 
         {/* ── PROFILE HEADER ── */}
         <div className="profile-header">
-          <img src={profilePicSrc} alt="Profile" className="profile-avatar" />
+          <img
+            src={profilePicSrc}
+            alt="Profile"
+            className="profile-avatar"
+          />
 
           <div className="profile-info">
             <h2>{profile?.full_name || "—"}</h2>
@@ -508,10 +582,9 @@ function MyProfile() {
           </button>
         </div>
 
-        {/* ════════════ FEED TAB ════════════ */}
+        {/* ════════ FEED TAB ════════ */}
         {activeTab === "feed" && (
           <div className="profile-content">
-
             <div className="profile-content-header">
               <div className="profile-content-title">
                 <h2>Personal Activity Feed</h2>
@@ -528,7 +601,10 @@ function MyProfile() {
                     <button
                       key={key}
                       className={reportFilter === key ? "active" : ""}
-                      onClick={() => { setReportFilter(key); setVisibleCount(PAGE_SIZE); }}
+                      onClick={() => {
+                        setReportFilter(key);
+                        setVisibleCount(PAGE_SIZE);
+                      }}
                     >
                       {label}
                     </button>
@@ -551,7 +627,7 @@ function MyProfile() {
             </div>
 
             {reportsLoading ? (
-              <p className="loading-text">Loading reports...</p>
+              <p className="loading-text">Loading reports…</p>
             ) : filteredReports.length === 0 ? (
               <div className="no-reports">
                 <h3>No Reports Found</h3>
@@ -588,21 +664,27 @@ function MyProfile() {
                           <img
                             src={imageUrl}
                             alt={`Report #${report.id}`}
-                            onError={(e) => { e.currentTarget.style.display = "none"; }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
                           />
                         )}
                         <div className="ai-result">
-                          <h4>AI CLASSIFICATION</h4>
-                          <h5>RESULT</h5>
+                          <h4>AI Classification</h4>
+                          <h5>Result</h5>
                           <p>
-                            <strong>Damage: </strong>
-                            <span className={`damage ${(report.ai_damage_type || "").toLowerCase()}`}>
+                            <strong>Damage:</strong>
+                            <span
+                              className={`damage ${(report.ai_damage_type || "").toLowerCase()}`}
+                            >
                               {report.ai_damage_type || "Pending"}
                             </span>
                           </p>
                           <p>
-                            <strong>Severity: </strong>
-                            <span className={`severity ${(report.ai_severity || "").toLowerCase()}`}>
+                            <strong>Severity:</strong>
+                            <span
+                              className={`severity ${(report.ai_severity || "").toLowerCase().replace(" ", "-")}`}
+                            >
                               {report.ai_severity || "Pending"}
                             </span>
                           </p>
@@ -614,7 +696,9 @@ function MyProfile() {
 
                       <p className="report-location">
                         <ImLocation className="report-location-icon" />
-                        {report.barangay || report.street_name || `${report.latitude}, ${report.longitude}`}
+                        {report.barangay ||
+                          report.street_name ||
+                          `${report.latitude}, ${report.longitude}`}
                       </p>
 
                       <div className="report-description">
@@ -642,17 +726,20 @@ function MyProfile() {
           </div>
         )}
 
-        {/* ════════════ SETTINGS TAB ════════════ */}
+        {/* ════════ SETTINGS TAB ════════ */}
         {activeTab === "settings" && formData && (
           <div className="profile-settings">
             <h3>Profile Settings</h3>
-            <p>Customize your profile in Snap2Fix!</p>
+            <p>Customize your profile in Snap2Fix</p>
 
             {/* Avatar */}
             <div className="settings-avatar">
               <div className="avatar-wrapper">
                 <img src={profilePicSrc} alt="Profile" />
-                <label className="camera-btn" title="Change profile picture">
+                <label
+                  className="camera-btn"
+                  title="Change profile picture"
+                >
                   <FaCamera className="change-camera-icon" />
                   <input
                     ref={avatarInputRef}
@@ -668,7 +755,7 @@ function MyProfile() {
                   <div className="upload-progress-bar">
                     <div className="upload-progress-fill" />
                   </div>
-                  <p className="upload-label">Uploading...</p>
+                  <p className="upload-label">Uploading…</p>
                 </div>
               )}
             </div>
@@ -681,12 +768,19 @@ function MyProfile() {
                 <input
                   type="text"
                   value={formData.full_name}
-                  onChange={(e) => { setFormData({ ...formData, full_name: e.target.value }); setFormErrors({ ...formErrors, full_name: "" }); }}
+                  onChange={(e) => {
+                    setFormData({ ...formData, full_name: e.target.value });
+                    setFormErrors({ ...formErrors, full_name: "" });
+                  }}
                   placeholder="Full Name"
                   className={formErrors.full_name ? "input-error" : ""}
                 />
               </div>
-              {formErrors.full_name && <p className="field-error"><BiError /> {formErrors.full_name}</p>}
+              {formErrors.full_name && (
+                <p className="field-error">
+                  <BiError /> {formErrors.full_name}
+                </p>
+              )}
 
               <label>Barangay</label>
               <div className="input-with-icon">
@@ -694,12 +788,19 @@ function MyProfile() {
                 <input
                   type="text"
                   value={formData.barangay}
-                  onChange={(e) => { setFormData({ ...formData, barangay: e.target.value }); setFormErrors({ ...formErrors, barangay: "" }); }}
+                  onChange={(e) => {
+                    setFormData({ ...formData, barangay: e.target.value });
+                    setFormErrors({ ...formErrors, barangay: "" });
+                  }}
                   placeholder="Barangay"
                   className={formErrors.barangay ? "input-error" : ""}
                 />
               </div>
-              {formErrors.barangay && <p className="field-error"><BiError /> {formErrors.barangay}</p>}
+              {formErrors.barangay && (
+                <p className="field-error">
+                  <BiError /> {formErrors.barangay}
+                </p>
+              )}
 
               <label>City</label>
               <div className="input-with-icon">
@@ -707,26 +808,44 @@ function MyProfile() {
                 <input
                   type="text"
                   value={formData.city}
-                  onChange={(e) => { setFormData({ ...formData, city: e.target.value }); setFormErrors({ ...formErrors, city: "" }); }}
+                  onChange={(e) => {
+                    setFormData({ ...formData, city: e.target.value });
+                    setFormErrors({ ...formErrors, city: "" });
+                  }}
                   placeholder="City"
                   className={formErrors.city ? "input-error" : ""}
                 />
               </div>
-              {formErrors.city && <p className="field-error"><BiError /> {formErrors.city}</p>}
+              {formErrors.city && (
+                <p className="field-error">
+                  <BiError /> {formErrors.city}
+                </p>
+              )}
             </div>
 
             {saveError && <p className="save-error">{saveError}</p>}
 
             <div className="settings-actions">
-              <button className="discard" onClick={() => setActiveTab("feed")}>Discard</button>
-              <button className="save" onClick={handleSaveProfile} disabled={saving}>
-                {saving ? "Saving..." : "Save Changes"}
+              <button
+                className="discard"
+                onClick={() => setActiveTab("feed")}
+              >
+                Discard
+              </button>
+              <button
+                className="save"
+                onClick={handleSaveProfile}
+                disabled={saving}
+              >
+                {saving ? "Saving…" : "Save Changes"}
               </button>
             </div>
 
             {/* ── Change Password ── */}
             <div className="change-password-section">
-              <h4><FaLock /> Change Password</h4>
+              <h4>
+                <FaLock /> Change Password
+              </h4>
 
               <div className="settings-form">
                 <label>Current Password</label>
@@ -735,15 +854,28 @@ function MyProfile() {
                   <input
                     type={showPw.current ? "text" : "password"}
                     value={pwData.current}
-                    onChange={(e) => { setPwData({ ...pwData, current: e.target.value }); setPwErrors({ ...pwErrors, current: "" }); }}
+                    onChange={(e) => {
+                      setPwData({ ...pwData, current: e.target.value });
+                      setPwErrors({ ...pwErrors, current: "" });
+                    }}
                     placeholder="Current Password"
                     className={pwErrors.current ? "input-error" : ""}
                   />
-                  <button type="button" className="pw-toggle" onClick={() => setShowPw((s) => ({ ...s, current: !s.current }))}>
+                  <button
+                    type="button"
+                    className="pw-toggle"
+                    onClick={() =>
+                      setShowPw((s) => ({ ...s, current: !s.current }))
+                    }
+                  >
                     {showPw.current ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
-                {pwErrors.current && <p className="field-error"><BiError /> {pwErrors.current}</p>}
+                {pwErrors.current && (
+                  <p className="field-error">
+                    <BiError /> {pwErrors.current}
+                  </p>
+                )}
 
                 <label>New Password</label>
                 <div className="input-with-icon">
@@ -751,15 +883,28 @@ function MyProfile() {
                   <input
                     type={showPw.newPw ? "text" : "password"}
                     value={pwData.newPw}
-                    onChange={(e) => { setPwData({ ...pwData, newPw: e.target.value }); setPwErrors({ ...pwErrors, newPw: "" }); }}
+                    onChange={(e) => {
+                      setPwData({ ...pwData, newPw: e.target.value });
+                      setPwErrors({ ...pwErrors, newPw: "" });
+                    }}
                     placeholder="New Password (min 8 chars)"
                     className={pwErrors.newPw ? "input-error" : ""}
                   />
-                  <button type="button" className="pw-toggle" onClick={() => setShowPw((s) => ({ ...s, newPw: !s.newPw }))}>
+                  <button
+                    type="button"
+                    className="pw-toggle"
+                    onClick={() =>
+                      setShowPw((s) => ({ ...s, newPw: !s.newPw }))
+                    }
+                  >
                     {showPw.newPw ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
-                {pwErrors.newPw && <p className="field-error"><BiError /> {pwErrors.newPw}</p>}
+                {pwErrors.newPw && (
+                  <p className="field-error">
+                    <BiError /> {pwErrors.newPw}
+                  </p>
+                )}
 
                 <label>Confirm Password</label>
                 <div className="input-with-icon">
@@ -767,25 +912,40 @@ function MyProfile() {
                   <input
                     type={showPw.confirm ? "text" : "password"}
                     value={pwData.confirm}
-                    onChange={(e) => { setPwData({ ...pwData, confirm: e.target.value }); setPwErrors({ ...pwErrors, confirm: "" }); }}
+                    onChange={(e) => {
+                      setPwData({ ...pwData, confirm: e.target.value });
+                      setPwErrors({ ...pwErrors, confirm: "" });
+                    }}
                     placeholder="Confirm New Password"
                     className={pwErrors.confirm ? "input-error" : ""}
                   />
-                  <button type="button" className="pw-toggle" onClick={() => setShowPw((s) => ({ ...s, confirm: !s.confirm }))}>
+                  <button
+                    type="button"
+                    className="pw-toggle"
+                    onClick={() =>
+                      setShowPw((s) => ({ ...s, confirm: !s.confirm }))
+                    }
+                  >
                     {showPw.confirm ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
-                {pwErrors.confirm && <p className="field-error"><BiError /> {pwErrors.confirm}</p>}
+                {pwErrors.confirm && (
+                  <p className="field-error">
+                    <BiError /> {pwErrors.confirm}
+                  </p>
+                )}
               </div>
 
-              <div className="settings-actions" style={{ marginTop: "14px" }}>
-                <button className="save" onClick={handleChangePassword}>Change Password</button>
+              <div className="settings-actions" style={{ marginTop: "16px" }}>
+                <button className="save" onClick={handleChangePassword}>
+                  Change Password
+                </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Modals */}
+        {/* ── Modals ── */}
         {showConfirm && (
           <ConfirmChangesModal
             title="Save Profile Changes?"

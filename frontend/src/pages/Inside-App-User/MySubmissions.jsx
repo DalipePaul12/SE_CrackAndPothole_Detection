@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import "./MySubmissions.css";
 import Sidebar from "../../components/Sidebar.jsx";
 import AppHeader from "../../components/AppHeader.jsx";
+import { useNavigate } from "react-router-dom";
 import { useReports } from "../../hooks/useReports";
 import {
   FileText, LayoutList, Map, Search, X, SlidersHorizontal,
@@ -270,13 +271,14 @@ function DeleteConfirmModal({ report, onConfirm, onCancel, loading }) {
 /* ──────────────────────────────────────────────────────────
    REPORT MODAL
 ────────────────────────────────────────────────────────── */
-function ReportModal({ report, onClose, onDelete, onEdit }) {
+function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details" }) {
   const [comments, setComments]           = useState([]);
   const [lightboxSrc, setLightboxSrc]     = useState(null);
   const [imgErr1, setImgErr1]             = useState(false);
   const [imgErr2, setImgErr2]             = useState(false);
-  const [activeTab, setActiveTab]         = useState("details");
+  const [activeTab, setActiveTab]         = useState(initialTab);
   const [unread, setUnread]               = useState(0);
+   const [unreadAdmin, setUnreadAdmin]     = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [shareMsg, setShareMsg]           = useState("");
@@ -298,7 +300,9 @@ function ReportModal({ report, onClose, onDelete, onEdit }) {
       .then((data) => {
         const arr = Array.isArray(data) ? data : [];
         setComments(arr);
-        setUnread(arr.filter((c) => c.user?.role === "admin").length);
+        const adminMsgs = arr.filter((c) => c.user?.role === "admin");
+        setUnread(adminMsgs.length);
+        setUnreadAdmin(adminMsgs.filter((c) => !c.is_read).length);
       })
       .catch(() => {});
   }, [report.id]);
@@ -340,7 +344,7 @@ function ReportModal({ report, onClose, onDelete, onEdit }) {
     { id: "details",  label: "Details",  Icon: FileText },
     { id: "timeline", label: "Timeline", Icon: Clock },
     { id: "media",    label: "Media",    Icon: Image },
-    { id: "messages", label: "Messages", Icon: MessageSquare, badge: unread },
+    { id: "messages", label: "Updates", Icon: MessageSquare, badge: unreadAdmin > 0 ? unreadAdmin : unread > 0 ? unread : null },
   ];
 
   return (
@@ -529,7 +533,48 @@ function ReportModal({ report, onClose, onDelete, onEdit }) {
             {/* ── Messages ── */}
             {activeTab === "messages" && (
               <div className="sub-tab-messages">
-                <NoteComposer reportId={report.id} onSent={loadComments} />
+
+              {/* Admin updates — shown first, prominently */}
+              {comments.filter(c => c.user?.role === "admin").length > 0 && (
+                <div style={{
+                  background: "var(--info-bg)",
+                  border: "1px solid var(--info-border)",
+                  borderRadius: "var(--radius-lg)",
+                  padding: "14px",
+                  marginBottom: "4px",
+                }}>
+                  <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--info)", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 10px", display: "flex", alignItems: "center", gap: 6 }}>
+                    <MessageSquare size={13} /> Updates from Admin
+                  </p>
+                  {comments.filter(c => c.user?.role === "admin").map((c) => (
+                    <div key={c.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid var(--info-border)" }}>
+                      <p style={{ margin: "0 0 3px", fontWeight: 700, fontSize: "0.87rem", color: "var(--text)" }}>{c.title ?? ""}</p>
+                      <p style={{ margin: "0 0 5px", fontSize: "0.86rem", color: "var(--subtext)", lineHeight: 1.5 }}>{c.content}</p>
+                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{fmtDT(c.created_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* No updates yet empty state */}
+              {comments.filter(c => c.user?.role === "admin").length === 0 && (
+                <div style={{
+                  background: "var(--bg-secondary)",
+                  border: "1px dashed var(--border-strong)",
+                  borderRadius: "var(--radius-lg)",
+                  padding: "16px",
+                  textAlign: "center",
+                  marginBottom: "4px",
+                  color: "var(--text-muted)",
+                  fontSize: "0.84rem",
+                }}>
+                  <MessageSquare size={20} style={{ marginBottom: 8, opacity: 0.4 }} />
+                  <p style={{ margin: 0 }}>No updates from admin yet.</p>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.76rem" }}>Estimated review time: 24–48 hours.</p>
+                </div>
+              )}
+
+              <NoteComposer reportId={report.id} onSent={loadComments} />
                 {comments.length > 0 ? (
                   <div className="sub-comments-thread">
                     <p className="sub-thread-label">Thread ({comments.length})</p>
@@ -728,13 +773,49 @@ function MySubmissions() {
   const [search, setSearch]             = useState("");
   const [sortBy, setSortBy]             = useState("newest");
   const [selectedReport, setSelectedReport] = useState(null);
+  const [initialTab,     setInitialTab]     = useState("details");
   const [viewMode, setViewMode]         = useState("list");
   const searchRef = useRef(null);
-
-  const { reports, loading, error, page, setPage, total, refetch } = useReports({
-    mine: true,
-    status: statusFilter !== "All" ? statusFilter : null,
+  
+  const { reports, loading, error, page, setPage, total, refetch } = useReports({ 
+    mine: true  
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reportId = params.get("report_id");
+    const tab      = params.get("tab") ?? "details";
+
+    if (!reportId) return;
+
+    // Clear URL immediately so back-navigation won't re-trigger
+    window.history.replaceState({}, "", window.location.pathname);
+
+    const open = async () => {
+      // Fast path — report already in current loaded list
+      const found = reports.find((r) => String(r.id) === String(reportId));
+      if (found) {
+        setInitialTab(tab);
+        setSelectedReport(found);
+        return;
+      }
+      // Fetch directly from API — works even if report is on a different page
+      // or currently filtered out
+      try {
+        const token = localStorage.getItem("access_token");
+        const res = await fetch(`${BASE_URL}/api/v1/reports/${reportId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setInitialTab(tab);
+          setSelectedReport(data);
+        }
+      } catch {}
+    };
+
+    open();
+  }, []); // runs once on mount — URL params are read once
 
   const processed = useMemo(() => {
     let arr = [...reports];
@@ -1013,9 +1094,10 @@ function MySubmissions() {
       {selectedReport && (
         <ReportModal
           report={selectedReport}
-          onClose={() => setSelectedReport(null)}
+          onClose={() => { setSelectedReport(null); setInitialTab("details"); }}
           onDelete={() => refetch()}
           onEdit={(r) => console.log("Edit:", r.id)}
+          initialTab={initialTab}
         />
       )}
     </>

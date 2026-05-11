@@ -1202,7 +1202,7 @@ function CreateReport({ onClose }) {
             {[
               { id: "photo", label: "Photo",     Icon: FaCamera },
               { id: "video", label: "Video",     Icon: FaVideo  },
-              { id: "live",  label: "Live Scan", Icon: MdRadar  },
+              // { id: "live",  label: "Live Scan", Icon: MdRadar  },
             ].map(({ id, label, Icon }) => (
               <button
                 key={id} role="tab" aria-selected={activeTab === id}
@@ -1215,6 +1215,7 @@ function CreateReport({ onClose }) {
           </div>
 
           {/* ── LIVE DETECTION TAB ── */}
+          {/* COMMENTED OUT - WILL BE ADDED IN NEXT FEATURE
           {activeTab === "live" && (
             <div className="rd-root">
               <div className="rd-viewport">
@@ -1386,6 +1387,7 @@ function CreateReport({ onClose }) {
               </div>
             </div>
           )}
+          */}
 
           {/* ── PHOTO / VIDEO CAMERA VIEWFINDER ── */}
           {activeTab !== "live" && showCamera && (

@@ -562,9 +562,8 @@ function AdminManageReports() {
               <label>Severity</label>
               <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
                 <option value="All">All Severity</option>
+                <option value="non-critical">Non-Critical</option>
                 <option value="critical">Critical</option>
-                <option value="moderate">Moderate</option>
-                <option value="low">Low</option>
               </select>
             </div>
 

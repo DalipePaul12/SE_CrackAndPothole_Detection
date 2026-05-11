@@ -54,54 +54,57 @@ function AdminStreetReports() {
     setAllReports(reportsData);
     setLoading(false);
 
-    // 2. Background Task: Convert any raw coordinates into real street names
-    const geoCache = {};
-    const updatedReports = [...reportsData];
-    let stateNeedsUpdate = false;
+// 2. Background: parallel geocoding with sessionStorage cache (CONCURRENCY=5)
+    const GEO_CACHE_KEY = "asr_geo_cache";
+    let geoCache = {};
+    try { geoCache = JSON.parse(sessionStorage.getItem(GEO_CACHE_KEY) || "{}"); }
+    catch { geoCache = {}; }
 
-    for (let i = 0; i < updatedReports.length; i++) {
-      let r = updatedReports[i];
-      let addressString = r.street_name || r.location_address || "";
+    const CONCURRENCY = 5;
+    const needsGeo = reportsData
+      .map((r, i) => ({ r, i, addr: r.street_name || r.location_address || "" }))
+      .filter(({ addr }) => isCoordinateString(addr));
 
-      if (isCoordinateString(addressString)) {
-        const [lat, lon] = addressString.split(',').map(s => s.trim());
-        const cacheKey = `${lat},${lon}`;
+    if (needsGeo.length > 0) {
+      const updated = [...reportsData];
 
-        if (!geoCache[cacheKey]) {
-          try {
-            // We use OpenStreetMap (Nominatim). 
-            // The 1-second delay is required to not get banned from their free server.
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
-            const data = await response.json();
-            
-            // Extract the base street name
-            let streetName = data.address?.road || data.address?.neighbourhood || data.address?.suburb || "Unnamed Road";
-            
-            // Add the house/building number if it exists in the data
-            if (data.address?.house_number) {
-              streetName = `${streetName} ${data.address.house_number}`;
+      for (let batch = 0; batch < needsGeo.length; batch += CONCURRENCY) {
+        const chunk = needsGeo.slice(batch, batch + CONCURRENCY);
+        await Promise.all(chunk.map(async ({ r, i, addr }) => {
+          const [lat, lon] = addr.split(",").map(s => s.trim());
+          const key = `${lat},${lon}`;
+
+          if (!geoCache[key]) {
+            try {
+              const resp = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`
+              );
+              const data = await resp.json();
+              const road = [
+                data.address?.road,
+                data.address?.neighbourhood,
+                data.address?.suburb,
+              ].find(Boolean) || "Unnamed Road";
+              geoCache[key] = data.address?.house_number
+                ? `${road} ${data.address.house_number}`
+                : road;
+            } catch {
+              geoCache[key] = "Unknown Road";
             }
-
-            geoCache[cacheKey] = streetName;
-          } catch (error) {
-            geoCache[cacheKey] = "Unknown Road";
           }
-        }
 
-        // Replace the coordinate with the real street name + number
-        updatedReports[i] = { 
-          ...r, 
-          street_name: geoCache[cacheKey], 
-          location_address: geoCache[cacheKey] 
-        };
-        stateNeedsUpdate = true;
+          updated[i] = {
+            ...r,
+            street_name:      geoCache[key],
+            location_address: geoCache[key],
+          };
+        }));
       }
-    }
 
-    // 3. Re-render the table with the human-readable streets
-    if (stateNeedsUpdate) {
-      setAllReports([...updatedReports]);
+      try { sessionStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geoCache)); }
+      catch { /* storage full — skip */ }
+
+      setAllReports([...updated]);
     }
 
   }, []);
@@ -177,8 +180,8 @@ function AdminStreetReports() {
               <div className="admin-custom-select">
                 <select value={filters.severity} onChange={(e) => setFilters({ ...filters, severity: e.target.value })}>
                   <option value="All">All Severity</option>
-                  <option value="Critical">Critical Only</option>
                   <option value="Non-Critical">Non-Critical</option>
+                  <option value="Critical">Critical</option>
                 </select>
               </div>
             </div>

@@ -36,6 +36,7 @@ const TYPE_CONFIG = {
   deleted:     { icon: Trash2,         label: "Removed",     cls: "type-deleted"     },
   pending:     { icon: Clock,          label: "Pending",     cls: "type-pending"     },
   info:        { icon: Info,           label: "Update",      cls: "type-info"        },
+  update:      { icon: MessageSquare,  label: "Update",      cls: "type-info"        },
   system:      { icon: Info,           label: "System",      cls: "type-system"      },
 };
 
@@ -332,20 +333,31 @@ export default function Notifications() {
   const handleView = useCallback(async (notif) => {
     markAsRead(notif.id);
 
-    // Don't try to load a deleted report
-    if (!notif.report_id || resolveTypeKeyFromNotif(notif) === "deleted") return;
+    if (!notif.report_id) return;
 
-    setReportLoading(true);
-    setReportModal(null);           // clear any previous report while loading
-    const res = await getReport(notif.report_id);
-    setReportLoading(false);
+    const typeKey = resolveTypeKeyFromNotif(notif);
 
-    if (res.success) {
-      setReportModal(res.data);
-    } else {
-      addToast("Could not load report", res.error ?? "Unknown error", "warning");
+    // Deleted reports — show inline modal only (no navigation)
+    if (typeKey === "deleted") {
+      setReportLoading(true);
+      setReportModal(null);
+      const res = await getReport(notif.report_id);
+      setReportLoading(false);
+      if (res.success) setReportModal(res.data);
+      else addToast("Could not load report", res.error ?? "Unknown error", "warning");
+      return;
     }
-  }, [markAsRead, addToast]);
+
+    // Admin updates → go to My Submissions, auto-open that report on Updates tab
+    // Status changes → Timeline tab
+    // Everything else (admin notes, comments, info, warnings) → Messages tab so user can reply
+    const STATUS_CHANGE_TYPES = ["verified", "inprogress", "in_progress", "resolved", "declined"];
+    if (STATUS_CHANGE_TYPES.includes(typeKey)) {
+      navigate(`/dashboard/submissions?report_id=${notif.report_id}&tab=timeline`);
+    } else {
+      navigate(`/dashboard/submissions?report_id=${notif.report_id}&tab=messages`);
+    }
+  }, [markAsRead, addToast, navigate]);
 
   /* ── content renderer ── */
   const renderContent = () => {

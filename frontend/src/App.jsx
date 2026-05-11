@@ -1,34 +1,43 @@
 /**
- * App.jsx
+ * App.jsx  —  FIXED
  *
- * FIX: Added PrivateRoute and AdminRoute guards.
- *      Previously /dashboard and /adminpanel were fully accessible without
- *      authentication — any user who knew the URL could reach protected pages.
+ * CHANGES FROM PREVIOUS VERSION:
  *
- * PrivateRoute: Redirects to "/" if no access_token in localStorage.
- * AdminRoute:   Redirects to "/dashboard" if logged-in user is not an admin.
- *               Role is read from the JWT payload (no extra API call needed).
+ * 1. REMOVED <BrowserRouter> — it is already in main.jsx. Having two routers
+ *    causes a context mismatch that makes useLocation / useNavigate behave
+ *    unpredictably and can trigger full re-mounts on every navigation.
+ *
+ * 2. REMOVED raw localStorage / JWT helpers (isAuthenticated, getUserRole).
+ *    Those read stale values and bypass the AuthProvider you already wired up
+ *    in main.jsx. Now PrivateRoute and AdminRoute read from useAuthContext(),
+ *    which is the single source of truth.
+ *
+ * 3. AuthProvider is in main.jsx (wrapping everything), so the auth state is
+ *    resolved BEFORE any route guard or page component mounts. That is what
+ *    stops data from flashing and then disappearing.
  */
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
+
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useState } from "react";
 import "./index.css";
 
-import ScrollToTop        from "./components/ScrollToTop.jsx";
-import Navbar             from "./components/Navbar.jsx";
+import ScrollToTop from "./components/ScrollToTop.jsx";
+import Navbar      from "./components/Navbar.jsx";
 import { NotificationProvider } from "./pages/Contexts/NotificationContext.jsx";
+import { useAuthContext }        from "./pages/Contexts/AuthContext.jsx";
 
 // Landing
-import HomePage   from "./pages/LandingPage/HomePage.jsx";
-import AboutPage  from "./pages/LandingPage/AboutPage.jsx";
+import HomePage  from "./pages/LandingPage/HomePage.jsx";
+import AboutPage from "./pages/LandingPage/AboutPage.jsx";
 
 // Inside App — User
-import Dashboard      from "./pages/Inside-App-User/Dashboard.jsx";
-import AllReports     from "./pages/Inside-App-User/AllReports.jsx";
-import MapView        from "./pages/Inside-App-User/MapView.jsx";
-import MyProfile      from "./pages/Inside-App-User/MyProfile.jsx";
-import MySubmissions  from "./pages/Inside-App-User/MySubmissions.jsx";
-import Notifications  from "./pages/Inside-App-User/Notifications.jsx";
-import Settings       from "./pages/Inside-App-User/Settings.jsx";
+import Dashboard     from "./pages/Inside-App-User/Dashboard.jsx";
+import AllReports    from "./pages/Inside-App-User/AllReports.jsx";
+import MapView       from "./pages/Inside-App-User/MapView.jsx";
+import MyProfile     from "./pages/Inside-App-User/MyProfile.jsx";
+import MySubmissions from "./pages/Inside-App-User/MySubmissions.jsx";
+import Notifications from "./pages/Inside-App-User/Notifications.jsx";
+import Settings      from "./pages/Inside-App-User/Settings.jsx";
 
 // Inside App — Admin
 import AdminPanel          from "./pages/Inside-App-Admin/AdminPanel.jsx";
@@ -38,54 +47,32 @@ import AdminManageRequests from "./pages/Inside-App-Admin/AdminManageRequests.js
 import AdminManageReports  from "./pages/Inside-App-Admin/AdminManageReports.jsx";
 import AdminStreetReports  from "./pages/Inside-App-Admin/AdminStreetReports.jsx";
 
-// ─── Auth helpers ──────────────────────────────────────────────────────────────
+// ─── Route guards (now use AuthContext, not localStorage) ─────────────────────
 
-/** Returns true if a valid (non-expired) access token exists in localStorage. */
-function isAuthenticated() {
-  const token = localStorage.getItem("access_token");
-  if (!token) return false;
-
-  try {
-    // Decode JWT payload without verifying signature (verification is server-side)
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    // exp is in seconds; Date.now() is in ms
-    if (payload.exp && payload.exp * 1000 < Date.now()) {
-      localStorage.removeItem("access_token");
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Returns the role string from the JWT payload, or null. */
-function getUserRole() {
-  const token = localStorage.getItem("access_token");
-  if (!token) return null;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.role ?? null;
-  } catch {
-    return null;
-  }
-}
-
-// ─── Route guards ──────────────────────────────────────────────────────────────
-
-/** Redirects unauthenticated users to the landing page. */
+/**
+ * PrivateRoute
+ * Blocks unauthenticated users from reaching user dashboard pages.
+ * Because AuthProvider already blocks rendering until isLoading=false,
+ * isAuthenticated here is always a settled value — no flash.
+ */
 function PrivateRoute({ children }) {
-  return isAuthenticated() ? children : <Navigate to="/" replace />;
+  const { isAuthenticated } = useAuthContext();
+  return isAuthenticated ? children : <Navigate to="/" replace />;
 }
 
-/** Redirects non-admin users back to the user dashboard. */
+/**
+ * AdminRoute
+ * Blocks non-admin users. Role is read from the auth context user object,
+ * which comes from the validated JWT — no stale localStorage reads.
+ */
 function AdminRoute({ children }) {
-  if (!isAuthenticated()) return <Navigate to="/" replace />;
-  if (getUserRole() !== "admin") return <Navigate to="/dashboard" replace />;
+  const { isAuthenticated, user } = useAuthContext();
+  if (!isAuthenticated)          return <Navigate to="/"          replace />;
+  if (user?.role !== "admin")    return <Navigate to="/dashboard" replace />;
   return children;
 }
 
-// ─── App shell ─────────────────────────────────────────────────────────────────
+// ─── App shell ────────────────────────────────────────────────────────────────
 
 function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
   const location = useLocation();
@@ -109,26 +96,29 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
 
       <NotificationProvider>
         <Routes>
-          {/* ── Landing ─────────────────────────────────────────────────── */}
+          {/* ── Landing ──────────────────────────────────────────────────── */}
           <Route path="/"      element={<HomePage onGetStarted={() => setShowSignUp(true)} />} />
           <Route path="/about" element={<AboutPage />} />
 
-          {/* ── User dashboard (auth required) ──────────────────────────── */}
-          <Route path="/dashboard"              element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          <Route path="/dashboard/reports"      element={<PrivateRoute><AllReports /></PrivateRoute>} />
-          <Route path="/dashboard/mapview"      element={<PrivateRoute><MapView /></PrivateRoute>} />
-          <Route path="/dashboard/profile"      element={<PrivateRoute><MyProfile /></PrivateRoute>} />
-          <Route path="/dashboard/submissions"  element={<PrivateRoute><MySubmissions /></PrivateRoute>} />
+          {/* ── User dashboard (auth required) ───────────────────────────── */}
+          <Route path="/dashboard"               element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/dashboard/reports"       element={<PrivateRoute><AllReports /></PrivateRoute>} />
+          <Route path="/dashboard/mapview"       element={<PrivateRoute><MapView /></PrivateRoute>} />
+          <Route path="/dashboard/profile"       element={<PrivateRoute><MyProfile /></PrivateRoute>} />
+          <Route path="/dashboard/submissions"   element={<PrivateRoute><MySubmissions /></PrivateRoute>} />
           <Route path="/dashboard/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
-          <Route path="/dashboard/settings"     element={<PrivateRoute><Settings /></PrivateRoute>} />
+          <Route path="/dashboard/settings"      element={<PrivateRoute><Settings /></PrivateRoute>} />
 
-          {/* ── Admin panel (admin role required) ───────────────────────── */}
-          <Route path="/adminpanel"                  element={<AdminRoute><AdminPanel /></AdminRoute>} />
-          <Route path="/adminpanel/reports"          element={<AdminRoute><AdminAllReports /></AdminRoute>} />
-          <Route path="/adminpanel/map"              element={<AdminRoute><AdminMapView /></AdminRoute>} />
-          <Route path="/adminpanel/requests"         element={<AdminRoute><AdminManageRequests /></AdminRoute>} />
-          <Route path="/adminpanel/managereports"    element={<AdminRoute><AdminManageReports /></AdminRoute>} />
-          <Route path="/adminpanel/managestreets"    element={<AdminRoute><AdminStreetReports /></AdminRoute>} />
+          {/* ── Admin panel (admin role required) ────────────────────────── */}
+          <Route path="/adminpanel"                element={<AdminRoute><AdminPanel /></AdminRoute>} />
+          <Route path="/adminpanel/reports"        element={<AdminRoute><AdminAllReports /></AdminRoute>} />
+          <Route path="/adminpanel/map"            element={<AdminRoute><AdminMapView /></AdminRoute>} />
+          <Route path="/adminpanel/requests"       element={<AdminRoute><AdminManageRequests /></AdminRoute>} />
+          <Route path="/adminpanel/managereports"  element={<AdminRoute><AdminManageReports /></AdminRoute>} />
+          <Route path="/adminpanel/managestreets"  element={<AdminRoute><AdminStreetReports /></AdminRoute>} />
+
+          {/* ── Fallback ─────────────────────────────────────────────────── */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </NotificationProvider>
     </>
@@ -136,7 +126,7 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
 }
 
 function App() {
-  const [showLogin, setShowLogin]   = useState(false);
+  const [showLogin,  setShowLogin]  = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
 
   return (
