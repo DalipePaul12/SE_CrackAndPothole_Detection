@@ -32,7 +32,7 @@ from app.utils.logger import configure_logging
 
 configure_logging()
 logger = logging.getLogger(__name__)
-from app.routers import auth
+from app.api.v1 import auth
 from app.api.v1 import analytics, cctv, media, ml, notifications, projects, reports, users
 from app.routers import comments
 from app.routers import ws

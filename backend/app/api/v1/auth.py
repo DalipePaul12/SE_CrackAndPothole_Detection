@@ -2,22 +2,32 @@ import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr, field_validator
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import create_access_token, decode_token, get_password_hash, verify_password
+from app.core.security import decode_token, get_password_hash, verify_password
 from app.db.session import get_db
-from app.middleware.auth_middleware import get_current_user, require_admin
+from app.middleware.auth_middleware import get_current_user
 from app.middleware.rate_limiter import limiter
 from app.models.enums import OTPPurpose, UserRole
 from app.models.user import User
+from app.schemas.auth import (
+    EmailSchema,
+    LoginRequest,
+    LoginStep1Response,
+    LoginVerifyRequest,
+    RefreshTokenRequest,
+    ResetPasswordSchema,
+    TokenResponse,
+    UserCreate,
+)
 from app.services import auth_service
+from app.services.email_service import send_otp_email
 from app.utils.logger import logger
 
-router = APIRouter(prefix="/auth", tags=["Authentication"]) 
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
@@ -28,87 +38,15 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: str
-    contact_number: str | None = None
-
-    @field_validator("password")
-    @classmethod
-    def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters.")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter.")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter.")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit.")
-        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
-            raise ValueError("Password must contain at least one special character.")
-        return v
-
-    @field_validator("full_name")
-    @classmethod
-    def full_name_clean(cls, v: str) -> str:
-        v = v.strip()
-        if len(v) < 2:
-            raise ValueError("Full name must be at least 2 characters.")
-        if len(v) > 100:
-            raise ValueError("Full name must be under 100 characters.")
-        if not re.match(r"^[a-zA-Z\s\-'.]+$", v):
-            raise ValueError("Full name contains invalid characters.")
-        return v
-
-    @field_validator("contact_number")
-    @classmethod
-    def contact_number_clean(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        digits_only = re.sub(r"\D", "", v)
-        if len(digits_only) < 10 or len(digits_only) > 15:
-            raise ValueError("Contact number must be between 10 and 15 digits.")
-        return digits_only
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    role: str
-
-
-class EmailSchema(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordSchema(BaseModel):
-    email: EmailStr
-    otp_code: str
-    new_password: str
-
-    @field_validator("otp_code")
-    @classmethod
-    def otp_format(cls, v: str) -> str:
-        v = v.strip()
-        if not re.fullmatch(r"\d{6}", v):
-            raise ValueError("OTP must be exactly 6 digits.")
-        return v
-
-    @field_validator("new_password")
-    @classmethod
-    def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters.")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter.")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter.")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit.")
-        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
-            raise ValueError("Password must contain at least one special character.")
-        return v
+def _mask_email(email: str) -> str:
+    if "@" not in email:
+        return email
+    local, domain = email.split("@")
+    if len(local) <= 2:
+        masked_local = local[0] + "***"
+    else:
+        masked_local = local[0] + "***" + local[-1]
+    return f"{masked_local}@{domain}"
 
 
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -119,11 +57,24 @@ async def register(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(User).where(User.email == user_data.email))
-    if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registration failed. Please check your details.",
-        )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        if existing.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Registration failed. Please check your details.",
+            )
+        else:
+            # Unverified leftover — resend OTP instead of blocking
+            existing.hashed_password = get_password_hash(user_data.password)
+            existing.full_name = user_data.full_name
+            existing.contact_number = user_data.contact_number
+            await db.commit()
+            await db.refresh(existing)
+            code = await auth_service.create_otp(db, existing.email, OTPPurpose.email_verify, existing.id)
+            await send_otp_email(existing.email, code, "email_verify")
+            return {"message": "Registration successful.", "user_id": existing.id}
 
     new_user = User(
         email=user_data.email,
@@ -133,33 +84,35 @@ async def register(
         role=UserRole.citizen,
         reputation_score=100,
         is_active=True,
+        is_verified=False,
     )
-
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
 
-    logger.info("New user registered | id=%d | ip=%s", new_user.id, _get_client_ip(request))
+    # ← THIS WAS MISSING
+    code = await auth_service.create_otp(db, new_user.email, OTPPurpose.email_verify, new_user.id)
+    await send_otp_email(new_user.email, code, "email_verify")
 
+    logger.info("New user registered | id=%d | ip=%s", new_user.id, _get_client_ip(request))
     return {"message": "Registration successful.", "user_id": new_user.id}
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=LoginStep1Response)
 @limiter.limit("5/minute")
 async def login(
     request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    credentials: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.email == form_data.username))
+    result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        logger.warning("Failed login attempt | email=%s | ip=%s", form_data.username, _get_client_ip(request))
+    if not user or not verify_password(credentials.password, user.hashed_password):
+        logger.warning("Failed login attempt | email=%s | ip=%s", credentials.email, _get_client_ip(request))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
-            headers={"WWW-Authenticate": "Bearer"},
         )
 
     if not getattr(user, "is_active", True):
@@ -168,16 +121,157 @@ async def login(
             detail="Account is deactivated. Contact support.",
         )
 
-    access_token = create_access_token(
-        data={"sub": user.email, "role": user.role.value, "id": user.id}
+    try:
+        code = await auth_service.create_otp(db, user.email, OTPPurpose.two_factor, user.id)
+        await send_otp_email(user.email, code, "two_factor")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
+
+    logger.info("2FA OTP sent | user_id=%d | ip=%s", user.id, _get_client_ip(request))
+
+    return {
+        "otp_required": True,
+        "email": _mask_email(user.email),
+        "message": "OTP sent to your email.",
+    }
+
+
+@router.post("/verify-login-otp", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def verify_login_otp(
+    request: Request,
+    data: LoginVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    ip = _get_client_ip(request)
+
+    try:
+        otp_valid = await auth_service.verify_otp(db, data.email, data.code, OTPPurpose.two_factor)
+        if not otp_valid:
+            raise ValueError("OTP verification returned False")
+    except ValueError as e:
+        logger.warning("2FA verification failed | email=%s | ip=%s | reason=%s", data.email, ip, str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account invalid or deactivated.")
+
+    user.last_login_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(user)
+
+    access_token = auth_service.create_access_token(user.public_id, user.role.value)
+    refresh_token = await auth_service.create_refresh_token(
+        db,
+        user.id,
+        device_info=request.headers.get("User-Agent"),
+        ip_address=ip,
     )
 
-    logger.info("Successful login | user_id=%d | ip=%s", user.id, _get_client_ip(request))
+    logger.info("Successful 2FA login | user_id=%d | ip=%s", user.id, ip)
 
     return {
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
-        "role": user.role.value,
+        "user": user,  # Return the ORM object directly — FastAPI/Pydantic will serialize via UserResponse
+    }
+@router.post("/verify-email-otp", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
+async def verify_email_otp(
+    request: Request,
+    data: LoginVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await auth_service.verify_otp(db, data.email, data.code, OTPPurpose.email_verify)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    user.is_verified = True
+    await db.commit()
+    return {"message": "Email verified successfully."}
+
+@router.post("/resend-login-otp", response_model=LoginStep1Response)
+@limiter.limit("3/minute")
+async def resend_login_otp(
+    request: Request,
+    data: EmailSchema,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if user and user.is_active:
+        try:
+            code = await auth_service.create_otp(db, user.email, OTPPurpose.two_factor, user.id)
+            await send_otp_email(user.email, code, "two_factor")
+        except ValueError:
+            pass
+
+    return {
+        "otp_required": True,
+        "email": _mask_email(data.email),
+        "message": "If that email exists, an OTP has been sent.",
+    }
+
+@router.post("/resend-email-otp", status_code=status.HTTP_200_OK)
+@limiter.limit("3/minute")
+async def resend_email_otp(
+    request: Request,
+    data: EmailSchema,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if user and not user.is_verified:
+        try:
+            code = await auth_service.create_otp(db, user.email, OTPPurpose.email_verify, user.id)
+            await send_otp_email(user.email, code, "email_verify")
+        except ValueError:
+            pass  # cooldown — silently ignore
+
+    return {"message": "If that email exists, a new code has been sent."}
+
+@router.post("/refresh")
+async def refresh_token(
+    request: Request,
+    data: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Rotate refresh token and return new access + refresh tokens."""
+    ip = _get_client_ip(request)
+
+    try:
+        new_refresh_token, user = await auth_service.rotate_refresh_token(
+            db, data.refresh_token, ip_address=ip
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except auth_service.TokenReuseError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token reuse detected. Please log in again.",
+        )
+
+    access_token = auth_service.create_access_token(user.public_id, user.role.value)
+
+    logger.info("Token refreshed | user_id=%d | ip=%s", user.id, ip)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+        "user": user,
     }
 
 
@@ -189,7 +283,6 @@ async def forgot_password(
     db: AsyncSession = Depends(get_db),
 ):
     ip = _get_client_ip(request)
-
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
 
@@ -198,14 +291,12 @@ async def forgot_password(
         return {"message": "If that email exists, an OTP has been sent."}
 
     try:
-        await auth_service.create_otp(
-            db, data.email, OTPPurpose.password_reset, user.id
-        )
+        code = await auth_service.create_otp(db, data.email, OTPPurpose.password_reset, user.id)
+        await send_otp_email(data.email, code, "password_reset")  # ← add this line
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
 
     logger.info("OTP generated for password reset | user_id=%d | ip=%s", user.id, ip)
-
     return {"message": "If that email exists, an OTP has been sent."}
 
 
@@ -219,9 +310,7 @@ async def reset_password(
     ip = _get_client_ip(request)
 
     try:
-        await auth_service.verify_otp(
-            db, data.email, data.otp_code, OTPPurpose.password_reset
-        )
+        await auth_service.verify_otp(db, data.email, data.otp_code, OTPPurpose.password_reset)
     except ValueError as e:
         logger.warning("OTP verification failed | ip=%s | reason=%s", ip, str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -230,28 +319,24 @@ async def reset_password(
     user = result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     user.hashed_password = get_password_hash(data.new_password)
     await db.commit()
 
     logger.info("Password reset successful | user_id=%d | ip=%s", user.id, ip)
-
     return {"message": "Password updated successfully."}
 
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
     return {
-        "id":             current_user.id,
-        "email":          current_user.email,
-        "full_name":      current_user.full_name,
-        "role":           current_user.role.value,
+        "id": str(current_user.public_id),
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role.value,
         "contact_number": current_user.contact_number,
-        "is_active":      getattr(current_user, "is_active", True),
+        "is_active": getattr(current_user, "is_active", True),
     }
 
 
