@@ -1,5 +1,5 @@
 import "./AdminSidebar.css";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useDarkMode } from "../hooks/useDarkMode";
 
@@ -29,6 +29,7 @@ function SnapLogo() {
 
 function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isDark, toggle } = useDarkMode();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
@@ -41,6 +42,15 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   useEffect(() => {
     if (onClose) onClose();
   }, [location.pathname]);
+
+  const handleLogout = () => {
+    // Clear auth tokens / session storage
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    sessionStorage.clear();
+    // Navigate to landing page
+    navigate("/", { replace: true });
+  };
 
   const navItems = [
     { to: "/adminpanel", icon: LayoutDashboard, label: "Dashboard" },
@@ -129,7 +139,7 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
 
         <button
           className="admin-footer-btn admin-logout-btn"
-          onClick={() => console.log("Logout")}
+          onClick={handleLogout}
           title={isCollapsed ? "Logout" : ""}
         >
           <LogOut size={18} />

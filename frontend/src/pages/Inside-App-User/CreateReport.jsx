@@ -1522,13 +1522,13 @@ function CreateReport({ onClose }) {
           {/* Reporter + Barangay */}
           <div className="snap-form-row">
             <div className="snap-form-group half">
-              <label htmlFor="reporter-name">REPORTER'S NAME</label>
+              <label htmlFor="reporter-name">{reporterName}</label>
               <div className="reporter-chip-compact">
                 <div className="reporter-avatar-compact">
                   {reporterName.charAt(0).toUpperCase()}
                 </div>
                 <div className="reporter-info-compact">
-                  <div className="reporter-name-compact">{reporterName}</div>
+                  <div className="reporter-name-compact">Reporter</div>
                 </div>
               </div>
               <input id="reporter-name" type="hidden" value={reporterName} />

@@ -447,8 +447,7 @@
 .manage-table colgroup { display: table-column-group; }
 
 .manage-table .col-check     { width: 44px; }
-.manage-table .col-report   { width: 70px; }
-.manage-table .col-location { width: 170px; }
+.manage-table .col-report   { width: 160px; }
 .manage-table .col-reported { width: 90px; }
 .manage-table .col-damage    { width: 100px; }
 .manage-table .col-photo     { width: 60px; }
@@ -488,7 +487,8 @@
 }
 
 .manage-table td.col-report {
-  padding: 12px 8px;
+  padding: 10px 8px;
+  white-space: normal;
 }
 
 .manage-table tr:last-child td { border-bottom: none; }
@@ -568,6 +568,30 @@
   color: var(--text);
   font-family: 'DM Mono', monospace;
   white-space: nowrap;
+}
+
+.report-location {
+  display: flex;
+  flex-direction: column;
+  margin-top: 3px;
+  gap: 1px;
+}
+
+.report-loc-barangay {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.report-loc-street {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Location Cell ────────────────────────────────────────── */

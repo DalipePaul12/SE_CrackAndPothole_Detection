@@ -1,5 +1,5 @@
 import "./UserSidebar.css";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useTheme } from "../pages/Contexts/ThemeContext";
 import { useNotifications } from "../hooks/useNotifications";
@@ -34,6 +34,7 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   const { unreadCount } = useNotifications();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
   const [showReportModal, setShowReportModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const isDark = theme === "dark";
@@ -47,6 +48,15 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   useEffect(() => {
     if (onClose) onClose();
   }, [location.pathname]);
+
+  const handleLogout = () => {
+    // Clear auth tokens / session storage
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    sessionStorage.clear();
+    // Navigate to landing page
+    navigate("/", { replace: true });
+  };
 
   const mainNavItems = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -184,7 +194,11 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
           )}
         </button>
 
-        <button className="user-footer-btn user-logout-btn" title={isCollapsed ? "Logout" : ""}>
+        <button
+          className="user-footer-btn user-logout-btn"
+          onClick={handleLogout}
+          title={isCollapsed ? "Logout" : ""}
+        >
           <LogOut size={18} />
           <span className={isCollapsed ? "hidden" : ""}>Logout</span>
         </button>

@@ -1,162 +1,294 @@
+/* ============================================
+   Snap2Fix Navbar — Modern Responsive Styles
+   Mobile-first | Fluid Typography | Rem-based
+   ============================================ */
+
+/* ------------------------------------------
+   1. Design Tokens (CSS Variables)
+   ------------------------------------------ */
+:root {
+  /* Brand Colors */
+  --snap-primary: #103410;
+  --snap-primary-hover: #315a31;
+  --snap-border: #414e417f;
+
+  /* Gradient */
+  --snap-grad-start: #687e68cb;
+  --snap-grad-end: #ffffff;
+
+  /* Shadows */
+  --snap-nav-shadow: 0 2px 4px rgba(1, 48, 32, 0.3);
+  --snap-hover-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
+
+  /* Spacing Scale (1rem = 16px) */
+  --space-1: 0.25rem;   /* 4px  */
+  --space-2: 0.5rem;    /* 8px  */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* Fluid Typography (scales smoothly between breakpoints) */
+  --text-logo: clamp(1.25rem, 3vw + 0.5rem, 2.25rem);        /* 20px → 36px */
+  --text-nav: clamp(0.8125rem, 1.2vw + 0.25rem, 1.1875rem);  /* 13px → 19px */
+  --text-nav-sm: clamp(0.75rem, 1vw + 0.25rem, 1.125rem);     /* 12px → 18px */
+  --text-icon: clamp(1.25rem, 3vw + 0.5rem, 2.5rem);          /* 20px → 40px */
+
+  /* Radius */
+  --radius-pill: 50px;
+  --radius-lg: 1.5rem;    /* 24px */
+  --radius-md: 1.25rem;   /* 20px */
+
+  /* Motion */
+  --transition-fast: all 0.2s ease-out;
+  --transition-base: all 0.3s ease-out;
+}
+
+/* ------------------------------------------
+   2. Base Styles (Mobile First)
+   ------------------------------------------ */
 .navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 21px 50px;
-  background-color: white;
-  box-shadow: 0 2px 4px rgba(1, 48, 32, 0.3);
-  border-bottom-left-radius: 50px;
-  border-bottom-right-radius: 50px;
-  border-bottom: 1px solid #414e417f;
+  width: 100%;
+  max-width: 100vw;
+  padding: var(--space-4) var(--space-4);
+  background: linear-gradient(to bottom, var(--snap-grad-start) 0%, var(--snap-grad-end) 100%);
+  box-shadow: var(--snap-nav-shadow);
+  border-bottom: 1px solid var(--snap-border);
+  border-bottom-left-radius: var(--radius-pill);
+  border-bottom-right-radius: var(--radius-pill);
   position: sticky;
   top: 0;
   z-index: 1000;
-  /*background-color: rgba(245, 245, 245, 0.736);*/
-
-    background: linear-gradient(
-    to bottom,
-   /* #687e68 0%,*/
-    #687e68cb 0%,
-    #ffffff 100%
-  );
+  box-sizing: border-box;
 }
 
 .logo {
-  color: #103410;
-  font-size: 36px;
+  color: var(--snap-primary);
+  font-size: var(--text-logo);
   font-weight: bolder;
   display: flex;
   align-items: center;
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .logo-icon {
-  font-size: 40px;  
-  color: #103410;       
-  margin-left: 20px;
+  font-size: var(--text-icon);
+  color: var(--snap-primary);
+  margin-left: var(--space-2);
+  display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
 }
-
 
 .navbar-right {
   display: flex;
-  gap: 25px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Common nav-item base */
+.nav-home,
+.nav-about,
+.nav-login,
+.nav-signup {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-
-.nav-login {
-  padding: 10px 25px;
-  color: #103410;
-  font-size: 19px;
+  padding: var(--space-2) var(--space-3);
+  color: var(--snap-primary);
+  font-size: var(--text-nav);
   font-weight: 800;
-  border-radius: 23px;
+  border-radius: var(--radius-md);
   text-decoration: none;
-  transition: all 0.2s ease-out;
+  transition: var(--transition-fast);
+  white-space: nowrap;
+  cursor: pointer;
+  line-height: 1.4;
+  border: 2px solid transparent;
 }
 
+/* Hover states for text links */
+.nav-home:hover,
+.nav-about:hover,
 .nav-login:hover {
-  background: #315a31;
-  box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
-  border-radius: 30px;
+  background: var(--snap-primary-hover);
+  box-shadow: var(--snap-hover-shadow);
+  border-radius: var(--radius-lg);
   color: #ffffff;
 }
 
+/* Sign Up — outlined style (slightly smaller font per original) */
 .nav-signup {
   background-color: transparent;
-  font-size: 18px;
-  color: #103410;
-  padding: 10px 25px;
-  box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
-  border: 2px solid #000000d1;
-  transition: all 0.3s ease-out;
-  border-radius: 23px;
-  text-decoration: none;
-  font-weight: 800;
+  border-color: #000000d1;
+  box-shadow: var(--snap-hover-shadow);
+  transition: var(--transition-base);
+  font-size: var(--text-nav-sm);
 }
 
 .nav-signup:hover {
-  background: #315a31;
+  background: var(--snap-primary-hover);
   color: #ffffff;
+  border-color: var(--snap-primary-hover);
 }
 
+/* Preserve original logic: Hide Home / About on small screens */
+.nav-home,
 .nav-about {
-  padding: 10px 25px;
-  color: #103410;
-  font-size: 19px;
-  font-weight: 800;
-  border-radius: 23px;
+  display: none;
+}
+
+.logo-link {
   text-decoration: none;
-  transition: all 0.2s ease-out;
-}
-
-.nav-about:hover {
-  background: #315a31;
-  box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
-  border-radius: 30px;
-  color: #ffffff;
-}
-
-.nav-home {
-  padding: 10px 25px;
-  color: #103410;
-  font-size: 19px;
-  font-weight: 800;
-  border-radius: 23px;
-  text-decoration: none;
-  transition: all 0.2s ease-out;
-}
-
-.nav-home:hover {
-  background: #315a31;
-  box-shadow: 2px 2px 4px rgba(0.5, 0.5, 0.5, 0.5);
-  border-radius: 30px;
-  color: #ffffff;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-  .navbar {
-    flex-direction: row;
-    align-items: flex-start;
-    padding: 15px 20px;
-    width: 500px;
-  }
-
-  .logo {
-  color: #103410;
-  font-size: 25px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  margin-top: 5px;
 }
 
-  .logo-icon {
-    font-size: 30px;  
-    color: #103410;       
-    margin-left: 10px;
-    align-items: center;
+.logo-link:hover {
+  text-decoration: none;
+}
+/* ------------------------------------------
+   3. Small Devices (375px+)
+   ------------------------------------------ */
+@media (min-width: 375px) {
+  .navbar {
+    padding: var(--space-4) var(--space-5);
   }
 
   .navbar-right {
-    display: flex;
-    gap: 15px;
-    align-items: center;
-    justify-content: center;
+    gap: var(--space-3);
   }
 
+  .logo-icon {
+    margin-left: var(--space-3);
+  }
+}
+
+/* ------------------------------------------
+   4. Tablets (640px+)
+   ------------------------------------------ */
+@media (min-width: 640px) {
+  .navbar {
+    padding: var(--space-5) var(--space-8);
+  }
+
+  .navbar-right {
+    gap: var(--space-4);
+  }
+
+  .nav-home,
   .nav-about,
-  .nav-home {
-   display: none;
-  }
-
-  .nav-login {
-    padding: 8px 15px;
-    font-size: 14px;
-  }
-
+  .nav-login,
   .nav-signup {
-    padding: 8px 15px;
-    font-size: 14px;
+    padding: var(--space-3) var(--space-5);
   }
+
+  /* Reveal hidden links on tablet and up */
+  .nav-home,
+  .nav-about {
+    display: inline-flex;
+  }
+}
+
+/* ------------------------------------------
+   5. Laptops (768px+)
+   ------------------------------------------ */
+@media (min-width: 768px) {
+  .navbar {
+    padding: var(--space-5) var(--space-10);
+  }
+
+  .navbar-right {
+    gap: var(--space-5);
+  }
+
+  .logo-icon {
+    margin-left: var(--space-5);
+  }
+}
+
+/* ------------------------------------------
+   6. Desktop (1024px+)
+   ------------------------------------------ */
+@media (min-width: 1024px) {
+  .navbar {
+    padding: 1.3125rem var(--space-12); /* 21px 48px — matches original */
+  }
+
+  .navbar-right {
+    gap: 1.5625rem; /* 25px */
+  }
+
+  .nav-home,
+  .nav-about,
+  .nav-login,
+  .nav-signup {
+    padding: 0.625rem 1.5625rem; /* 10px 25px */
+  }
+
+  .logo {
+    font-size: 2.25rem; /* 36px */
+  }
+
+  .logo-icon {
+    font-size: 2.5rem;  /* 40px */
+    margin-left: 1.25rem; /* 20px */
+  }
+}
+
+/* ------------------------------------------
+   7. Large Desktop (1280px+)
+   ------------------------------------------ */
+@media (min-width: 1280px) {
+  .navbar {
+    padding: 1.3125rem clamp(3rem, 5vw, 4rem);
+  }
+}
+
+/* ------------------------------------------
+   8. Touch & Accessibility Optimizations
+   ------------------------------------------ */
+@media (hover: none) and (pointer: coarse) {
+  .nav-home,
+  .nav-about,
+  .nav-login,
+  .nav-signup {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .nav-home:active,
+  .nav-about:active,
+  .nav-login:active,
+  .nav-signup:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-home,
+  .nav-about,
+  .nav-login,
+  .nav-signup {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------
+   9. Global Overflow Guard
+   ------------------------------------------ */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
 }

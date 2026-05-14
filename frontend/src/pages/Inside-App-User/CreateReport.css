@@ -858,8 +858,7 @@ body.dark {
 ══════════════════════════════════════════════════════════════ */
 .snap-right {
   grid-column: 2;
-  padding: 28px 28px 20px 24px;
-  padding-right: 46px;
+  padding: 28px 24px 20px;
   display: flex;
   flex-direction: column;
   background: var(--cr-bg-right);
@@ -1715,7 +1714,7 @@ body.dark .liability-icon { color: #fbbf24; }
 @media (max-width: 1100px) {
   .snap-modal { width: 100%; max-width: 900px; grid-template-columns: 44% 1fr; }
   .snap-left  { padding: 22px 20px 16px; }
-  .snap-right { padding: 22px 20px 16px; padding-right: 44px; }
+  .snap-right { padding: 22px 20px 16px; }
   .rd-sidebar { width: 180px; }
 }
 
@@ -2577,7 +2576,7 @@ body.dark .reporter-name {
   align-items: center;
   justify-content: center;
   z-index: 9000;
-  padding: 20px;
+  padding: 16px;
   animation: modalBackdropIn 0.2s ease;
 }
 
@@ -2589,17 +2588,17 @@ body.dark .reporter-name {
 .modal-box {
   background: var(--cr-bg-right);
   border: 1px solid var(--cr-border);
-  border-radius: 20px;
-  padding: 28px 24px 22px;
-  max-width: 400px;
+  border-radius: 16px;
+  padding: 18px 20px 16px;
+  max-width: 340px;
   width: 100%;
   text-align: center;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
   animation: modalSlideUp 0.28s cubic-bezier(0.34, 1.18, 0.64, 1);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 @keyframes modalSlideUp {
@@ -2608,14 +2607,14 @@ body.dark .reporter-name {
 }
 
 .modal-icon {
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  margin-bottom: 4px;
+  font-size: 18px;
+  margin-bottom: 2px;
 }
 
 .modal-icon-red {
@@ -2632,7 +2631,7 @@ body.dark .reporter-name {
 
 .modal-box h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--cr-text);
   letter-spacing: -0.2px;
@@ -2640,47 +2639,47 @@ body.dark .reporter-name {
 
 .modal-box p {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: var(--cr-text-muted);
-  line-height: 1.55;
-  max-width: 320px;
+  line-height: 1.5;
+  max-width: 280px;
 }
 
 .modal-review-note {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 6px;
-  padding: 5px 10px;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 4px 8px;
   background: rgba(245,158,11,0.10);
   border: 1px solid rgba(245,158,11,0.25);
-  border-radius: 8px;
-  font-size: 11px;
+  border-radius: 6px;
+  font-size: 10px;
   font-weight: 600;
   color: #f59e0b;
 }
 
 .modal-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .btn-modal-secondary {
   flex: 1;
-  padding: 10px 16px;
+  padding: 8px 14px;
   border-radius: var(--cr-radius-btn);
   border: 1.5px solid var(--cr-border);
   background: var(--cr-cancel-btn);
   color: var(--cr-primary);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
   font-family: 'Inter', sans-serif;
   transition: all 0.18s ease;
   touch-action: manipulation;
-  min-height: 40px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2694,19 +2693,19 @@ body.dark .reporter-name {
 
 .btn-modal-danger {
   flex: 1;
-  padding: 10px 16px;
+  padding: 8px 14px;
   border-radius: var(--cr-radius-btn);
   border: none;
   background: #ef4444;
   color: #fff;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
   font-family: 'Inter', sans-serif;
   transition: all 0.18s ease;
   touch-action: manipulation;
   box-shadow: 0 2px 8px rgba(239,68,68,0.25);
-  min-height: 40px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2720,19 +2719,19 @@ body.dark .reporter-name {
 
 .btn-modal-primary {
   flex: 1;
-  padding: 10px 16px;
+  padding: 8px 14px;
   border-radius: var(--cr-radius-btn);
   border: none;
   background: var(--cr-primary);
   color: #fff;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
   font-family: 'Inter', sans-serif;
   transition: all 0.18s ease;
   touch-action: manipulation;
   box-shadow: 0 2px 8px var(--cr-primary-shadow);
-  min-height: 40px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2867,8 +2866,13 @@ body.dark .reporter-name-compact {
   background: rgba(239,68,68,0.08);
   border: 1px solid rgba(239,68,68,0.20);
   border-radius: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
   line-height: 1.45;
+}
+
+/* Add margin to disclaimer so error doesn't stick to it */
+.snap-left .liability-disclaimer {
+  margin-bottom: 4px;
 }
 
 body.dark .error-message-left {

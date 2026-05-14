@@ -7,6 +7,7 @@ import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 import { MdEmail } from "react-icons/md";
 import { RiLockPasswordFill } from "react-icons/ri";
 import { GrFormNextLink } from "react-icons/gr";
+import { IoClose } from "react-icons/io5";
 
 import { login } from "../../api/auth";
 import { useAuthContext } from "../Contexts/AuthContext.jsx";
@@ -44,7 +45,6 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
       }
 
       const data = res.data;
-      // data = { access_token, refresh_token, token_type, user: { role, email, ... } }
 
       saveLogin(
         data.access_token,
@@ -72,6 +72,10 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   return (
     <div className="login-overlay" onClick={onClose}>
       <div className="login-content" onClick={(e) => e.stopPropagation()}>
+        
+        <button className="login-close-btn" onClick={onClose} aria-label="Close login modal">
+          <IoClose />
+        </button>
 
         <div className="login-left">
           <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />

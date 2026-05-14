@@ -11,6 +11,7 @@ import { IoIosArrowRoundBack } from "react-icons/io";
 import { RiLockPasswordFill } from "react-icons/ri";
 import { IoMdDoneAll } from "react-icons/io";
 import { BsFillEyeFill, BsFillEyeSlashFill } from "react-icons/bs";
+import { IoClose } from "react-icons/io5";
 
 import { register, verifyOtp } from "../../api/auth";
 
@@ -137,9 +138,13 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
   return (
     <div className="sign-up-overlay" onClick={onClose}>
       <div className={`sign-up-content ${step === 2 ? "signup-small" : ""}`} onClick={(e) => e.stopPropagation()}>
+        
+        <button className="signup-close-btn" onClick={onClose} aria-label="Close sign up modal">
+          <IoClose />
+        </button>
 
         <div className="sign-up-left">
-          <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />
+          <img src="/snap.jpg" alt="Snap2Fix Logo" className="sign-up-logo" />
           <h1 className="sign-up-title">Snap2Fix</h1>
           <p className="sign-up-slogan">
             Report road damage. Improve safety. Build better streets.
@@ -177,7 +182,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                     <input
                       type="email"
                       name="email"
-                      placeholder="name@gmail.com"
+                      placeholder="Enter Your Email Address"
                       required
                       value={formData.email}
                       onChange={handleChange}
@@ -196,7 +201,6 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                     >
                       <option value="" disabled hidden>Select City</option>
                       <option value="Malabon City">Malabon City</option>
-                      <option value="...">...</option>
                     </select>
                   </div>
 
@@ -209,15 +213,13 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       onChange={handleChange}
                     >
                       <option value="" disabled hidden>Select Barangay</option>
-                      <option value="Barangay 1">Panghulo</option>
-                      <option value="Barangay 2">Barangay 2</option>
-                      <option value="Barangay 3">Barangay 3</option>
+                      <option value="Panghulo">Panghulo</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="sign-up-label-form">
-                  <label>Street Address <span style={{ fontWeight: 400, fontSize: "0.85em", opacity: 0.6 }}>(optional)</span></label>
+                  <label>Street Address <span className="label-optional">(optional)</span></label>
                   <div className="icon-input-signup">
                     <input
                       type="text"
@@ -241,7 +243,17 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       value={formData.password}
                       onChange={handleChange}
                     />
-                    <span className="toggle-eye" onClick={() => setShowPassword((p) => !p)}>
+                    <span 
+                      className="toggle-eye" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setShowPassword((p) => !p);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
                       {showPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
                     </span>
                   </div>
@@ -259,7 +271,17 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       value={formData.confirmPassword}
                       onChange={handleChange}
                     />
-                    <span className="toggle-eye" onClick={() => setShowConfirmPassword((p) => !p)}>
+                    <span 
+                      className="toggle-eye" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setShowConfirmPassword((p) => !p);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    >
                       {showConfirmPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
                     </span>
                   </div>

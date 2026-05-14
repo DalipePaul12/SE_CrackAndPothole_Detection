@@ -340,7 +340,7 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
               </>
             ) : (
               <>
-                <span className="pcg-lock-icon" aria-hidden="true">🔒</span>
+                <span className="pcg-lock-icon" aria-hidden="true"></span>
                 Complete checklist to proceed
               </>
             )}

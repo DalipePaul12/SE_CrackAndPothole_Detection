@@ -577,7 +577,6 @@ function AdminManageReports() {
             <colgroup>
               <col className="col-check" />
               <col className="col-report" />
-              <col className="col-location" />
               <col className="col-reported" />
               <col className="col-damage" />
               <col className="col-photo" />
@@ -617,9 +616,9 @@ function AdminManageReports() {
 
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} className="no-data">Loading reports…</td></tr>
+                <tr><td colSpan={10} className="no-data">Loading reports…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={11} className="no-data">No reports found</td></tr>
+                <tr><td colSpan={10} className="no-data">No reports found</td></tr>
               ) : filtered.map(r => {
                 const st       = r.status?.toLowerCase();
                 const pri      = getPriority(r);
@@ -640,19 +639,13 @@ function AdminManageReports() {
 
                     <td className="col-report">
                       <div className="report-number">#{String(r.id).padStart(3, "0")}</div>
-                    </td>
-
-                    <td className="col-location">
-                      <div className="location-cell-wrapper">
-                        <IcoMapPin size={14} className="location-pin-icon" />
-                        <div className="location-text-stack">
-                          <span className="location-barangay">{barangay(r)}</span>
-                          {street(r) && (
-                            <span className="location-street">
-                              {isCoordinateString(street(r)) ? "Translating coordinates…" : street(r)}
-                            </span>
-                          )}
-                        </div>
+                      <div className="report-location">
+                        <span className="report-loc-barangay">{barangay(r)}</span>
+                        {street(r) && (
+                          <span className="report-loc-street">
+                            {isCoordinateString(street(r)) ? "Translating…" : street(r)}
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -671,10 +664,12 @@ function AdminManageReports() {
                           alt=""
                           className="photo-thumb"
                           onClick={e => { e.stopPropagation(); setViewReport(r); }}
+                          onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                         />
-                      ) : (
+                      ) : null}
+                      <div className="photo-fallback" style={{ display: media?.url ? 'none' : 'flex' }}>
                         <IcoCamera size={16} className="photo-placeholder-icon" />
-                      )}
+                      </div>
                     </td>
 
                     <td className="col-severity"><Badge text={severity(r)} className={`sev-badge sev-${sev}`} /></td>
@@ -690,7 +685,7 @@ function AdminManageReports() {
                           <span className="assigned-name">{r.assigned_to}</span>
                         </div>
                       ) : (
-                        <span className="unassigned">Unassigned</span>
+                        <span className="unassigned">— Unassigned</span>
                       )}
                     </td>
 
