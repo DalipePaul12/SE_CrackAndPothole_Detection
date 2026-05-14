@@ -1,22 +1,4 @@
-/**
- * hooks/useNotifications.js
- * ──────────────────────────
- * Standalone polling hook for components that don't use NotificationProvider.
- *
- * If your app uses <NotificationProvider> in App.jsx, prefer
- * useNotificationContext() instead — it shares state across all components
- * and avoids duplicate network requests.
- *
- * This hook is kept for backward compatibility with Notifications.jsx which
- * imports it directly.
- *
- * FIX: response normalization was double-wrapping data.
- *   notifications.js api returns { success, data: [...], error }
- *   Previously code did res.data which after client.js normalization
- *   was already the array — but getNotifications() was re-wrapping it.
- *   Now we read res.data directly which is the array of notifications.
- */
-
+import { useWebSocket } from "./useWebSocket";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteNotification as deleteApi,
@@ -35,7 +17,7 @@ export function useNotifications() {
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  const { lastMessage } = useWebSocket("/ws/notifications");
 
   const fetchNotifications = useCallback(async () => {
     const token = localStorage.getItem("access_token");
@@ -52,13 +34,10 @@ export function useNotifications() {
         throw new Error(res?.error || "Failed to load notifications");
       }
 
-      // getNotifications() already returns { success, data: [...] }
-      // where data is the plain array from FastAPI
       const fetched = Array.isArray(res.data) ? res.data : [];
 
       if (!abortRef.current) {
         setNotifications((prev) => {
-          // Preserve optimistic is_read state for items already read locally
           const localReadIds = new Set(
             prev.filter((n) => n.is_read).map((n) => n.id)
           );
@@ -76,8 +55,6 @@ export function useNotifications() {
     }
   }, []);
 
-  // ── Polling ───────────────────────────────────────────────────────────────
-
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30_000);
@@ -88,7 +65,29 @@ export function useNotifications() {
     };
   }, [fetchNotifications]);
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!lastMessage) return;
+    try {
+      const payload = JSON.parse(lastMessage.data);
+      if (payload.event !== "notification") return;
+
+      const newNotif = {
+        id:         payload.id,
+        title:      payload.title,
+        message:    payload.message,
+        type:       payload.type,
+        report_id:  payload.report_id,
+        is_read:    payload.is_read ?? false,
+        created_at: payload.created_at,
+      };
+
+      setNotifications(prev => {
+        if (prev.some(n => n.id === newNotif.id)) return prev;
+        return [newNotif, ...prev];
+      });
+    } catch {
+    }
+  }, [lastMessage]);
 
   const markAsRead = useCallback(async (id) => {
     setNotifications((prev) =>
@@ -98,7 +97,6 @@ export function useNotifications() {
       const res = await markAsReadApi(id);
       if (!res?.success) throw new Error(res?.error || "Failed to mark as read");
     } catch {
-      // Rollback optimistic update
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: false } : n))
       );

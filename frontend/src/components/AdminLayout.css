@@ -1,0 +1,82 @@
+:root {
+  --admin-sidebar-width: 260px;
+  --admin-sidebar-collapsed-width: 72px;
+  --header-height: 80px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ADMIN LAYOUT — EXACT mirror of UserLayout.css
+══════════════════════════════════════════════════════════════ */
+.admin-layout {
+  min-height: 100vh;
+  position: relative;
+  padding-top: var(--header-height);  /* Same as user-layout */
+}
+
+/* ── Mobile Hamburger Button ── */
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 1100;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #5bd35b, #2c6a2c);
+  color: white;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Main Content Area — EXACT mirror of user-main-content ── */
+.admin-main-content {
+  margin-left: var(--admin-sidebar-width);
+  min-height: calc(100vh - var(--header-height));
+  transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  /* NO padding — let child handle it */
+  box-sizing: border-box;
+}
+
+/* ── Collapsed state ── */
+.admin-main-content.collapsed {
+  margin-left: var(--admin-sidebar-collapsed-width);
+}
+
+/* ── Mobile Overlay Backdrop ── */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 998;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Responsive ── */
+@media (max-width: 1023px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
+  .admin-main-content {
+    margin-left: 0 !important;
+    padding: 16px;
+    padding-top: 16px;
+  }
+  .admin-layout {
+    padding-top: var(--header-height);
+  }
+}
+
+/* ── Dark Mode ── */
+body.dark .mobile-menu-btn {
+  background: linear-gradient(135deg, #1a3d1a, #0f1a10);
+}

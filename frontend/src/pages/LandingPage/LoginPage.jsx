@@ -9,11 +9,11 @@ import { RiLockPasswordFill } from "react-icons/ri";
 import { GrFormNextLink } from "react-icons/gr";
 
 import { login } from "../../api/auth";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuthContext } from "../Contexts/AuthContext.jsx";
 
 function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   const navigate = useNavigate();
-  const { saveLogin } = useAuth();
+  const { saveLogin } = useAuthContext();
 
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errorMsg, setErrorMsg] = useState("");
@@ -36,26 +36,31 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
       const res = await login(formData.email, formData.password);
 
       if (!res.success) {
-        throw new Error(res.error || "Login failed");
+        const errText = res.error || "Login failed";
+        if (errText.includes("429") || errText.includes("Too many")) {
+          throw new Error("Too many failed attempts. Please wait a few minutes.");
+        }
+        throw new Error(errText);
       }
 
       const data = res.data;
+      // data = { access_token, refresh_token, token_type, user: { role, email, ... } }
 
       saveLogin(
         data.access_token,
-        data.refresh_token,
-        data.user
+        data.refresh_token ?? null,
+        data.user ?? null,
       );
 
       onClose();
       setFormData({ email: "", password: "" });
 
-      if (data.user?.role === "admin") {
+      const role = data.user?.role;
+      if (role === "admin" || role === "superadmin") {
         navigate("/adminpanel");
       } else {
         navigate("/dashboard");
       }
-
     } catch (err) {
       setErrorMsg(err.message || "Invalid email or password.");
       setShowErrorModal(true);
@@ -67,7 +72,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   return (
     <div className="login-overlay" onClick={onClose}>
       <div className="login-content" onClick={(e) => e.stopPropagation()}>
-        
+
         <div className="login-left">
           <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />
           <h1 className="login-title">Snap2Fix</h1>

@@ -1,0 +1,507 @@
+:root {
+  --user-bg-from: #f4faf5;
+  --user-bg-to: #e8f5e9;
+  --user-text: #1b3a1b;
+  --user-text-muted: #5a8a5a;
+  --user-border: #c8e6c955;
+  --user-divider: #a5d6a7;
+  --user-link-hover: #dcedc8;
+  --user-active-from: #4caf5099;
+  --user-active-to: #388e3c;
+  --user-btn-from: #4caf5099;
+  --user-btn-to: #2e7d32;
+  --user-toggle-track: #4caf50;
+  --user-toggle-thumb: #ffffff;
+  --user-width: 260px;
+  --user-collapsed: 72px;
+}
+
+body.dark {
+  --user-bg-from: #0f1a10;
+  --user-bg-to: #162018;
+  --user-text: #e8f5e9;
+  --user-text-muted: #7aab7a;
+  --user-border: #2a4a2c55;
+  --user-divider: #2a4a2c;
+  --user-link-hover: #1f5c1f;
+  --user-active-from: #1f5c3f99;
+  --user-active-to: #1a3d1a;
+  --user-btn-from: #1f5c3f99;
+  --user-btn-to: #1a3d1a;
+  --user-toggle-track: #4caf50;
+  --user-toggle-thumb: #0f1a10;
+}
+
+.user-sidebar {
+  width: var(--user-width);
+  height: 100vh;
+  background: linear-gradient(180deg, var(--user-bg-from), var(--user-bg-to));
+  color: var(--user-text);
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  font-family: "Poppins", sans-serif;
+  border-right: 1px solid var(--user-border);
+  border-radius: 0 20px 20px 0;
+  z-index: 1000;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.user-sidebar.collapsed {
+  width: var(--user-collapsed);
+  padding: 16px 8px;
+}
+
+@media (max-width: 1023px) {
+  .user-sidebar {
+    left: calc(-1 * var(--user-width));
+    box-shadow: 4px 0 24px rgba(0,0,0,0.2);
+  }
+  .user-sidebar.mobile-open {
+    left: 0;
+  }
+  .user-sidebar.collapsed {
+    width: var(--user-width);
+    left: calc(-1 * var(--user-width));
+  }
+  .user-sidebar.collapsed.mobile-open {
+    left: 0;
+  }
+}
+
+.user-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--user-border);
+  flex-shrink: 0;
+}
+
+.user-sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.3s, width 0.3s, transform 0.3s;
+  overflow: hidden;
+  flex: 1;
+  text-align: center;
+}
+
+/* Hide logo completely when collapsed */
+.user-sidebar.collapsed .user-sidebar-brand,
+.user-sidebar-brand.hidden {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  flex: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Collapsed sidebar: badge sits at the top-right corner of the nav item */
+.user-sidebar.collapsed .user-notification-badge.collapsed-badge {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  margin-left: 0;
+  min-width: 16px;
+  height: 16px;
+  font-size: 0.6rem;
+  padding: 0 4px;
+  border-radius: 8px;
+  z-index: 2;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+/* Mobile drawer (full-width) should keep the normal inline badge look */
+.user-sidebar.mobile-open .user-notification-badge.collapsed-badge {
+  position: static;
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  font-size: 0.65rem;
+  padding: 0 5px;
+  border-radius: 9px;
+  box-shadow: none;
+}
+/* ========== BRAND / LOGO ========== */
+.user-sidebar-brand img {
+  width: 52px;
+  height: 52px;
+  border-radius: 30%;
+  border: 2px solid var(--user-text);
+  flex-shrink: 0;
+  object-fit: cover;
+  display: block;
+}
+
+.user-sidebar-brand h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--user-text);
+  margin: 0;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* ========== COLLAPSE TOGGLE ========== */
+.user-collapse-btn {
+  background: transparent;
+  border: 1px solid var(--user-border);
+  color: var(--user-text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.user-collapse-btn:hover {
+  background: var(--user-link-hover);
+  color: var(--user-text);
+  border-color: var(--user-divider);
+}
+
+/* ========== REPORT BUTTON ========== */
+.user-report-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #fff;
+  background: linear-gradient(135deg, var(--user-btn-from), var(--user-btn-to));
+  transition: all 0.3s ease;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.user-report-btn:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(31, 92, 63, 0.25);
+}
+
+.user-report-btn:active {
+  transform: translateY(0);
+}
+
+/* Collapsed report button: just an icon */
+.user-report-btn.collapsed {
+  padding: 12px 0;
+  width: 100%;
+}
+
+.user-report-btn.collapsed span {
+  display: none;
+}
+
+/* ========== NAVIGATION ========== */
+.user-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  margin-right: -4px;
+}
+
+/* Custom scrollbar */
+.user-sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+.user-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.user-sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--user-border);
+  border-radius: 10px;
+}
+.user-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--user-divider);
+}
+
+/* ========== NAV SECTIONS ========== */
+.user-nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.user-section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--user-text-muted);
+  padding: 0 8px;
+  margin-bottom: 2px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.user-section-spacer {
+  height: 8px;
+}
+
+/* ========== NAV LINKS ========== */
+.user-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--user-text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.25s ease;
+  position: relative;
+  white-space: nowrap;
+}
+
+.user-nav-link:hover {
+  background: var(--user-link-hover);
+  color: var(--user-text);
+}
+
+.user-nav-link.active {
+  background: linear-gradient(90deg, var(--user-active-from), var(--user-active-to));
+  color: var(--user-text);
+  font-weight: 600;
+}
+
+/* When collapsed, center icons */
+.user-sidebar.collapsed .user-nav-link {
+  justify-content: center;
+  padding: 10px 0;
+}
+
+/* Only hide spans with .hidden class */
+.user-sidebar.collapsed .user-nav-link span.hidden {
+  display: none;
+}
+
+/* ========== ACTIVE DOT (collapsed indicator) ========== */
+/* Green dot matching AdminSidebar exactly */
+.user-active-dot {
+  position: absolute;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--user-toggle-track);
+  box-shadow: 0 0 8px var(--user-toggle-track);
+}
+
+/* ========== NOTIFICATION BADGE ========== */
+.user-notification-badge {
+  margin-left: auto;
+  background: #e53935;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ========== FOOTER ========== */
+.user-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--user-border);
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.user-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--user-text-muted);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  white-space: nowrap;
+}
+
+.user-footer-btn:hover {
+  background: var(--user-link-hover);
+  color: var(--user-text);
+}
+
+.user-sidebar.collapsed .user-footer-btn {
+  justify-content: center;
+  padding: 10px 0;
+}
+
+/* Only hide spans with .hidden class */
+.user-sidebar.collapsed .user-footer-btn span.hidden {
+  display: none;
+}
+
+/* ========== THEME TOGGLE PILL ========== */
+.user-toggle-pill {
+  margin-left: auto;
+  width: 36px;
+  height: 20px;
+  background: #555;
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.3s ease;
+  flex-shrink: 0;
+}
+
+.user-toggle-pill.on {
+  background: var(--user-toggle-track);
+}
+
+.user-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--user-toggle-thumb);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.user-toggle-pill.on .user-toggle-knob {
+  transform: translateX(16px);
+}
+
+/* ========== LOGOUT BUTTON ========== */
+.user-logout-btn:hover {
+  background: rgba(229, 57, 53, 0.15);
+  color: #ff8a80;
+}
+
+/* ========== UTILITY ========== */
+.hidden {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: none;
+}
+
+/* ========== RESPONSIVE TWEAKS ========== */
+@media (max-width: 1023px) {
+  .user-sidebar {
+    border-radius: 0 16px 16px 0;
+  }
+  .user-sidebar-header {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+  }
+  .user-report-btn {
+    margin-bottom: 16px;
+  }
+  .user-sidebar-nav {
+    gap: 18px;
+  }
+}
+
+/* ========== MOBILE FULL DRAWER OVERRIDES ========== */
+@media (max-width: 1023px) {
+  .user-sidebar.mobile-open {
+    width: var(--user-width);
+    padding: 12px 10px;
+  }
+
+  .user-sidebar.mobile-open .user-sidebar-brand,
+  .user-sidebar.mobile-open .user-sidebar-brand.hidden {
+    opacity: 1;
+    width: auto;
+    height: auto;
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    pointer-events: auto;
+    overflow: visible;
+    display: flex;
+  }
+
+  .user-sidebar.mobile-open .user-nav-link span,
+  .user-sidebar.mobile-open .user-report-btn span,
+  .user-sidebar.mobile-open .user-footer-btn span,
+  .user-sidebar.mobile-open .hidden {
+    display: inline !important;
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    pointer-events: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  .user-sidebar.mobile-open .user-nav-link {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+
+  .user-sidebar.mobile-open .user-report-btn {
+    justify-content: center;
+    padding: 10px 12px;
+  }
+
+  .user-sidebar.mobile-open .user-report-btn.collapsed {
+    padding: 10px 12px;
+  }
+
+  .user-sidebar.mobile-open .user-footer-btn {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+
+  .user-sidebar.mobile-open .user-active-dot {
+    display: none;
+  }
+}

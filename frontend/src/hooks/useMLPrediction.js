@@ -1,30 +1,18 @@
-/**
- * useMLPrediction.js
- *
- * Unified ML prediction hook covering:
- *   - analyzeMedia()      → full HF + dual-YOLO pipeline (post-capture upload)
- *   - analyzeFrame()      → lightweight realtime frame inference (live camera)
- *   - classify()          → legacy polling endpoint (backward-compatible)
- *
- * All state resets are handled internally; callers only need to
- * destructure what they use.
- */
-
 import { useCallback, useRef, useState } from "react";
 import { analyzeMedia } from "../api/ml";
 import { api } from "../api/client";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const REALTIME_ENDPOINT = `${BASE_URL}/api/v1/ml/analyze/realtime`;
-const REALTIME_TIMEOUT_MS = 900; // tight — dropped frames are acceptable
-
-// ─── Shared normalizers ───────────────────────────────────────────────────────
+const REALTIME_TIMEOUT_MS = 900;
 
 function normalizeAiValidation(raw) {
   return {
     is_ai_generated: raw?.is_ai_generated ?? false,
     confidence:      raw?.confidence      ?? 0,
     status:          raw?.status          ?? "unknown",
+    model:           raw?.model           ?? null,
+    raw_scores:      raw?.raw_scores      ?? {},
   };
 }
 
@@ -48,25 +36,19 @@ function normalizeRealtimeResult(raw) {
   };
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────────────
-
 export default function useMLPrediction() {
-  // ── Full-pipeline state ───────────────────────────────────────────────────
   const [loading,           setLoading]           = useState(false);
   const [error,             setError]             = useState(null);
   const [prediction,        setPrediction]        = useState(null);
   const [aiValidation,      setAiValidation]      = useState(null);
   const [analysisComplete,  setAnalysisComplete]  = useState(false);
 
-  // ── Realtime state ────────────────────────────────────────────────────────
   const [realtimeResult,    setRealtimeResult]    = useState(null);
   const [realtimeLoading,   setRealtimeLoading]   = useState(false);
   const [realtimeError,     setRealtimeError]     = useState(null);
 
-  // Prevents stale async results from clobbering newer ones
   const analysisIdRef = useRef(0);
 
-  // ── reset ─────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
     analysisIdRef.current++;
     setLoading(false);
@@ -78,11 +60,6 @@ export default function useMLPrediction() {
     setRealtimeError(null);
   }, []);
 
-  // ── analyzeFile — full HF + dual-YOLO pipeline ───────────────────────────
-  /**
-   * @param {File} file
-   * @returns {Promise<{ ai_validation, prediction }|null>}
-   */
   const analyzeFile = useCallback(async (file) => {
     if (!file) {
       setError("No file provided.");
@@ -99,7 +76,7 @@ export default function useMLPrediction() {
     try {
       const result = await analyzeMedia(file);
 
-      if (analysisIdRef.current !== thisId) return null; // superseded
+      if (analysisIdRef.current !== thisId) return null;
 
       if (!result.success) {
         setError(result.error ?? "Analysis failed.");
@@ -125,14 +102,6 @@ export default function useMLPrediction() {
     }
   }, []);
 
-  // ── analyzeFrame — lightweight realtime inference ─────────────────────────
-  /**
-   * Sends a JPEG blob (canvas snapshot) to the /realtime endpoint.
-   * Designed to be called on an interval; stale responses are silently dropped.
-   *
-   * @param {Blob} blob  — JPEG image blob from canvas.toBlob()
-   * @returns {Promise<{ detected: boolean, prediction: object|null }|null>}
-   */
   const analyzeFrame = useCallback(async (blob) => {
     if (!blob) return null;
 
@@ -156,7 +125,6 @@ export default function useMLPrediction() {
       });
 
       if (!response.ok) {
-        // Silently ignore transient server errors during realtime loop
         setRealtimeLoading(false);
         return null;
       }
@@ -177,11 +145,6 @@ export default function useMLPrediction() {
     }
   }, []);
 
-  // ── classify — legacy polling endpoint (backward-compatible) ─────────────
-  /**
-   * @param {number|string} file_id
-   * @returns {Promise<object|null>}
-   */
   const classify = useCallback(async (file_id) => {
     if (!file_id) {
       setError("Missing file id.");
@@ -214,24 +177,17 @@ export default function useMLPrediction() {
   }, []);
 
   return {
-    // Full pipeline
     analyzeFile,
     loading,
     error,
     prediction,
     aiValidation,
     analysisComplete,
-
-    // Realtime frame
     analyzeFrame,
     realtimeResult,
     realtimeLoading,
     realtimeError,
-
-    // Legacy
     classify,
-
-    // Utilities
     reset,
   };
 }

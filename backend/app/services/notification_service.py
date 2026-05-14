@@ -1,37 +1,3 @@
-"""
-notification_service.py — Snap2Fix
-----------------------------------
-Centralized notification service for:
-
-• Database notification persistence
-• Real-time WebSocket broadcasting
-• BackgroundTasks support
-• Reusable notification helpers
-
-Usage inside routes:
-
-    await notify(
-        db,
-        user_id=user.id,
-        title="Report Verified",
-        message="Your report has been verified.",
-        type=NotificationType.success,
-        report_id=report.id,
-    )
-
-Usage with BackgroundTasks:
-
-    background_tasks.add_task(
-        notify_background,
-        user_id=user.id,
-        title="Report Verified",
-        message="Your report has been verified.",
-        type=NotificationType.success,
-        report_id=report.id,
-    )
-"""
-
-import logging
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,13 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal
 from app.models.enums import NotificationType
 from app.models.notification import Notification
+from app.utils.logger import logger
 
-logger = logging.getLogger(__name__)
-
-
-# ─────────────────────────────────────────────────────────────
-# Core Notification Creator
-# ─────────────────────────────────────────────────────────────
 
 async def notify(
     db: AsyncSession,
@@ -56,12 +17,6 @@ async def notify(
     type: NotificationType = NotificationType.info,
     report_id: Optional[int] = None,
 ) -> Notification:
-    """
-    Create and persist a notification using an existing DB session.
-
-    Use this inside routes/services where an active AsyncSession already exists.
-    """
-
     notif = Notification(
         user_id=user_id,
         title=title,
@@ -76,13 +31,9 @@ async def notify(
     try:
         await db.commit()
         await db.refresh(notif)
-
     except Exception:
         await db.rollback()
-        logger.exception(
-            "Failed to create notification for user_id=%d",
-            user_id,
-        )
+        logger.exception("Failed to create notification for user_id=%d", user_id)
         raise
 
     logger.info(
@@ -91,10 +42,6 @@ async def notify(
         type.value,
         report_id,
     )
-
-    # ─────────────────────────────────────────────────────────
-    # Real-time WebSocket Broadcast
-    # ─────────────────────────────────────────────────────────
 
     try:
         from app.routers.ws import manager
@@ -113,23 +60,13 @@ async def notify(
             },
         )
 
-        logger.info(
-            "WebSocket notification sent to user_id=%d",
-            user_id,
-        )
+        logger.info("WebSocket notification sent to user_id=%d", user_id)
 
     except Exception:
-        logger.exception(
-            "Failed to send WebSocket notification to user_id=%d",
-            user_id,
-        )
+        logger.exception("Failed to send WebSocket notification to user_id=%d", user_id)
 
     return notif
 
-
-# ─────────────────────────────────────────────────────────────
-# Background Task Notification Creator
-# ─────────────────────────────────────────────────────────────
 
 async def notify_background(
     *,
@@ -151,14 +88,10 @@ async def notify_background(
             )
             db.add(notif)
             await db.commit()
-            logger.info(f"Background notification created for user_id={user_id}")
+            logger.info("Background notification created for user_id=%d", user_id)
     except Exception:
-        logger.exception(f"Background notification failed for user_id={user_id}")
+        logger.exception("Background notification failed for user_id=%d", user_id)
 
-
-# ─────────────────────────────────────────────────────────────
-# Convenience Notification Wrappers
-# ─────────────────────────────────────────────────────────────
 
 async def notify_verified(
     background_tasks,
@@ -166,18 +99,11 @@ async def notify_verified(
     user_id: int,
     report_id: int,
 ) -> None:
-    """
-    Notify user that a report has been verified.
-    """
-
     background_tasks.add_task(
         notify_background,
         user_id=user_id,
         title="Report Verified",
-        message=(
-            f"Your report #{report_id} "
-            f"has been verified by an administrator."
-        ),
+        message=f"Your report #{report_id} has been verified by an administrator.",
         type=NotificationType.success,
         report_id=report_id,
     )
@@ -190,18 +116,11 @@ async def notify_declined(
     report_id: int,
     reason: str,
 ) -> None:
-    """
-    Notify user that a report has been declined.
-    """
-
     background_tasks.add_task(
         notify_background,
         user_id=user_id,
         title="Report Declined",
-        message=(
-            f"Your report #{report_id} was declined. "
-            f"Reason: {reason}"
-        ),
+        message=f"Your report #{report_id} was declined. Reason: {reason}",
         type=NotificationType.warning,
         report_id=report_id,
     )
@@ -214,18 +133,11 @@ async def notify_status_changed(
     report_id: int,
     new_status: str,
 ) -> None:
-    """
-    Notify user that report status has changed.
-    """
-
     background_tasks.add_task(
         notify_background,
         user_id=user_id,
         title="Report Status Updated",
-        message=(
-            f"Your report #{report_id} "
-            f"is now '{new_status}'."
-        ),
+        message=f"Your report #{report_id} is now '{new_status}'.",
         type=NotificationType.info,
         report_id=report_id,
     )
@@ -238,16 +150,11 @@ async def notify_comment_added(
     report_id: int,
     preview: str = "",
 ) -> None:
-    """
-    Notify user that an admin commented on their report.
-    """
-
     msg = f"Admin commented on your report #{report_id}."
 
     if preview:
         truncated = preview[:80]
-        suffix = "…" if len(preview) > 80 else ""
-
+        suffix = "..." if len(preview) > 80 else ""
         msg += f' "{truncated}{suffix}"'
 
     background_tasks.add_task(

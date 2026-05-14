@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Dashboard.css  —  Complete (deduplicated + preloader/skeleton added)
+   Dashboard.css  —  Layout-agnostic (UserLayout.jsx handles positioning)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Container ──────────────────────────────────────────────────────────── */
@@ -9,8 +9,7 @@
   color: var(--text);
   min-height: 100vh;
   overflow-y: auto;
-  width: calc(100% - 255px);
-  margin-left: 255px;
+  /* REMOVED: width, margin-left — handled by UserLayout.jsx */
   box-sizing: border-box;
   transition: background 0.3s ease, color 0.3s ease;
 }
@@ -27,7 +26,6 @@
 
 /* ─────────────────────────────────────────────────────────────────────────
    SKELETON / PRELOADER
-   Used while auth is restoring and data hooks are fetching.
    ───────────────────────────────────────────────────────────────────────── */
 @keyframes shimmer {
   0%   { background-position: -800px 0; }
@@ -103,7 +101,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   margin-bottom: 1rem;
-  margin-top: 64px;
+  /* REMOVED: margin-top — no extra top spacing needed */
   animation: slideIn 0.4s ease;
 }
 
@@ -119,8 +117,16 @@
 }
 .alert-icon { flex-shrink: 0; }
 
-body.dark .predictive-alert.alert-up   { background: #2d1a08; border-color: #92400e; color: #fdba74; }
-body.dark .predictive-alert.alert-down { background: #052e16; border-color: #166534; color: #86efac; }
+body.dark .predictive-alert.alert-up   { 
+  background: #2d1a08; 
+  border-color: #92400e; 
+  color: #fdba74; 
+}
+body.dark .predictive-alert.alert-down { 
+  background: #052e16; 
+  border-color: #166534; 
+  color: #86efac; 
+}
 
 /* Error banner */
 .dashboard-error-banner {
@@ -133,7 +139,7 @@ body.dark .predictive-alert.alert-down { background: #052e16; border-color: #166
   border-radius: 10px;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
-  margin-top: 64px;
+  /* REMOVED: margin-top — no extra top spacing needed */
   font-size: 0.88rem;
 }
 body.dark .dashboard-error-banner {
@@ -164,7 +170,7 @@ body.dark .dashboard-error-banner {
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 22px;
-  margin-top: 64px;
+  /* REMOVED: margin-top — UserLayout.jsx handles content spacing */
 }
 
 .summary-card {
@@ -177,6 +183,8 @@ body.dark .dashboard-error-banner {
   border-bottom: 2px solid rgba(0, 0, 0, 0.06);
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
   box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
 }
 .summary-card:hover {
   transform: translateY(-4px);
@@ -219,6 +227,11 @@ body.dark .summary-card h3 { color: var(--subtext); }
   gap: 4px;
 }
 
+/* Sparkline chart container */
+.kpi-right svg {
+  overflow: visible;
+}
+
 .kpi-trend {
   display: flex;
   align-items: center;
@@ -251,6 +264,16 @@ body.dark .kpi-trend.down { background: rgba(220, 38,  38,  0.15); color: #fca5a
 .summary-card.users p     { color: #fff; }
 .summary-card.users .icon { color: rgba(255,255,255,0.85); }
 .summary-card.users .kpi-trend.up { background: rgba(255,255,255,0.2); color: #fff; }
+
+/* Dark mode for Active Users card */
+body.dark .summary-card.users {
+  background: linear-gradient(135deg, #0f2e0f 0%, #1a6b1e 100%);
+}
+body.dark .summary-card.users h3 { color: rgba(255,255,255,0.7); }
+body.dark .summary-card.users .kpi-trend.up { 
+  background: rgba(255,255,255,0.15); 
+  color: #fff; 
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    DASHBOARD GRID
@@ -323,6 +346,11 @@ body.dark .dashboard-panel-submissiontrends .icon { color: #5cd65c; }
   cursor: pointer;
   outline: none;
 }
+body.dark .dashboard-panel-submissiontrends select {
+  background: linear-gradient(180deg, var(--card), #1a3d1a);
+  border-color: var(--card-hover);
+  color: var(--text);
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    EMPTY STATE
@@ -357,6 +385,12 @@ body.dark .dashboard-panel-submissiontrends .icon { color: #5cd65c; }
   background: #2ba81d;
   transform: translateY(-1px);
 }
+body.dark .create-report-btn {
+  background: #2ba81d;
+}
+body.dark .create-report-btn:hover {
+  background: #34c42a;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    ACTIVITY LIST
@@ -381,7 +415,7 @@ body.dark .dashboard-panel-submissiontrends .icon { color: #5cd65c; }
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.2s ease;
 }
 .activity-card:hover {
   transform: translateY(-2px);
@@ -391,6 +425,11 @@ body.dark .activity-card {
   background: var(--card-hover);
   color: var(--text);
   border-bottom-color: rgba(255,255,255,0.05);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+body.dark .activity-card:hover {
+  background: var(--border);
+  box-shadow: 0 5px 14px rgba(0,0,0,0.3);
 }
 
 .status-dot {
@@ -425,6 +464,7 @@ body.dark .activity-card {
 
 .activity-status { font-weight: 600; text-transform: capitalize; }
 .activity-time   { color: #aaa; }
+body.dark .activity-time { color: var(--subtext); }
 
 .hotspot-rank {
   width: 20px;
@@ -438,6 +478,10 @@ body.dark .activity-card {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+body.dark .hotspot-rank {
+  background: #2ba81d;
+  color: #fff;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -559,6 +603,74 @@ body.dark .badge-display {
   outline: 2px solid #12691c;
   outline-offset: 2px;
 }
+body.dark *:focus-visible {
+  outline-color: #5cd65c;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SEVERITY BADGE INLINE (for activity cards)
+   ───────────────────────────────────────────────────────────────────────── */
+.severity-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.severity-inline.critical {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+.severity-inline.high {
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+}
+.severity-inline.medium {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+}
+.severity-inline.low {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+body.dark .severity-inline.critical {
+  background: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+}
+body.dark .severity-inline.high {
+  background: rgba(249, 115, 22, 0.25);
+  color: #fdba74;
+}
+body.dark .severity-inline.medium {
+  background: rgba(234, 179, 8, 0.25);
+  color: #fde047;
+}
+body.dark .severity-inline.low {
+  background: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+/* Damage type badge */
+.damage-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: rgba(43, 168, 29, 0.15);
+  color: #2ba81d;
+}
+body.dark .damage-type-badge {
+  background: rgba(43, 168, 29, 0.25);
+  color: #86efac;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RESPONSIVE
@@ -576,13 +688,9 @@ body.dark .badge-display {
 /* Sidebar disappears at 1024px → full width */
 @media (max-width: 1024px) {
   .dashboard-container {
-    width: 100%;
-    margin-left: 0;
-    margin-top: 0;
     padding: 1rem 1.2rem 2rem;
   }
   .dashboard-summary {
-    margin-top: 70px;
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
   }
@@ -594,8 +702,6 @@ body.dark .badge-display {
     padding: 0 16px 16px;
   }
   .insights-list    { grid-template-columns: 1fr; }
-  .predictive-alert { margin-top: 70px; }
-  .dashboard-error-banner { margin-top: 70px; }
 }
 
 @media (max-width: 768px) {
@@ -604,7 +710,6 @@ body.dark .badge-display {
   }
   .dashboard-summary {
     grid-template-columns: 1fr 1fr;
-    margin-top: 60px;
     gap: 10px;
   }
   .dashboard-grid             { gap: 14px; }
@@ -612,8 +717,6 @@ body.dark .badge-display {
   .activity-card              { padding: 10px 12px; font-size: 0.82rem; }
   .summary-card p             { font-size: 1.5rem; }
   .kpi-right                  { display: none; }
-  .predictive-alert           { margin-top: 60px; }
-  .dashboard-error-banner     { margin-top: 60px; }
   .insights-list              { grid-template-columns: 1fr; }
 }
 

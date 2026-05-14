@@ -1,4 +1,4 @@
-const BASE_URL   = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const BASE_URL = import.meta.env.VITE_API_URL || "";
 const API_PREFIX = "/api/v1";
 
 // ── Token storage — single source of truth shared with useAuth.js ─────────────
@@ -172,7 +172,14 @@ export async function requestRaw(endpoint, options = {}, _isRetry = false) {
 // ── Public api object ─────────────────────────────────────────────────────────
 export const api = {
   get:    (url)               => request(url, { method: "GET" }),
-  post:   (url, body, h = {}) => request(url, { method: "POST",  headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify(body) }),
+  post: (url, body, h = {}) => {
+    const isForm = body instanceof URLSearchParams;
+    return request(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...h },
+      body: isForm ? body : JSON.stringify(body),
+    });
+  },
   put:    (url, body)         => request(url, { method: "PUT",   headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   patch:  (url, body)         => request(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   delete: (url)               => request(url, { method: "DELETE" }),

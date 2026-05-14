@@ -31,11 +31,7 @@ export const requestOtp = async (email, purpose) => {
 };
 
 export const verifyOtp = async (email, code, purpose) => {
-  const res = await api.post("/auth/otp/verify", {
-    email,
-    code,
-    purpose,
-  });
+  const res = await api.post("/auth/otp/verify", { email, code, purpose });
 
   return {
     success: res?.success ?? false,
@@ -58,8 +54,18 @@ export const resetPassword = async (email, code, new_password) => {
   };
 };
 
-export const logout = async (refresh_token) => {
-  const res = await api.post("/auth/logout", { refresh_token });
+export const getMe = async () => {
+  const res = await api.get("/auth/me");
+
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};
+
+export const logout = async () => {
+  const res = await api.post("/auth/logout");
 
   return {
     success: res?.success ?? false,

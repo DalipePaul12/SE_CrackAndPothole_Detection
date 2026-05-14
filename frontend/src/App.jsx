@@ -1,23 +1,8 @@
 /**
- * App.jsx  —  FIXED
- *
- * CHANGES FROM PREVIOUS VERSION:
- *
- * 1. REMOVED <BrowserRouter> — it is already in main.jsx. Having two routers
- *    causes a context mismatch that makes useLocation / useNavigate behave
- *    unpredictably and can trigger full re-mounts on every navigation.
- *
- * 2. REMOVED raw localStorage / JWT helpers (isAuthenticated, getUserRole).
- *    Those read stale values and bypass the AuthProvider you already wired up
- *    in main.jsx. Now PrivateRoute and AdminRoute read from useAuthContext(),
- *    which is the single source of truth.
- *
- * 3. AuthProvider is in main.jsx (wrapping everything), so the auth state is
- *    resolved BEFORE any route guard or page component mounts. That is what
- *    stops data from flashing and then disappearing.
+ * App.jsx  —  FIXED WITH SIDEBAR LAYOUTS
  */
 
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import { useState } from "react";
 import "./index.css";
 
@@ -25,6 +10,10 @@ import ScrollToTop from "./components/ScrollToTop.jsx";
 import Navbar      from "./components/Navbar.jsx";
 import { NotificationProvider } from "./pages/Contexts/NotificationContext.jsx";
 import { useAuthContext }        from "./pages/Contexts/AuthContext.jsx";
+
+// Layouts (NEW - import your layout components)
+import UserLayout  from "./components/UserLayout.jsx";
+import AdminLayout from "./components/AdminLayout.jsx";
 
 // Landing
 import HomePage  from "./pages/LandingPage/HomePage.jsx";
@@ -46,30 +35,43 @@ import AdminMapView        from "./pages/Inside-App-Admin/AdminMapView.jsx";
 import AdminManageRequests from "./pages/Inside-App-Admin/AdminManageRequests.jsx";
 import AdminManageReports  from "./pages/Inside-App-Admin/AdminManageReports.jsx";
 import AdminStreetReports  from "./pages/Inside-App-Admin/AdminStreetReports.jsx";
+import AdminSettings       from "./pages/Inside-App-Admin/AdminSettings.jsx";
+// ─── Route guards ─────────────────────────────────────────────────────────────
 
-// ─── Route guards (now use AuthContext, not localStorage) ─────────────────────
-
-/**
- * PrivateRoute
- * Blocks unauthenticated users from reaching user dashboard pages.
- * Because AuthProvider already blocks rendering until isLoading=false,
- * isAuthenticated here is always a settled value — no flash.
- */
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuthContext();
   return isAuthenticated ? children : <Navigate to="/" replace />;
 }
 
-/**
- * AdminRoute
- * Blocks non-admin users. Role is read from the auth context user object,
- * which comes from the validated JWT — no stale localStorage reads.
- */
 function AdminRoute({ children }) {
   const { isAuthenticated, user } = useAuthContext();
   if (!isAuthenticated)          return <Navigate to="/"          replace />;
-  if (user?.role !== "admin")    return <Navigate to="/dashboard" replace />;
+  if (user?.role !== "admin" && user?.role !== "superadmin")    return <Navigate to="/dashboard" replace />;
   return children;
+}
+
+// ─── Layout wrappers with auth guards ─────────────────────────────────────────
+
+/** UserLayout with auth guard */
+function UserLayoutGuard() {
+  return (
+    <PrivateRoute>
+      <UserLayout>
+        <Outlet />  {/* Renders the matched child route */}
+      </UserLayout>
+    </PrivateRoute>
+  );
+}
+
+/** AdminLayout with auth guard */
+function AdminLayoutGuard() {
+  return (
+    <AdminRoute>
+      <AdminLayout>
+        <Outlet />
+      </AdminLayout>
+    </AdminRoute>
+  );
 }
 
 // ─── App shell ────────────────────────────────────────────────────────────────
@@ -96,28 +98,33 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
 
       <NotificationProvider>
         <Routes>
-          {/* ── Landing ──────────────────────────────────────────────────── */}
+          {/* ── Landing (no sidebar) ───────────────────────────────────── */}
           <Route path="/"      element={<HomePage onGetStarted={() => setShowSignUp(true)} />} />
           <Route path="/about" element={<AboutPage />} />
 
-          {/* ── User dashboard (auth required) ───────────────────────────── */}
-          <Route path="/dashboard"               element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          <Route path="/dashboard/reports"       element={<PrivateRoute><AllReports /></PrivateRoute>} />
-          <Route path="/dashboard/mapview"       element={<PrivateRoute><MapView /></PrivateRoute>} />
-          <Route path="/dashboard/profile"       element={<PrivateRoute><MyProfile /></PrivateRoute>} />
-          <Route path="/dashboard/submissions"   element={<PrivateRoute><MySubmissions /></PrivateRoute>} />
-          <Route path="/dashboard/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
-          <Route path="/dashboard/settings"      element={<PrivateRoute><Settings /></PrivateRoute>} />
+          {/* ── User dashboard WITH sidebar layout ─────────────────────── */}
+          <Route element={<UserLayoutGuard />}>
+            <Route path="/dashboard"               element={<Dashboard />} />
+            <Route path="/dashboard/reports"       element={<AllReports />} />
+            <Route path="/dashboard/mapview"       element={<MapView />} />
+            <Route path="/dashboard/profile"       element={<MyProfile />} />
+            <Route path="/dashboard/submissions"   element={<MySubmissions />} />
+            <Route path="/dashboard/notifications" element={<Notifications />} />
+            <Route path="/dashboard/settings"      element={<Settings />} />
+          </Route>
 
-          {/* ── Admin panel (admin role required) ────────────────────────── */}
-          <Route path="/adminpanel"                element={<AdminRoute><AdminPanel /></AdminRoute>} />
-          <Route path="/adminpanel/reports"        element={<AdminRoute><AdminAllReports /></AdminRoute>} />
-          <Route path="/adminpanel/map"            element={<AdminRoute><AdminMapView /></AdminRoute>} />
-          <Route path="/adminpanel/requests"       element={<AdminRoute><AdminManageRequests /></AdminRoute>} />
-          <Route path="/adminpanel/managereports"  element={<AdminRoute><AdminManageReports /></AdminRoute>} />
-          <Route path="/adminpanel/managestreets"  element={<AdminRoute><AdminStreetReports /></AdminRoute>} />
+          {/* ── Admin panel WITH sidebar layout ────────────────────────── */}
+          <Route element={<AdminLayoutGuard />}>
+            <Route path="/adminpanel"               element={<AdminPanel />} />
+            <Route path="/adminpanel/reports"       element={<AdminAllReports />} />
+            <Route path="/adminpanel/map"           element={<AdminMapView />} />
+            <Route path="/adminpanel/requests"      element={<AdminManageRequests />} />
+            <Route path="/adminpanel/managereports" element={<AdminManageReports />} />
+            <Route path="/adminpanel/managestreets" element={<AdminStreetReports />} />
+            <Route path="/adminpanel/settings"      element={<AdminSettings />} />
+          </Route>
 
-          {/* ── Fallback ─────────────────────────────────────────────────── */}
+          {/* ── Fallback ───────────────────────────────────────────────── */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </NotificationProvider>

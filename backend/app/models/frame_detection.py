@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import (
     Column, DateTime, Float, ForeignKey,
     Integer, JSON, String, Index,
@@ -6,6 +10,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.report import Report
 
 
 class FrameDetection(Base):

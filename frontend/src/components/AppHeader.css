@@ -1,8 +1,3 @@
-/* ════════════════════════════════════════
-   APP HEADER — Dark Mode Ready
-   Uses global CSS vars from index.css
-════════════════════════════════════════ */
-
 .app-header {
   height: 80px;
   background: var(--card);
@@ -13,13 +8,13 @@
   padding: 0 40px;
   position: fixed;
   top: 0;
-  left: 260px;
+  left: var(--user-width);        /* full sidebar width */
   right: 0;
   z-index: 100;
   border-bottom-left-radius: 30px;
   border-bottom-right-radius: 30px;
   box-shadow: var(--shadow-md);
-  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .app-header-left {
@@ -41,19 +36,13 @@
   gap: 30px;
 }
 
+.app-header.collapsed {
+  left: var(--user-collapsed);
+}
 .user-name {
   font-weight: 500;
   color: var(--subtext);
   transition: color 0.3s ease;
-}
-
-.profile-icon {
-  font-size: 35px;
-  color: var(--primary);
-  cursor: pointer;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  transition: color 0.3s ease, border-color 0.3s ease;
 }
 
 .profile-image {
@@ -98,14 +87,13 @@
   transition: color 0.3s ease;
 }
 
-/* ── Responsive ── */
-@media (max-width: 1024px) {
-  .burger-btn  { display: block; }
-  .app-header  { left: 0; }
+@media (max-width: 1023px) {
+  .burger-btn { display: block; }
+  .app-header { left: 0 !important; }
 }
 
 @media (max-width: 768px) {
-  .app-header       { padding: 0 20px; }
+  .app-header { padding: 0 20px; }
   .app-header-right { gap: 15px; }
-  .user-name        { display: none; }
+  .user-name { display: none; }
 }

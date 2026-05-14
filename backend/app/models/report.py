@@ -1,10 +1,21 @@
+
 from sqlalchemy import (
-    Boolean, CheckConstraint, Column, DateTime,
-    Enum as SQLEnum, Float, ForeignKey, Integer, String, Text, Index
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Enum as SQLEnum,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    Index,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
 from app.db.base import Base
 from app.models.enums import DamageType, ReportStatus, ReportType, SeverityLevel
 
@@ -21,32 +32,40 @@ class Report(Base):
             "fake_confidence IS NULL OR (fake_confidence >= 0.0 AND fake_confidence <= 1.0)",
             name="ck_report_fake_confidence_range",
         ),
-
-        # Indexes for performance
-        Index("idx_report_status",         "status"),
-        Index("idx_report_barangay",        "barangay"),
-        Index("idx_report_ai_damage_type",  "ai_damage_type"),
-        Index("idx_report_type",            "report_type"),
-        Index("idx_report_is_hybrid",       "is_hybrid"),
+        CheckConstraint(
+            "ai_validation_confidence IS NULL OR "
+            "(ai_validation_confidence >= 0.0 AND ai_validation_confidence <= 1.0)",
+            name="ck_report_ai_validation_confidence_range",
+        ),
+        # ── Indexes for performance ───────────────────────────────────────────
+        Index("idx_report_status",              "status"),
+        Index("idx_report_barangay",            "barangay"),
+        Index("idx_report_ai_damage_type",      "ai_damage_type"),
+        Index("idx_report_type",                "report_type"),
+        Index("idx_report_is_hybrid",           "is_hybrid"),
+        Index("idx_report_requires_review",     "requires_admin_review"),
+        Index("idx_report_owner_id",            "owner_id"),
     )
 
+    # ── Primary key ───────────────────────────────────────────────────────────
     id = Column(Integer, primary_key=True, index=True)
 
+    # ── Owner (nullable so reports survive user deletion) ─────────────────────
     owner_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
 
-    latitude   = Column(Float,  nullable=False)
-    longitude  = Column(Float,  nullable=False)
-    barangay   = Column(String, nullable=True)
+    # ── Location ──────────────────────────────────────────────────────────────
+    latitude    = Column(Float,  nullable=False)
+    longitude   = Column(Float,  nullable=False)
+    barangay    = Column(String, nullable=True)
     street_name = Column(String, nullable=True)
 
-    # Removed direct dependency on single image — use media_attachments instead
     description = Column(String, nullable=True)
 
-    # ── ML RESULTS (nullable until classification runs) ──────────────────────
+    # ── ML RESULTS (nullable until classification runs) ───────────────────────
     ai_damage_type = Column(
         SQLEnum(DamageType, name="damagetype", create_type=True),
         nullable=True,
@@ -61,34 +80,49 @@ class Report(Base):
 
     ai_confidence = Column(Float, nullable=True)
 
-    # ── AI FAKE DETECTION (derived from media_attachments) ───────────────────
+    # ── STRUCTURED AI VALIDATION AUDIT ────────────────────────────────────────
+    # FIX: These 3 columns were declared in ReportCreate / ReportResponse
+    #      but missing from the ORM model → HTTP 500 on every submission.
+    ai_validation_status     = Column(String(50),  nullable=True)
+    ai_validation_confidence = Column(Float,        nullable=True)
+    ai_validation_model      = Column(String(100),  nullable=True)
+
+    # ── CAPTURE METADATA (angle, distance, device info) ───────────────────────
+    # FIX: Was in schema but missing from ORM.
+    capture_metadata = Column(JSON, nullable=True)
+
+    # ── ADMIN REVIEW FLAGS ────────────────────────────────────────────────────
+    # FIX: Was in schema but missing from ORM.
+    requires_admin_review = Column(Boolean, default=False, nullable=False)
+    review_reason         = Column(String(500), nullable=True)
+
+    # ── LEGAL DISCLAIMER ─────────────────────────────────────────────────────
+    # FIX: Was in schema but missing from ORM.
+    disclaimer_accepted = Column(Boolean, default=False, nullable=False)
+
+    # ── AI FAKE DETECTION ─────────────────────────────────────────────────────
     is_flagged_fake = Column(Boolean, default=False, nullable=False)
     fake_confidence = Column(Float,   nullable=True)
 
-    # ── VIDEO / HYBRID ───────────────────────────────────────────────────────
+    # ── VIDEO / HYBRID ────────────────────────────────────────────────────────
     report_type = Column(
         SQLEnum(ReportType, name="reporttype", create_type=True),
         default=ReportType.image,
         nullable=False,
     )
 
-    # Relative path to the stored video file (e.g. /uploads/abc123.webm)
     video_path = Column(String, nullable=True)
 
-    # True when both crack AND pothole are detected across video frames
     is_hybrid = Column(Boolean, default=False, nullable=False)
 
-    # The secondary damage type on hybrid reports (e.g. pothole when primary is crack)
     secondary_damage = Column(
         SQLEnum(DamageType, name="damagetype_secondary", create_type=True),
         nullable=True,
     )
 
-    # Human-readable note produced by resolve_hybrid()
-    # e.g. "Also detected crack in 4 frame(s) with avg confidence 0.71"
     detection_note = Column(Text, nullable=True)
-    # ─────────────────────────────────────────────────────────────────────────
 
+    # ── DUPLICATE DETECTION ───────────────────────────────────────────────────
     is_potential_duplicate = Column(Boolean, default=False)
 
     duplicate_of_id = Column(
@@ -97,6 +131,7 @@ class Report(Base):
         nullable=True,
     )
 
+    # ── STATUS ────────────────────────────────────────────────────────────────
     status = Column(
         SQLEnum(ReportStatus, name="reportstatus", create_type=True),
         default=ReportStatus.PENDING,
@@ -121,7 +156,26 @@ class Report(Base):
         onupdate=func.now(),
     )
 
-    # ── RELATIONSHIPS ────────────────────────────────────────────────────────
+    # ── HYBRID PROPERTY ───────────────────────────────────────────────────────
+    # FIX: ReportResponse declared image_url as a plain field but there is no
+    #      DB column for it.  Exposing it as a hybrid_property lets Pydantic's
+    #      model_validate(report, from_attributes=True) read it safely without
+    #      an AttributeError → HTTP 500.
+    #
+    #      Requires media_attachments to be loaded (selectinload) before access.
+    #      _fetch_report_or_404 in reports.py already does this.
+    @hybrid_property
+    def image_url(self) -> str | None:
+        """Return the file_url of the first image-type media attachment."""
+        for attachment in self.media_attachments:
+            if (
+                hasattr(attachment, "media_type")
+                and attachment.media_type.value == "image"
+            ):
+                return attachment.file_url
+        return None
+
+    # ── RELATIONSHIPS ─────────────────────────────────────────────────────────
 
     owner = relationship("User", back_populates="reports")
 
@@ -167,8 +221,12 @@ class Report(Base):
         remote_side="Report.id",
         foreign_keys=[duplicate_of_id],
     )
+
+    # FIX: indentation was 4 spaces instead of 8 — misaligned with the rest
+    #      of the class body.
     frame_detections = relationship(
-    "FrameDetection",
-    back_populates="report",
-    cascade="all, delete-orphan",
-)
+        "FrameDetection",
+        back_populates="report",
+        cascade="all, delete-orphan",
+    )
+from app.models.frame_detection import FrameDetection 

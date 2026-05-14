@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Notifications.css";
-import Sidebar    from "../../components/Sidebar.jsx";
-import AppHeader  from "../../components/AppHeader.jsx";
 import { useNotifications } from "../../hooks/useNotifications.js";
 import { getReport } from "../../api/reports";
 
@@ -23,7 +21,6 @@ import {
   Trash2,
 } from "lucide-react";
 
-/* ─── type config ─────────────────────────────────────────────────────────── */
 const TYPE_CONFIG = {
   verified:    { icon: ShieldCheck,    label: "Verified",    cls: "type-verified"    },
   success:     { icon: ShieldCheck,    label: "Verified",    cls: "type-verified"    },
@@ -40,7 +37,6 @@ const TYPE_CONFIG = {
   system:      { icon: Info,           label: "System",      cls: "type-system"      },
 };
 
-/* ─── filter tabs ─────────────────────────────────────────────────────────── */
 const FILTER_TABS = [
   { key: "all",        label: "All"        },
   { key: "unread",     label: "Unread"     },
@@ -52,10 +48,8 @@ const FILTER_TABS = [
   { key: "deleted",    label: "Removed"    },
 ];
 
-/* ─── Status steps used by the report modal timeline ─────────────────────── */
 const STATUS_STEPS = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
 
-/* ─── helper — resolve notification type key ─────────────────────────────── */
 function normalizeType(raw = "") {
   return raw.replace(/[\u{1F300}-\u{1FFFF}]/gu, "").toLowerCase().replace(/[\s_\-]/g, "");
 }
@@ -83,7 +77,6 @@ function resolveTypeKeyFromNotif(notif) {
   return baseKey;
 }
 
-/* ─── time formatter ──────────────────────────────────────────────────────── */
 function formatTime(dateString) {
   if (!dateString) return "—";
   const date = new Date(dateString);
@@ -98,7 +91,6 @@ function formatTime(dateString) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/* ─── toast hook ──────────────────────────────────────────────────────────── */
 function useToasts() {
   const [toasts, setToasts] = useState([]);
 
@@ -115,7 +107,6 @@ function useToasts() {
   return { toasts, addToast, removeToast };
 }
 
-/* ─── Toast component ─────────────────────────────────────────────────────── */
 function Toast({ toasts, onRemove }) {
   return (
     <div className="notif-toast-container">
@@ -140,7 +131,6 @@ function Toast({ toasts, onRemove }) {
   );
 }
 
-/* ─── NotifCard ───────────────────────────────────────────────────────────── */
 function NotifCard({ notif, onView, onMarkRead, onDelete }) {
   const key  = resolveTypeKeyFromNotif(notif);
   const cfg  = TYPE_CONFIG[key];
@@ -172,7 +162,6 @@ function NotifCard({ notif, onView, onMarkRead, onDelete }) {
   );
 }
 
-/* ─── Empty state ─────────────────────────────────────────────────────────── */
 function EmptyState({ activeFilter }) {
   return (
     <div className="notif-empty-state">
@@ -183,7 +172,6 @@ function EmptyState({ activeFilter }) {
   );
 }
 
-/* ─── Report Detail Modal ─────────────────────────────────────────────────── */
 function ReportDetailModal({ report, loading, onClose }) {
   if (!report && !loading) return null;
 
@@ -193,7 +181,7 @@ function ReportDetailModal({ report, loading, onClose }) {
         <button className="notif-modal-close" onClick={onClose}><X size={20} /></button>
 
         {loading ? (
-          <div style={{ padding: "40px", textAlign: "center", color: "#aaa" }}>Loading report…</div>
+          <div className="notif-modal-loading">Loading report…</div>
         ) : (
           <>
             <div className="notif-modal-header">
@@ -203,7 +191,6 @@ function ReportDetailModal({ report, loading, onClose }) {
               </span>
             </div>
 
-            {/* Progress timeline */}
             <div className="notif-modal-timeline">
               {STATUS_STEPS.map((s, i) => {
                 const currentIdx = STATUS_STEPS.indexOf(report.status?.toUpperCase());
@@ -229,7 +216,6 @@ function ReportDetailModal({ report, loading, onClose }) {
               })}
             </div>
 
-            {/* Details */}
             <div className="notif-modal-body">
               <div className="notif-modal-row">
                 <span className="notif-modal-label">Location</span>
@@ -259,13 +245,11 @@ function ReportDetailModal({ report, loading, onClose }) {
               )}
             </div>
 
-            {/* Photo */}
             {report.media_attachments?.[0]?.file_url && (
               <div className="notif-modal-photo">
                 <img
                   src={`${import.meta.env.VITE_API_URL || ""}${report.media_attachments[0].file_url}`}
                   alt="Report"
-                  style={{ width: "100%", borderRadius: 8, objectFit: "cover", maxHeight: 200 }}
                 />
               </div>
             )}
@@ -276,20 +260,12 @@ function ReportDetailModal({ report, loading, onClose }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   MAIN PAGE
-════════════════════════════════════════════════════════════════════════════ */
 export default function Notifications() {
   const navigate = useNavigate();
 
-  const [sidebarOpen,   setSidebarOpen]   = useState(false);
   const [activeFilter,  setActiveFilter]  = useState("all");
   const [showSettings,  setShowSettings]  = useState(false);
 
-  /* ── FIX: reportModal and reportLoading were used in JSX and in handleView
-     but never declared with useState — causing "setReportLoading is not
-     defined" and "setReportModal is not defined" ReferenceErrors at runtime.
-     Both declarations are now here, at the top of the component body.    ── */
   const [reportModal,   setReportModal]   = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
 
@@ -306,7 +282,6 @@ export default function Notifications() {
 
   const { toasts, addToast, removeToast } = useToasts();
 
-  /* ── filtered list ── */
   const filteredNotifications = useMemo(() => {
     return notifications.filter(notif => {
       if (activeFilter === "all")    return true;
@@ -315,7 +290,6 @@ export default function Notifications() {
     });
   }, [notifications, activeFilter]);
 
-  /* ── per-tab badge counts ── */
   const tabBadges = useMemo(() => {
     return FILTER_TABS.reduce((acc, tab) => {
       if (tab.key === "unread") {
@@ -329,7 +303,6 @@ export default function Notifications() {
     }, {});
   }, [notifications, unreadCount]);
 
-  /* ── view handler — fetches report detail on demand ── */
   const handleView = useCallback(async (notif) => {
     markAsRead(notif.id);
 
@@ -337,7 +310,6 @@ export default function Notifications() {
 
     const typeKey = resolveTypeKeyFromNotif(notif);
 
-    // Deleted reports — show inline modal only (no navigation)
     if (typeKey === "deleted") {
       setReportLoading(true);
       setReportModal(null);
@@ -348,9 +320,6 @@ export default function Notifications() {
       return;
     }
 
-    // Admin updates → go to My Submissions, auto-open that report on Updates tab
-    // Status changes → Timeline tab
-    // Everything else (admin notes, comments, info, warnings) → Messages tab so user can reply
     const STATUS_CHANGE_TYPES = ["verified", "inprogress", "in_progress", "resolved", "declined"];
     if (STATUS_CHANGE_TYPES.includes(typeKey)) {
       navigate(`/dashboard/submissions?report_id=${notif.report_id}&tab=timeline`);
@@ -359,11 +328,10 @@ export default function Notifications() {
     }
   }, [markAsRead, addToast, navigate]);
 
-  /* ── content renderer ── */
   const renderContent = () => {
     if (loading) {
       return Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="skeleton-row" style={{ height: 72, borderRadius: "var(--radius-xl)" }} />
+        <div key={i} className="skeleton-row" />
       ));
     }
     if (error) {
@@ -391,19 +359,11 @@ export default function Notifications() {
 
   return (
     <>
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <AppHeader onMenuClick={() => setSidebarOpen(true)} />
-
-      {sidebarOpen && (
-        <div className="sidebar-overlay active" onClick={() => setSidebarOpen(false)} />
-      )}
-
       <Toast toasts={toasts} onRemove={removeToast} />
 
-      <main className="notifications-page">
+      <div className="notifications-page">
         <div className="notifications-inner">
 
-          {/* Page header */}
           <div className="notif-page-header">
             <div className="notif-page-title-group">
               <div className="notif-page-icon-wrap"><Bell size={22} /></div>
@@ -439,7 +399,6 @@ export default function Notifications() {
             </div>
           </div>
 
-          {/* Filter tabs */}
           <div className="notif-filter-bar">
             {FILTER_TABS.map(tab => (
               <button
@@ -455,18 +414,13 @@ export default function Notifications() {
             ))}
           </div>
 
-          {/* Notification list */}
           <div className="notif-list">
             {renderContent()}
           </div>
 
         </div>
-      </main>
+      </div>
 
-      {/* FIX: Report detail modal is now a named component (ReportDetailModal)
-              with both reportModal and reportLoading properly wired to state
-              declared above. Previously these state vars were missing entirely,
-              causing a hard crash when any notification was clicked.         */}
       <ReportDetailModal
         report={reportModal}
         loading={reportLoading}

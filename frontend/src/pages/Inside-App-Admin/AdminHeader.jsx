@@ -1,39 +1,68 @@
+/**
+ * AdminHeader.jsx
+ * Top navigation bar for all admin pages.
+ * Includes global dark-mode toggle — uses CSS vars, fully token-driven.
+ */
+
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { LogOut, Moon, Sun, Bell } from "lucide-react";
+import { useDarkMode } from "../hooks/useDarkMode";
 import "./AdminHeader.css";
-import { IoLogOut } from "react-icons/io5";
 
-function AdminHeader() {
-  const navigate = useNavigate();
-  const stored = localStorage.getItem("user");
-  const user = stored ? JSON.parse(stored) : null;
-  const displayName = user?.full_name || user?.name || "Admin";
+export default function AdminHeader() {
+  const navigate    = useNavigate();
+  const { isDark, toggle } = useDarkMode();
 
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user");
-    navigate("/");
-  };
+  function handleLogout() {
+    // clear session / auth tokens here
+    navigate("/login");
+  }
 
   return (
-    <header className="admin-header">
-      <h1 className="admin-header-title">Admin Panel</h1>
+    <header className="adm-header">
+      <div className="adm-header-brand">
+        <div className="adm-header-logo" aria-hidden="true">
+          {/* logo icon placeholder — replace with <img> if needed */}
+          <span className="adm-header-logo-inner" />
+        </div>
+        <span className="adm-header-name">Snap2Fix</span>
+        <span className="adm-header-role-pill">Admin</span>
+      </div>
 
-      <div className="admin-header-right">
-        <span className="admin-header-name">{displayName}</span>
+      <div className="adm-header-title">Admin Panel</div>
 
-        <div className="admin-header-avatar">
-          {displayName.charAt(0).toUpperCase()}
+      <div className="adm-header-actions">
+        {/* Dark mode toggle */}
+        <button
+          className="adm-theme-toggle adm-hdr-icon-btn"
+          onClick={toggle}
+          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          title={isDark ? "Light mode" : "Dark mode"}
+        >
+          {isDark
+            ? <Sun size={17} strokeWidth={2} />
+            : <Moon size={17} strokeWidth={2} />
+          }
+        </button>
+
+        {/* Notifications (placeholder — wire up as needed) */}
+        <button className="adm-hdr-icon-btn adm-hdr-notif-btn" aria-label="Notifications">
+          <Bell size={17} strokeWidth={2} />
+          <span className="adm-hdr-notif-dot" aria-hidden="true" />
+        </button>
+
+        {/* User info + logout */}
+        <div className="adm-hdr-user">
+          <div className="adm-hdr-avatar" aria-hidden="true" />
+          <span className="adm-hdr-username">Admin</span>
         </div>
 
-        <button className="admin-header-logout-btn" onClick={handleLogout}>
-          <IoLogOut />
+        <button className="adm-hdr-logout-btn" onClick={handleLogout}>
+          <LogOut size={15} strokeWidth={2} />
           Logout
         </button>
       </div>
     </header>
   );
 }
-
-export default AdminHeader;

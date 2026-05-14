@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "./MySubmissions.css";
-import Sidebar from "../../components/Sidebar.jsx";
-import AppHeader from "../../components/AppHeader.jsx";
 import { useNavigate } from "react-router-dom";
 import { useReports } from "../../hooks/useReports";
 import {
@@ -9,7 +7,7 @@ import {
   RotateCcw, AlertTriangle, Image, Video, ThumbsUp,
   ChevronLeft, ChevronRight, CircleCheck, Clock, Wrench,
   Send, FileSearch, Trash2, Pencil, Share2, Bot, ZoomIn,
-  MessageSquare, Info, ShieldX, CheckCheck, MapPin,
+  MessageSquare, Info, ShieldX, CheckCheck, MapPin, ChevronDown,
 } from "lucide-react";
 
 const BASE_URL  = import.meta.env.VITE_API_URL || "";
@@ -21,9 +19,7 @@ const mediaUrl  = (att) => att?.file_url ? `${BASE_URL}${att.file_url}` : null;
 const STATUS_LABEL  = { PENDING: "Pending", IN_PROGRESS: "In Progress", VERIFIED: "Verified", RESOLVED: "Resolved", DECLINED: "Declined" };
 const STATUS_STEPS  = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
 const SEVERITY_ORDER = { critical: 1, "non-critical": 0 };
-/* ──────────────────────────────────────────────────────────
-   STATUS PROGRESS BAR
-────────────────────────────────────────────────────────── */
+
 function StatusProgress({ status }) {
   if (status === "DECLINED") {
     return (
@@ -58,9 +54,6 @@ function StatusProgress({ status }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   PAGINATION
-────────────────────────────────────────────────────────── */
 function Pagination({ page, setPage, total, pageSize = 15 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
@@ -69,7 +62,7 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
       <button className="s2f-page-btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
         <ChevronLeft size={15} /> Prev
       </button>
-      <span className="s2f-page-info">Page {page} of {totalPages} · {total} report{total !== 1 ? "s" : ""}</span>
+      <span className="s2f-page-info">Page {page} of {totalPages} &middot; {total} report{total !== 1 ? "s" : ""}</span>
       <button className="s2f-page-btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
         Next <ChevronRight size={15} />
       </button>
@@ -77,9 +70,6 @@ function Pagination({ page, setPage, total, pageSize = 15 }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   NOTE COMPOSER
-────────────────────────────────────────────────────────── */
 function NoteComposer({ reportId, onSent }) {
   const [text, setText]     = useState("");
   const [sending, setSending] = useState(false);
@@ -120,7 +110,7 @@ function NoteComposer({ reportId, onSent }) {
         className="sub-note-textarea"
         rows={3}
         maxLength={500}
-        placeholder="Ask about your report, provide more details, or follow up…"
+        placeholder="Ask about your report, provide more details, or follow up..."
         value={text}
         onChange={(e) => setText(e.target.value)}
         disabled={sending}
@@ -137,16 +127,13 @@ function NoteComposer({ reportId, onSent }) {
           aria-label="Send message"
         >
           <Send size={14} aria-hidden="true" />
-          {sending ? "Sending…" : "Send Message"}
+          {sending ? "Sending..." : "Send Message"}
         </button>
       </div>
     </div>
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   LIGHTBOX
-────────────────────────────────────────────────────────── */
 function Lightbox({ src, alt, onClose }) {
   useEffect(() => {
     const h = (e) => { if (e.key === "Escape") onClose(); };
@@ -172,9 +159,6 @@ function Lightbox({ src, alt, onClose }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   AI TOOLTIP
-────────────────────────────────────────────────────────── */
 function AITooltip({ report }) {
   const [open, setOpen] = useState(false);
   const conf = report.ai_confidence != null ? (report.ai_confidence * 100).toFixed(1) : null;
@@ -197,7 +181,7 @@ function AITooltip({ report }) {
           <p><strong>Severity:</strong> {sev}</p>
           {conf && <p><strong>Confidence:</strong> {conf}%</p>}
           <p className="sub-ai-tooltip-note">
-            The model analyzed visual patterns in the uploaded image — crack geometry, depth cues, and surface texture — to classify this as <em>{type}</em> with <em>{sev}</em> severity.
+            The model analyzed visual patterns in the uploaded image to classify this as <em>{type}</em> with <em>{sev}</em> severity.
           </p>
           {conf && parseFloat(conf) < 70 && (
             <p className="sub-ai-tooltip-warning">
@@ -211,9 +195,6 @@ function AITooltip({ report }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   REPORT TIMELINE
-────────────────────────────────────────────────────────── */
 function ReportTimeline({ report }) {
   const events = useMemo(() => {
     const evts = [{ label: "Submitted",  date: report.created_at,     Icon: Send }];
@@ -248,9 +229,6 @@ function ReportTimeline({ report }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   DELETE CONFIRM MODAL
-────────────────────────────────────────────────────────── */
 function DeleteConfirmModal({ report, onConfirm, onCancel, loading }) {
   return (
     <div className="s2f-modal-overlay" onClick={onCancel} role="dialog" aria-modal="true" aria-labelledby="del-title">
@@ -260,7 +238,7 @@ function DeleteConfirmModal({ report, onConfirm, onCancel, loading }) {
         <div className="sub-confirm-actions">
           <button className="sub-cancel-btn" onClick={onCancel} disabled={loading}>Cancel</button>
           <button className="sub-delete-btn" onClick={onConfirm} disabled={loading}>
-            {loading ? "Withdrawing…" : "Yes, Withdraw"}
+            {loading ? "Withdrawing..." : "Yes, Withdraw"}
           </button>
         </div>
       </div>
@@ -268,9 +246,6 @@ function DeleteConfirmModal({ report, onConfirm, onCancel, loading }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   REPORT MODAL
-────────────────────────────────────────────────────────── */
 function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details" }) {
   const [comments, setComments]           = useState([]);
   const [lightboxSrc, setLightboxSrc]     = useState(null);
@@ -278,7 +253,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
   const [imgErr2, setImgErr2]             = useState(false);
   const [activeTab, setActiveTab]         = useState(initialTab);
   const [unread, setUnread]               = useState(0);
-   const [unreadAdmin, setUnreadAdmin]     = useState(0);
+  const [unreadAdmin, setUnreadAdmin]     = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [shareMsg, setShareMsg]           = useState("");
@@ -355,7 +330,6 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
             <X size={16} />
           </button>
 
-          {/* Header */}
           <div className="sub-modal-header">
             <div>
               <h2 id="modal-title" className="sub-modal-title">Report #{report.id}</h2>
@@ -387,10 +361,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
             </div>
           </div>
 
-          {/* Status Progress */}
           <StatusProgress status={report.status} />
 
-          {/* Tabs */}
           <div className="sub-modal-tabs" role="tablist">
             {TABS.map(({ id, label, Icon, badge }) => (
               <button
@@ -407,10 +379,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
             ))}
           </div>
 
-          {/* Tab Content */}
           <div className="sub-modal-body">
 
-            {/* ── Details ── */}
             {activeTab === "details" && (
               <div>
                 <div className="sub-detail-grid">
@@ -467,10 +437,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
               </div>
             )}
 
-            {/* ── Timeline ── */}
             {activeTab === "timeline" && <ReportTimeline report={report} />}
 
-            {/* ── Media ── */}
             {activeTab === "media" && (
               <div className="sub-tab-media">
                 <div className="sub-media-block">
@@ -530,11 +498,9 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
               </div>
             )}
 
-            {/* ── Messages ── */}
             {activeTab === "messages" && (
               <div className="sub-tab-messages">
 
-              {/* Admin updates — shown first, prominently */}
               {comments.filter(c => c.user?.role === "admin").length > 0 && (
                 <div style={{
                   background: "var(--info-bg)",
@@ -556,7 +522,6 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
                 </div>
               )}
 
-              {/* No updates yet empty state */}
               {comments.filter(c => c.user?.role === "admin").length === 0 && (
                 <div style={{
                   background: "var(--bg-secondary)",
@@ -570,7 +535,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
                 }}>
                   <MessageSquare size={20} style={{ marginBottom: 8, opacity: 0.4 }} />
                   <p style={{ margin: 0 }}>No updates from admin yet.</p>
-                  <p style={{ margin: "4px 0 0", fontSize: "0.76rem" }}>Estimated review time: 24–48 hours.</p>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.76rem" }}>Estimated review time: 24-48 hours.</p>
                 </div>
               )}
 
@@ -624,9 +589,6 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   MOBILE CARD
-────────────────────────────────────────────────────────── */
 function ReportCard({ report, onView }) {
   const [imgError, setImgError] = useState(false);
   const att      = report.media_attachments?.[0];
@@ -677,9 +639,6 @@ function ReportCard({ report, onView }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   TABLE ROW (DESKTOP)
-────────────────────────────────────────────────────────── */
 function TableRow({ report, onView }) {
   const [imgError, setImgError] = useState(false);
   const att      = report.media_attachments?.[0];
@@ -732,9 +691,6 @@ function TableRow({ report, onView }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   EMPTY STATE
-────────────────────────────────────────────────────────── */
 function EmptyState({ hasFilters, onClear }) {
   return (
     <div className="sub-empty-state">
@@ -762,11 +718,132 @@ function EmptyState({ hasFilters, onClear }) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────
-   MAIN COMPONENT
-────────────────────────────────────────────────────────── */
+function FilterDrawer({ typeFilter, setTypeFilter, sevFilter, setSevFilter, statusFilter, handleStatusChange, hasActiveFilters, handleReset }) {
+  const [open, setOpen] = useState(false);
+  const drawerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    if (open) {
+      document.addEventListener("keydown", handleEsc);
+    }
+    return () => document.removeEventListener("keydown", handleEsc);
+  }, [open]);
+
+  return (
+    <div className="sub-filter-drawer-wrap" ref={drawerRef}>
+      <button
+        className={`sub-filter-toggle-btn ${hasActiveFilters ? "has-active" : ""}`}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="filter-drawer-panel"
+      >
+        <SlidersHorizontal size={15} aria-hidden="true" />
+        <span>Filters</span>
+        <ChevronDown size={14} className={`sub-filter-chevron ${open ? "open" : ""}`} aria-hidden="true" />
+        {hasActiveFilters && <span className="sub-filter-badge" />}
+      </button>
+
+      <div
+        id="filter-drawer-panel"
+        className={`sub-filter-drawer ${open ? "open" : ""}`}
+        role="region"
+        aria-label="Filter options"
+      >
+        <div className="sub-filter-drawer-inner">
+          <div className="sub-filter-drawer-header">
+            <span className="sub-filter-drawer-title">
+              <SlidersHorizontal size={14} aria-hidden="true" />
+              Filter Reports
+            </span>
+            <button
+              className="sub-filter-drawer-close"
+              onClick={() => setOpen(false)}
+              aria-label="Close filters"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="sub-filter-drawer-body">
+            <div className="sub-filter-drawer-group">
+              <label className="sub-filter-drawer-label">Damage Type</label>
+              <select
+                className="sub-filter-drawer-select"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                aria-label="Filter by damage type"
+              >
+                <option value="All">All Types</option>
+                <option value="Crack">Crack</option>
+                <option value="Pothole">Pothole</option>
+              </select>
+            </div>
+
+            <div className="sub-filter-drawer-group">
+              <label className="sub-filter-drawer-label">Severity</label>
+              <select
+                className="sub-filter-drawer-select"
+                value={sevFilter === "All" ? "All" : sevFilter.charAt(0).toUpperCase() + sevFilter.slice(1)}
+                onChange={(e) => setSevFilter(e.target.value === "All" ? "All" : e.target.value.toLowerCase())}
+                aria-label="Filter by severity"
+              >
+                <option value="All">All Severity</option>
+                <option value="Non-critical">Non-critical</option>
+                <option value="Critical">Critical</option>
+              </select>
+            </div>
+
+            <div className="sub-filter-drawer-group">
+              <label className="sub-filter-drawer-label">Status</label>
+              <select
+                className="sub-filter-drawer-select"
+                value={statusFilter}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                aria-label="Filter by status"
+              >
+                <option value="All">All Status</option>
+                <option value="PENDING">Pending</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="VERIFIED">Verified</option>
+                <option value="RESOLVED">Resolved</option>
+                <option value="DECLINED">Declined</option>
+              </select>
+            </div>
+          </div>
+
+          {hasActiveFilters && (
+            <div className="sub-filter-drawer-footer">
+              <button className="sub-filter-drawer-reset" onClick={handleReset}>
+                <RotateCcw size={13} /> Reset
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MySubmissions() {
-  const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [typeFilter, setTypeFilter]     = useState("All");
   const [sevFilter, setSevFilter]       = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -776,7 +853,7 @@ function MySubmissions() {
   const [initialTab,     setInitialTab]     = useState("details");
   const [viewMode, setViewMode]         = useState("list");
   const searchRef = useRef(null);
-  
+
   const { reports, loading, error, page, setPage, total, refetch } = useReports({ 
     mine: true  
   });
@@ -788,19 +865,15 @@ function MySubmissions() {
 
     if (!reportId) return;
 
-    // Clear URL immediately so back-navigation won't re-trigger
     window.history.replaceState({}, "", window.location.pathname);
 
     const open = async () => {
-      // Fast path — report already in current loaded list
       const found = reports.find((r) => String(r.id) === String(reportId));
       if (found) {
         setInitialTab(tab);
         setSelectedReport(found);
         return;
       }
-      // Fetch directly from API — works even if report is on a different page
-      // or currently filtered out
       try {
         const token = localStorage.getItem("access_token");
         const res = await fetch(`${BASE_URL}/api/v1/reports/${reportId}`, {
@@ -815,7 +888,7 @@ function MySubmissions() {
     };
 
     open();
-  }, []); // runs once on mount — URL params are read once
+  }, []);
 
   const processed = useMemo(() => {
     let arr = [...reports];
@@ -850,24 +923,19 @@ function MySubmissions() {
   const hasActiveFilters = typeFilter !== "All" || sevFilter !== "All" || statusFilter !== "All" || search.trim();
 
   const stats = useMemo(() => ({
+    total:      reports.length,
     pending:    reports.filter((r) => r.status === "PENDING").length,
     verified:   reports.filter((r) => r.status === "VERIFIED").length,
     inProgress: reports.filter((r) => r.status === "IN_PROGRESS").length,
     resolved:   reports.filter((r) => r.status === "RESOLVED").length,
+    declined:   reports.filter((r) => r.status === "DECLINED").length,
   }), [reports]);
 
   return (
     <>
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <AppHeader onMenuClick={() => setSidebarOpen(true)} />
-      {sidebarOpen && (
-        <div className="sidebar-overlay active" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
-      )}
-
       <main className="submissions-page">
         <div className="submissions-inner">
 
-          {/* ── Header Card ── */}
           <div className="submissions-header-card">
             <div className="sub-header-top">
               <div className="sub-header-title-group">
@@ -902,22 +970,25 @@ function MySubmissions() {
               </div>
             </div>
 
-            {/* Mini Stats */}
             <div className="sub-mini-stats">
-              {[
-                { cls: "stat-pending",  count: stats.pending,    label: "Pending" },
-                { cls: "stat-verified", count: stats.verified,   label: "Verified" },
-                { cls: "stat-progress", count: stats.inProgress, label: "In Progress" },
-                { cls: "stat-resolved", count: stats.resolved,   label: "Resolved" },
-              ].map(({ cls, count, label }) => (
-                <div key={label} className={`sub-mini-stat ${cls}`}>
-                  <span className="sub-mini-stat-count">{count}</span>
-                  <span className="sub-mini-stat-label">{label}</span>
-                </div>
-              ))}
+              <div className="sub-mini-stat stat-total">
+                <span className="sub-mini-stat-count">{stats.total}</span>
+                <span className="sub-mini-stat-label">Total Posts</span>
+              </div>
+              <div className="sub-mini-stat stat-resolved">
+                <span className="sub-mini-stat-count">{stats.resolved}</span>
+                <span className="sub-mini-stat-label">Resolved</span>
+              </div>
+              <div className="sub-mini-stat stat-progress">
+                <span className="sub-mini-stat-count">{stats.inProgress}</span>
+                <span className="sub-mini-stat-label">In Progress</span>
+              </div>
+              <div className="sub-mini-stat stat-score">
+                <span className="sub-mini-stat-count">{stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0}%</span>
+                <span className="sub-mini-stat-label">Rep Score</span>
+              </div>
             </div>
 
-            {/* Search + Sort */}
             <div className="sub-search-sort-row">
               <div className="sub-search-wrapper">
                 <Search size={16} className="sub-search-icon" aria-hidden="true" />
@@ -925,7 +996,7 @@ function MySubmissions() {
                   ref={searchRef}
                   type="text"
                   className="sub-search-input"
-                  placeholder="Search by ID, location, or type…"
+                  placeholder="Search by ID, location, or type..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   aria-label="Search reports"
@@ -950,68 +1021,19 @@ function MySubmissions() {
                   <option value="upvotes">Most Upvotes</option>
                 </select>
               </div>
-            </div>
-
-            {/* Filters */}
-            <div className="sub-filters-row">
-              <div className="sub-filter-group">
-                <label className="sub-filter-label">Type</label>
-                <div className="sub-filter-chips">
-                  {["All", "Crack", "Pothole"].map((t) => (
-                    <button
-                      key={t}
-                      className={`sub-chip ${typeFilter === t ? "chip-active" : ""}`}
-                      onClick={() => setTypeFilter(t)}
-                      aria-pressed={typeFilter === t}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="sub-filter-group">
-                <label className="sub-filter-label">Severity</label>
-                <div className="sub-filter-chips">
-                  {["All","non-critical", "critical"].map((s) => (
-                    <button
-                      key={s}
-                      className={`sub-chip ${sevFilter === s ? "chip-active" : ""} ${s !== "All" ? `sev-${s}` : ""}`}
-                      onClick={() => setSevFilter(s)}
-                      aria-pressed={sevFilter === s}
-                    >
-                      {s === "All" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="sub-filter-group">
-                <label className="sub-filter-label">Status</label>
-                <select
-                  className="sub-status-select"
-                  value={statusFilter}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  aria-label="Filter by status"
-                >
-                  <option value="All">All Status</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="VERIFIED">Verified</option>
-                  <option value="RESOLVED">Resolved</option>
-                  <option value="DECLINED">Declined</option>
-                </select>
-              </div>
-
-              {hasActiveFilters && (
-                <button className="sub-reset-btn" onClick={handleReset}>
-                  <RotateCcw size={13} /> Reset
-                </button>
-              )}
+              <FilterDrawer
+                typeFilter={typeFilter}
+                setTypeFilter={setTypeFilter}
+                sevFilter={sevFilter}
+                setSevFilter={setSevFilter}
+                statusFilter={statusFilter}
+                handleStatusChange={handleStatusChange}
+                hasActiveFilters={hasActiveFilters}
+                handleReset={handleReset}
+              />
             </div>
           </div>
 
-          {/* Error Banner */}
           {error && (
             <div className="s2f-error-banner" role="alert">
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1021,7 +1043,6 @@ function MySubmissions() {
             </div>
           )}
 
-          {/* Map View */}
           {viewMode === "map" && (
             <div className="sub-map-placeholder">
               <Map size={42} aria-hidden="true" />
@@ -1034,7 +1055,6 @@ function MySubmissions() {
 
           {viewMode === "list" && (
             <>
-              {/* Desktop Table */}
               <div className="sub-table-wrapper">
                 {loading ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "10px 0" }}>
@@ -1070,7 +1090,6 @@ function MySubmissions() {
                 )}
               </div>
 
-              {/* Mobile Cards */}
               <div className="sub-mobile-cards">
                 {loading ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

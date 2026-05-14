@@ -1,23 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api, tokenStorage } from "../api/client";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// useAuth.js  —  FIXED (handles 500 from /auth/refresh gracefully)
-//
-// NEW PROBLEM SEEN IN SCREENSHOT:
-//   /auth/refresh → 500 (backend crash)
-//   All analytics → 403 (no valid token after failed refresh)
-//   Dashboard shows "Failed to load" banner
-//   User sees Admin-style dashboard layout (role read from stale localStorage)
-//
-// FIXES:
-//   1. If refresh returns 500 (server error), don't logout immediately —
-//      try to use the existing access token if it's still valid.
-//   2. If access token is still valid (not expired), keep the session alive
-//      and let the user work. Only force logout when BOTH tokens are dead.
-//   3. isLoading always resolves so the app never hangs on a spinner.
-// ─────────────────────────────────────────────────────────────────────────────
-
 const REFRESH_BUFFER_MS = 2 * 60 * 1000;
 
 function parseJwt(token) {
@@ -47,33 +30,50 @@ function isHardExpired(token) {
   return Date.now() >= expiry;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// New tokens have sub=UUID and role — no email or id in the token itself.
+// We prefer the stored user object (set at login) over deriving from token.
+function deriveUserFromToken(token) {
+  const payload = parseJwt(token);
+  if (!payload) return null;
+  return {
+    public_id: payload.sub,  // UUID
+    role: payload.role,
+  };
+}
+
 export function useAuth() {
   const [user, setUser] = useState(() => {
     try {
       const stored = localStorage.getItem("user");
-      return stored ? JSON.parse(stored) : null;
+      if (stored) return JSON.parse(stored);
+      const token = tokenStorage.getAccess();
+      return token ? deriveUserFromToken(token) : null;
     } catch {
       return null;
     }
   });
 
   const [token, setToken] = useState(() => tokenStorage.getAccess());
-
-  // ✅ Starts true — app waits for auth to resolve before rendering data pages
   const [isLoading, setIsLoading] = useState(true);
-
   const timerRef = useRef(null);
 
   const saveLogin = useCallback((access_token, refresh_token, userData) => {
     tokenStorage.setAccess(access_token);
-    tokenStorage.setRefresh(refresh_token);
-    localStorage.setItem("user", JSON.stringify(userData));
+    if (refresh_token) tokenStorage.setRefresh(refresh_token);
+
+    // Prefer the full user object from the login response over deriving from token
+    const resolvedUser = userData ?? deriveUserFromToken(access_token);
+    localStorage.setItem("user", JSON.stringify(resolvedUser));
     setToken(access_token);
-    setUser(userData);
+    setUser(resolvedUser);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      // ignore — token expires naturally
+    }
     tokenStorage.clear();
     localStorage.removeItem("user");
     setToken(null);
@@ -82,13 +82,15 @@ export function useAuth() {
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
-  // ── Silent refresh — with 500 resilience ────────────────────────────────
   const silentRefresh = useCallback(
     async ({ finallySetLoading = false } = {}) => {
       const refreshToken = tokenStorage.getRefresh();
 
       if (!refreshToken) {
-        logout();
+        const currentAccess = tokenStorage.getAccess();
+        if (!currentAccess || isHardExpired(currentAccess)) {
+          logout();
+        }
         if (finallySetLoading) setIsLoading(false);
         return;
       }
@@ -97,33 +99,22 @@ export function useAuth() {
         const res = await api.post("/auth/refresh", { refresh_token: refreshToken });
 
         if (res?.success && res.data?.access_token) {
-          // ✅ Happy path: rotation succeeded
           saveLogin(
             res.data.access_token,
             res.data.refresh_token ?? refreshToken,
-            res.data.user
+            res.data.user ?? null,
           );
         } else {
-          // Backend returned non-success (400/401)
           throw new Error(res?.error || "Refresh failed");
         }
       } catch (err) {
-        const isServerError = err?.message?.includes("500") ||
-                              err?.message?.includes("server");
-
+        const isServerError =
+          err?.message?.includes("500") || err?.message?.includes("server");
         const currentAccess = tokenStorage.getAccess();
 
         if (isServerError && currentAccess && !isHardExpired(currentAccess)) {
-          // ✅ RESILIENCE: backend refresh is broken BUT access token is still
-          //    valid. Don't log the user out — let them keep working.
-          //    The next hard expiry will force a fresh login.
-          console.warn(
-            "[useAuth] Refresh endpoint returned 500. " +
-            "Access token still valid — keeping session alive."
-          );
-          // Don't call logout() — user stays logged in
+          console.warn("[useAuth] Refresh error but access token still valid — keeping session.");
         } else {
-          // Access token is also dead → must re-login
           logout();
         }
       } finally {
@@ -133,9 +124,8 @@ export function useAuth() {
     [saveLogin, logout]
   );
 
-  // ── Mount: validate stored token before rendering anything ───────────────
   useEffect(() => {
-    const accessToken  = tokenStorage.getAccess();
+    const accessToken = tokenStorage.getAccess();
     const refreshToken = tokenStorage.getRefresh();
 
     if (!accessToken && !refreshToken) {
@@ -149,17 +139,18 @@ export function useAuth() {
     }
 
     if (accessToken && isExpiredOrExpiringSoon(accessToken)) {
-      // Try to refresh; if the refresh endpoint is broken but token
-      // isn't hard-expired yet, silentRefresh keeps the session
       silentRefresh({ finallySetLoading: true });
       return;
     }
 
-    // Token is valid and not expiring soon → restore immediately
+    if (accessToken && !user) {
+      const derived = deriveUserFromToken(accessToken);
+      if (derived) setUser(derived);
+    }
+
     setIsLoading(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Proactive refresh timer ──────────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
     const expiryMs = getTokenExpiryMs(token);

@@ -1,17 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import AdminSidebar from "../../components/AdminSidebar.jsx";
-import AdminHeader  from "../../components/AdminHeader.jsx";
 import { getReports, updateReport, uploadReportMedia, addComment } from "../../api/reports";
 import "./AdminManageReports.css";
 
-/* ─── coordinate detector ─────────────────────────────────────────────────── */
 function isCoordinateString(str) {
   if (!str) return false;
   return /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(str.trim());
 }
 
-/* ─── constants ───────────────────────────────────────────────────────────── */
-const STATUS_FLOW   = ["pending", "verified", "assigned", "in_progress", "resolved", "rejected"];
+const STATUS_FLOW   = ["pending", "verified", "assigned", "in_progress", "resolved", "rejected", "cancelled"];
 const STATUS_LABELS = {
   pending:     "Pending",
   verified:    "Verified",
@@ -19,6 +15,7 @@ const STATUS_LABELS = {
   in_progress: "In Progress",
   resolved:    "Resolved",
   rejected:    "Rejected",
+  cancelled:   "Cancelled",
 };
 const WORKERS = [
   { id: 1, name: "Juan dela Cruz"    },
@@ -34,78 +31,54 @@ const TEAMS_DEFAULT = [
   { id: 3, name: "Team Gamma", leader: "Marco Villanueva", members: ["Liza Mendoza", "Pedro Reyes"]         },
 ];
 
-/* ─── color tokens ────────────────────────────────────────────────────────── */
-const C = {
-  bg:        "#f7fdf9",
-  surface:   "#ffffff",
-  border:    "#e5ede8",
-  borderMid: "#c6dbc9",
-  green50:   "#f0fdf4",
-  green100:  "#dcfce7",
-  green200:  "#bbf7d0",
-  green600:  "#16a34a",
-  green700:  "#15803d",
-  green800:  "#166534",
-  green900:  "#14532d",
-  text:      "#111827",
-  textMid:   "#374151",
-  textSub:   "#6b7280",
-  textMuted: "#9ca3af",
-  red50:     "#fef2f2",
-  red600:    "#dc2626",
-  amber50:   "#fffbeb",
-  amber600:  "#d97706",
-};
-
-/* ─── inline SVG icons ────────────────────────────────────────────────────── */
 function IcoClipboard({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>;
 }
 function IcoAlert({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="m10.29 3.86-8.29 14.28A1 1 0 0 0 3 19.71h18a1 1 0 0 0 .86-1.57l-8.29-14.28a1 1 0 0 0-1.72 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="m10.29 3.86-8.29 14.28A1 1 0 0 0 3 19.71h18a1 1 0 0 0 .86-1.57l-8.29-14.28a1 1 0 0 0-1.72 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
 }
 function IcoClock({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
 }
 function IcoWrench({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
 }
 function IcoCheck({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
 }
 function IcoSearch({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
 }
 function IcoRefresh({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
 }
 function IcoMapPin({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
 }
 function IcoUsers({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 }
 function IcoX({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
 }
 function IcoPlus({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
 }
 function IcoBan({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>;
 }
 function IcoCamera({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>;
 }
 function IcoShield({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
 }
 function IcoStar({ size = 16, ...p }) {
-  return <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 }
 function IcoSort({ size = 14, active, dir }) {
   return (
-    <svg width={size} height={size} style={{ flexShrink: 0, color: active ? C.green600 : C.textMuted }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <svg width={size} height={size} className="ico-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       {active
         ? dir === "asc"
           ? <polyline points="18 15 12 9 6 15" />
@@ -115,8 +88,13 @@ function IcoSort({ size = 14, active, dir }) {
     </svg>
   );
 }
+function IcoChevronDown({ size = 16, ...p }) {
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="6 9 12 15 18 9"/></svg>;
+}
+function IcoSliders({ size = 16, ...p }) {
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>;
+}
 
-/* ─── utility functions ───────────────────────────────────────────────────── */
 function timeAgo(dateStr) {
   if (!dateStr) return "—";
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -145,7 +123,6 @@ function initials(name) {
     .toUpperCase();
 }
 
-/* ─── field accessors ─────────────────────────────────────────────────────── */
 const damageType = (r) => r.ai_damage_type ?? r.damage_type ?? "—";
 const severity   = (r) => r.ai_severity    ?? r.severity    ?? "—";
 const barangay   = (r) => r.barangay ?? r.location_address?.split(",")[0] ?? "—";
@@ -159,12 +136,6 @@ const mediaFull  = (r, idx = 0) => {
   };
 };
 
-/* ─── geocode helper — parallel with concurrency limit ───────────────────────
-   FIX: The original code awaited every reverse-geocode call SEQUENTIALLY with
-        a hard-coded 1 000 ms delay, meaning 200 reports = ~200 s to complete.
-        We now batch with CONCURRENCY=5 and cache in sessionStorage so repeated
-        opens of the page do not re-query Nominatim.
-──────────────────────────────────────────────────────────────────────────── */
 const GEO_CACHE_KEY = "amr_geo_cache";
 
 function loadGeoCache() {
@@ -173,7 +144,7 @@ function loadGeoCache() {
 }
 function saveGeoCache(cache) {
   try { sessionStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache)); }
-  catch { /* storage full — skip */ }
+  catch { }
 }
 
 async function reverseGeocodeAll(reports) {
@@ -226,7 +197,6 @@ async function reverseGeocodeAll(reports) {
   return updated;
 }
 
-/* ─── small reusable components ───────────────────────────────────────────── */
 function Badge({ text, className }) {
   return <span className={`badge ${className || ""}`}>{text}</span>;
 }
@@ -313,15 +283,18 @@ function BulkBar({ count, onComplete, onAssign, onCancel, onClear }) {
   );
 }
 
-function ActionButtons({ r, onVerify, onAssign, onStart, onComplete, onCancel, isPatching }) {
+function ActionButtons({ r, onVerify, onAssign, onComplete, onCancel, isPatching }) {
   const st = r.status?.toLowerCase();
   return (
     <div className="action-btns">
       {st === "pending"     && <button disabled={isPatching} className="action-btn ab-verify"   onClick={e => { e.stopPropagation(); onVerify();   }}><IcoShield size={11} />Verify</button>}
       {st === "verified"    && <button disabled={isPatching} className="action-btn ab-assign"   onClick={e => { e.stopPropagation(); onAssign();   }}><IcoUsers size={11} />Assign</button>}
-      {st === "assigned"    && <button disabled={isPatching} className="action-btn ab-start"    onClick={e => { e.stopPropagation(); onStart();    }}><IcoWrench size={11} />Start</button>}
-      {st === "in_progress" && <button disabled={isPatching} className="action-btn ab-complete" onClick={e => { e.stopPropagation(); onComplete(); }}><IcoCheck size={11} />Done</button>}
-      {!["resolved", "rejected"].includes(st) && (
+      {(st === "assigned" || st === "in_progress") && (
+        <button disabled={isPatching} className="action-btn ab-complete" onClick={e => { e.stopPropagation(); onComplete(); }}>
+          <IcoCheck size={11} />Complete
+        </button>
+      )}
+      {!["resolved", "rejected", "cancelled"].includes(st) && (
         <button disabled={isPatching} className="action-btn ab-reject" onClick={e => { e.stopPropagation(); onCancel(); }}>
           <IcoBan size={11} />Cancel
         </button>
@@ -330,56 +303,40 @@ function ActionButtons({ r, onVerify, onAssign, onStart, onComplete, onCancel, i
   );
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT
-════════════════════════════════════════════════════════════════════════════ */
 function AdminManageReports() {
-  /* ── data ── */
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
 
-  /* ── filters ── */
   const [search,         setSearch]         = useState("");
   const [filterType,     setFilterType]     = useState("All");
   const [filterSeverity, setFilterSeverity] = useState("All");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterDate,     setFilterDate]     = useState("All");
+  const [filtersOpen,    setFiltersOpen]    = useState(false);
 
-  /* ── sort ── */
   const [sortCol, setSortCol] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
 
-  /* ── selection ── */
   const [selected, setSelected] = useState(new Set());
 
-  /* ── modals ── */
   const [viewReport,     setViewReport]     = useState(null);
   const [completeReport, setCompleteReport] = useState(null);
   const [assignReport,   setAssignReport]   = useState(null);
   const [cancelReport,   setCancelReport]   = useState(null);
   const [bulkMode,       setBulkMode]       = useState(null);
 
-  /* ── auto-refresh ── */
   const [countdown, setCountdown] = useState(30);
   const timerRef = useRef(null);
 
-  /* ── teams ── */
   const [teams, setTeams] = useState(TEAMS_DEFAULT);
 
-  /* ─────────────────────────────────────────────────────────────────────────
-     FIX: `patching` state and `patchStatus` MUST be declared BEFORE the
-     handler functions that reference them.  In the original file, `const
-     [patching …]` and `const patchStatus` appeared AFTER handleVerify /
-     handleStart / etc.  Because `const` is block-scoped (not hoisted),
-     those handlers threw "Cannot access 'patchStatus' before initialization"
-     the first time any button was clicked.
-  ──────────────────────────────────────────────────────────────────────── */
   const [patching, setPatching] = useState(new Set());
 
   const patchStatus = useCallback(async (id, status, extra = {}) => {
     if (patching.has(id)) return false;
     setPatching(prev => new Set(prev).add(id));
+    setError(null);
     const res = await updateReport(id, { status, ...extra });
     if (res.success) {
       setReports(prev =>
@@ -387,6 +344,8 @@ function AdminManageReports() {
           r.id === id ? { ...r, status: status.toLowerCase(), ...extra } : r
         )
       );
+    } else {
+      setError(res.error || `Failed to update report #${String(id).padStart(3, '0')}. Please try again.`);
     }
     setPatching(prev => {
       const n = new Set(prev);
@@ -396,19 +355,17 @@ function AdminManageReports() {
     return res.success;
   }, [patching]);
 
-  /* ── status handlers — all safely declared AFTER patchStatus ── */
   const handleVerify  = useCallback((id) => patchStatus(id, "VERIFIED"),    [patchStatus]);
   const handleStart   = useCallback((id) => patchStatus(id, "IN_PROGRESS"), [patchStatus]);
 
   const handleAssign = useCallback(async (id, teamOrWorker) => {
-    await patchStatus(id, "ASSIGNED", { assigned_to: teamOrWorker.name });
-    setAssignReport(null);
+    const success = await patchStatus(id, "ASSIGNED", { assigned_to: teamOrWorker.name });
+    if (success) setAssignReport(null);
   }, [patchStatus]);
 
   const handleCancel = useCallback(async (id, reason) => {
-    // FIX: standardised to decline_reason to match backend schema
-    await patchStatus(id, "REJECTED", { decline_reason: reason });
-    setCancelReport(null);
+    const success = await patchStatus(id, "CANCELLED", { decline_reason: reason });
+    if (success) setCancelReport(null);
   }, [patchStatus]);
 
   const handleCompleteSuccess = useCallback((id) => {
@@ -424,7 +381,6 @@ function AdminManageReports() {
     setBulkMode(null);
   }, [selectedIds, patchStatus]);
 
-  /* ── fetch ── */
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -434,20 +390,17 @@ function AdminManageReports() {
       setLoading(false);
       return;
     }
-
     const raw = res.data?.results ?? [];
-    setReports(raw);          // show data immediately
+    setReports(raw);
     setLoading(false);
     setCountdown(30);
 
-    // geocode in background — parallel, cached
     const geocoded = await reverseGeocodeAll(raw);
     setReports(geocoded);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  /* ── auto-refresh timer ── */
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setCountdown(c => {
@@ -458,13 +411,11 @@ function AdminManageReports() {
     return () => clearInterval(timerRef.current);
   }, [fetchAll]);
 
-  /* ── sort ── */
   const handleSort = (col) => {
     if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortCol(col); setSortDir("asc"); }
   };
 
-  /* ── filtered + sorted data ── */
   const filtered = reports
     .filter(r => {
       const dt  = damageType(r).toLowerCase();
@@ -496,7 +447,6 @@ function AdminManageReports() {
       return 0;
     });
 
-  /* ── select helpers ── */
   const allSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
   const toggleAll   = () =>
     setSelected(allSelected ? new Set() : new Set(filtered.map(r => r.id)));
@@ -507,290 +457,321 @@ function AdminManageReports() {
       return n;
     });
 
-  /* ── render ── */
+  const hasActiveFilters = filterType !== "All" || filterSeverity !== "All" || filterStatus !== "All" || filterDate !== "All";
+
   return (
-    <>
-      <AdminHeader  />
-      <AdminSidebar />
+    <div className="manage-container">
+      <StatsCards reports={reports} />
 
-      <div className="manage-container">
-        <StatsCards reports={reports} />
+      <div className="manage-filters">
+        <div className="filters-top-row">
+          <h2 className="manage-title">Manage Reports</h2>
+          <div className="refresh-area">
+            <span className="refresh-countdown">Auto-refresh in {countdown}s</span>
+            <button className="refresh-btn" onClick={fetchAll}>
+              <IcoRefresh size={12} /> Refresh
+            </button>
+          </div>
+        </div>
 
-        <div className="manage-filters">
-          <div className="filters-top-row">
-            <h2 className="manage-title">Manage Reports</h2>
-            <div className="refresh-area">
-              <span className="refresh-countdown">Auto-refresh in {countdown}s</span>
-              <button className="refresh-btn" onClick={fetchAll}>
-                <IcoRefresh size={12} /> Refresh
+        <div className="search-row">
+          <div className="search-box">
+            <IcoSearch size={14} className="search-icon" />
+            <input
+              className="search-input"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by ID, barangay or street…"
+            />
+            {search && (
+              <button className="search-clear" onClick={() => setSearch("")}>
+                <IcoX size={12} />
               </button>
-            </div>
+            )}
           </div>
 
-          <div className="search-row">
-            <div className="search-box">
-              <IcoSearch size={14} className="search-icon" />
-              <input
-                className="search-input"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search by ID, barangay or street…"
-              />
-              {search && (
-                <button className="search-clear" onClick={() => setSearch("")}>
-                  <IcoX size={12} />
-                </button>
-              )}
-            </div>
+          <div className="filters-trigger-wrap">
+            <button
+              className={`filters-trigger ${filtersOpen ? "open" : ""} ${hasActiveFilters ? "active" : ""}`}
+              onClick={() => setFiltersOpen(o => !o)}
+            >
+              <IcoSliders size={14} />
+              <span>Filters</span>
+              {hasActiveFilters && <span className="filters-dot" />}
+              <IcoChevronDown size={14} className="filters-chevron" />
+            </button>
           </div>
+        </div>
 
-          <div className="filters-row">
-            <div className="filter-group">
-              <label>Damage Type</label>
-              <div className="filter-buttons">
-                {["All", "Crack", "Pothole"].map(t => (
-                  <button
-                    key={t}
-                    className={filterType === t ? "active" : ""}
-                    onClick={() => setFilterType(t)}
-                  >{t}</button>
-                ))}
+        {filtersOpen && (
+          <div className="filters-drawer">
+            <div className="filters-row">
+              <div className="filter-group">
+                <label>Damage Type</label>
+                <div className="filter-buttons">
+                  {["All", "Crack", "Pothole"].map(t => (
+                    <button
+                      key={t}
+                      className={filterType === t ? "active" : ""}
+                      onClick={() => setFilterType(t)}
+                    >{t}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="filter-group custom-select">
+                <label>Severity</label>
+                <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
+                  <option value="All">All Severity</option>
+                  <option value="non-critical">Non-Critical</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+
+              <div className="filter-group custom-select">
+                <label>Status</label>
+                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                  <option value="All">All Status</option>
+                  {STATUS_FLOW.map(s => (
+                    <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-group custom-select">
+                <label>Date</label>
+                <select value={filterDate} onChange={e => setFilterDate(e.target.value)}>
+                  <option value="All">All Time</option>
+                  <option value="Today">Today</option>
+                  <option value="Week">This Week</option>
+                </select>
               </div>
             </div>
 
-            <div className="filter-group custom-select">
-              <label>Severity</label>
-              <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
-                <option value="All">All Severity</option>
-                <option value="non-critical">Non-Critical</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
-
-            <div className="filter-group custom-select">
-              <label>Status</label>
-              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                <option value="All">All Status</option>
-                {STATUS_FLOW.map(s => (
-                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-group custom-select">
-              <label>Date</label>
-              <select value={filterDate} onChange={e => setFilterDate(e.target.value)}>
-                <option value="All">All Time</option>
-                <option value="Today">Today</option>
-                <option value="Week">This Week</option>
-              </select>
-            </div>
+            {hasActiveFilters && (
+              <div className="filters-footer">
+                <button className="filters-clear" onClick={() => { setFilterType("All"); setFilterSeverity("All"); setFilterStatus("All"); setFilterDate("All"); }}>
+                  <IcoX size={12} /> Clear all filters
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-
-        {error && <div className="admin-error-banner">{error}</div>}
-
-        {selected.size > 0 && (
-          <BulkBar
-            count={selected.size}
-            onComplete={() => bulkPatch("RESOLVED")}
-            onAssign={() => setBulkMode("assign")}
-            onCancel={() => bulkPatch("REJECTED")}
-            onClear={() => setSelected(new Set())}
-          />
-        )}
-
-        <div className="manage-table-container">
-          <div className="table-responsive">
-            <table className="manage-table">
-              <colgroup>
-                <col className="col-check" />
-                <col style={{ width: "8%"  }} />
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "12%" }} />
-                <col style={{ width: "20%" }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  {[
-                    [null,        <input type="checkbox" checked={allSelected} onChange={toggleAll} className="amr-cb" />, false],
-                    [null,        "Report",      false],
-                    ["created_at","Reported",    true ],
-                    [null,        "Damage Type", false],
-                    ["severity",  "Severity",    true ],
-                    ["priority",  "Priority",    true ],
-                    ["status",    "Status",      true ],
-                    [null,        "Assigned To", false],
-                    [null,        "Actions",     false],
-                  ].map(([col, label, sortable], i) => (
-                    <th
-                      key={i}
-                      onClick={sortable ? () => handleSort(col) : undefined}
-                      className={sortable ? "sortable" : ""}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        {label}
-                        {sortable && <IcoSort size={12} active={sortCol === col} dir={sortDir} />}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={9} className="no-data">Loading reports…</td></tr>
-                ) : filtered.length === 0 ? (
-                  <tr><td colSpan={9} className="no-data">No reports found</td></tr>
-                ) : filtered.map(r => {
-                  const st       = r.status?.toLowerCase();
-                  const pri      = getPriority(r);
-                  const sev      = severity(r).toLowerCase();
-                  const isCrit   = sev === "critical";
-                  const isSelec  = selected.has(r.id);
-
-                  return (
-                    <tr
-                      key={r.id}
-                      className={`clickable-row ${isSelec ? "selected-row" : ""} ${isCrit ? "critical-row" : ""}`}
-                      onClick={() => setViewReport(r)}
-                    >
-                      <td className="col-check" onClick={e => { e.stopPropagation(); toggleOne(r.id); }}>
-                        <input type="checkbox" checked={isSelec} onChange={() => toggleOne(r.id)} className="amr-cb" />
-                      </td>
-
-                      <td>
-                        <div className="report-number">#{String(r.id).padStart(3, "0")}</div>
-                      </td>
-
-                      <td>
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                          <IcoMapPin size={14} style={{ color: C.green600, flexShrink: 0, marginTop: 2 }} />
-                          <div style={{ display: "flex", flexDirection: "column" }}>
-                            <span style={{ fontSize: "0.9rem", fontWeight: 700, color: C.text }}>{barangay(r)}</span>
-                            {street(r) && (
-                              <span style={{ fontSize: "0.75rem", color: C.textSub, marginTop: 2 }}>
-                                {isCoordinateString(street(r)) ? "Translating coordinates…" : street(r)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="time-ago-cell">{timeAgo(r.created_at)}</td>
-
-                      <td>
-                        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: C.textMid, textTransform: "capitalize" }}>
-                          {damageType(r)}
-                        </span>
-                      </td>
-
-                      <td><Badge text={severity(r)} className={`sev-badge sev-${sev}`} /></td>
-                      <td><Badge text={pri}          className={`pri-badge pri-${pri}`} /></td>
-                      <td><Badge text={STATUS_LABELS[st] ?? st} className={`status-badge st-${st}`} /></td>
-
-                      <td onClick={e => e.stopPropagation()}>
-                        {r.assigned_to ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <div className="worker-avatar" style={{ width: 22, height: 22, fontSize: "0.6rem" }}>
-                              {initials(r.assigned_to)}
-                            </div>
-                            <span className="assigned-name">{r.assigned_to}</span>
-                          </div>
-                        ) : (
-                          <span className="unassigned">Unassigned</span>
-                        )}
-                      </td>
-
-                      <td onClick={e => e.stopPropagation()}>
-                        <ActionButtons
-                          r={r}
-                          onVerify={()  => handleVerify(r.id)}
-                          onAssign={()  => setAssignReport(r)}
-                          onStart={()   => handleStart(r.id)}
-                          onComplete={() => setCompleteReport(r)}
-                          onCancel={()  => setCancelReport(r)}
-                          isPatching={patching.has(r.id)}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* ── View modal ── */}
-        {viewReport && !completeReport && !assignReport && !cancelReport && (
-          <ViewModal
-            report={viewReport}
-            onClose={() => setViewReport(null)}
-            onMarkComplete={r => { setCompleteReport(r); setViewReport(null); }}
-            onAssign={r       => { setAssignReport(r);   setViewReport(null); }}
-            onCancel={r       => { setCancelReport(r);   setViewReport(null); }}
-            onVerify={id      => { handleVerify(id); setViewReport(p => ({ ...p, status: "verified" })); }}
-            onStart={id       => { handleStart(id);  setViewReport(p => ({ ...p, status: "in_progress" })); }}
-          />
-        )}
-
-        {completeReport && (
-          <CompleteModal
-            report={completeReport}
-            onClose={() => setCompleteReport(null)}
-            onSuccess={handleCompleteSuccess}
-          />
-        )}
-
-        {(assignReport || bulkMode === "assign") && (
-          <AssignModal
-            report={assignReport}
-            bulkIds={bulkMode === "assign" ? selectedIds : null}
-            teams={teams}
-            setTeams={setTeams}
-            onClose={() => { setAssignReport(null); setBulkMode(null); }}
-            onAssign={async (id, teamOrWorker) => {
-              if (bulkMode === "assign") {
-                await Promise.all(selectedIds.map(sid => patchStatus(sid, "ASSIGNED", { assigned_to: teamOrWorker.name })));
-                setSelected(new Set());
-                setBulkMode(null);
-              } else {
-                await handleAssign(id, teamOrWorker);
-              }
-            }}
-          />
-        )}
-
-        {cancelReport && (
-          <CancelModal
-            report={cancelReport}
-            onClose={() => setCancelReport(null)}
-            onCancel={handleCancel}
-          />
         )}
       </div>
-    </>
+
+      {error && <div className="admin-error-banner">{error}</div>}
+
+      {selected.size > 0 && (
+        <BulkBar
+          count={selected.size}
+          onComplete={() => bulkPatch("RESOLVED")}
+          onAssign={() => setBulkMode("assign")}
+          onCancel={() => bulkPatch("CANCELLED")}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
+
+      <div className="manage-table-container">
+        <div className="table-responsive">
+          <table className="manage-table">
+            <colgroup>
+              <col className="col-check" />
+              <col className="col-report" />
+              <col className="col-location" />
+              <col className="col-reported" />
+              <col className="col-damage" />
+              <col className="col-photo" />
+              <col className="col-severity" />
+              <col className="col-priority" />
+              <col className="col-status" />
+              <col className="col-assigned" />
+              <col className="col-actions" />
+            </colgroup>
+            <thead>
+              <tr>
+                {[
+                  [null,        <input type="checkbox" checked={allSelected} onChange={toggleAll} className="amr-cb" />, false],
+                  [null,        "Report",      false],
+                  ["created_at","Reported",    true ],
+                  [null,        "Damage Type", false],
+                  [null,        "Photo",       false],
+                  ["severity",  "Severity",    true ],
+                  ["priority",  "Priority",    true ],
+                  ["status",    "Status",      true ],
+                  [null,        "Assigned To", false],
+                  [null,        "Actions",     false],
+                ].map(([col, label, sortable], i) => (
+                  <th
+                    key={i}
+                    onClick={sortable ? () => handleSort(col) : undefined}
+                    className={sortable ? "sortable" : ""}
+                  >
+                    <div className="th-content">
+                      {label}
+                      {sortable && <IcoSort size={12} active={sortCol === col} dir={sortDir} />}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={11} className="no-data">Loading reports…</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={11} className="no-data">No reports found</td></tr>
+              ) : filtered.map(r => {
+                const st       = r.status?.toLowerCase();
+                const pri      = getPriority(r);
+                const sev      = severity(r).toLowerCase();
+                const isCrit   = sev === "critical";
+                const isSelec  = selected.has(r.id);
+                const media    = mediaFull(r);
+
+                return (
+                  <tr
+                    key={r.id}
+                    className={`clickable-row ${isSelec ? "selected-row" : ""} ${isCrit ? "critical-row" : ""}`}
+                    onClick={() => setViewReport(r)}
+                  >
+                    <td className="col-check" onClick={e => { e.stopPropagation(); toggleOne(r.id); }}>
+                      <input type="checkbox" checked={isSelec} onChange={() => toggleOne(r.id)} className="amr-cb" />
+                    </td>
+
+                    <td className="col-report">
+                      <div className="report-number">#{String(r.id).padStart(3, "0")}</div>
+                    </td>
+
+                    <td className="col-location">
+                      <div className="location-cell-wrapper">
+                        <IcoMapPin size={14} className="location-pin-icon" />
+                        <div className="location-text-stack">
+                          <span className="location-barangay">{barangay(r)}</span>
+                          {street(r) && (
+                            <span className="location-street">
+                              {isCoordinateString(street(r)) ? "Translating coordinates…" : street(r)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="col-reported time-ago-cell">{timeAgo(r.created_at)}</td>
+
+                    <td>
+                      <span className="damage-type-text">
+                        {damageType(r)}
+                      </span>
+                    </td>
+
+                    <td className="col-photo" onClick={e => e.stopPropagation()}>
+                      {media?.url ? (
+                        <img
+                          src={media.url}
+                          alt=""
+                          className="photo-thumb"
+                          onClick={e => { e.stopPropagation(); setViewReport(r); }}
+                        />
+                      ) : (
+                        <IcoCamera size={16} className="photo-placeholder-icon" />
+                      )}
+                    </td>
+
+                    <td className="col-severity"><Badge text={severity(r)} className={`sev-badge sev-${sev}`} /></td>
+                    <td className="col-priority"><Badge text={pri}          className={`pri-badge pri-${pri}`} /></td>
+                    <td className="col-status"><Badge text={STATUS_LABELS[st] ?? st} className={`status-badge st-${st}`} /></td>
+
+                    <td className="col-assigned" onClick={e => e.stopPropagation()}>
+                      {r.assigned_to ? (
+                        <div className="assigned-cell-wrapper">
+                          <div className="worker-avatar assigned-avatar-sm">
+                            {initials(r.assigned_to)}
+                          </div>
+                          <span className="assigned-name">{r.assigned_to}</span>
+                        </div>
+                      ) : (
+                        <span className="unassigned">Unassigned</span>
+                      )}
+                    </td>
+
+                    <td className="col-actions" onClick={e => e.stopPropagation()}>
+                      <ActionButtons
+                        r={r}
+                        onVerify={()  => handleVerify(r.id)}
+                        onAssign={()  => setAssignReport(r)}
+                        onComplete={() => setCompleteReport(r)}
+                        onCancel={()  => setCancelReport(r)}
+                        isPatching={patching.has(r.id)}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {viewReport && !completeReport && !assignReport && !cancelReport && (
+        <ViewModal
+          report={viewReport}
+          onClose={() => setViewReport(null)}
+          onMarkComplete={r => { setCompleteReport(r); setViewReport(null); }}
+          onAssign={r       => { setAssignReport(r);   setViewReport(null); }}
+          onCancel={r       => { setCancelReport(r);   setViewReport(null); }}
+          onVerify={id      => { handleVerify(id); setViewReport(p => ({ ...p, status: "verified" })); }}
+        />
+      )}
+
+      {completeReport && (
+        <CompleteModal
+          report={completeReport}
+          onClose={() => setCompleteReport(null)}
+          onSuccess={handleCompleteSuccess}
+        />
+      )}
+
+      {(assignReport || bulkMode === "assign") && (
+        <AssignModal
+          report={assignReport}
+          bulkIds={bulkMode === "assign" ? selectedIds : null}
+          teams={teams}
+          setTeams={setTeams}
+          onClose={() => { setAssignReport(null); setBulkMode(null); }}
+          onAssign={async (id, teamOrWorker) => {
+            if (bulkMode === "assign") {
+              await Promise.all(selectedIds.map(sid => patchStatus(sid, "ASSIGNED", { assigned_to: teamOrWorker.name })));
+              setSelected(new Set());
+              setBulkMode(null);
+            } else {
+              await handleAssign(id, teamOrWorker);
+            }
+          }}
+        />
+      )}
+
+      {cancelReport && (
+        <CancelModal
+          report={cancelReport}
+          onClose={() => setCancelReport(null)}
+          onCancel={handleCancel}
+        />
+      )}
+    </div>
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   MODAL SHELL COMPONENTS
-──────────────────────────────────────────────────────────────────────────── */
 function ModalShell({ maxWidth = 860, onClose, children }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth }} onClick={e => e.stopPropagation()}>
+      <div className={`modal-content modal-content-${maxWidth <= 520 ? 'sm' : maxWidth <= 640 ? 'md' : 'lg'}`} onClick={e => e.stopPropagation()}>
         {children}
       </div>
     </div>
   );
 }
-function ModalTitle({ children, color }) {
-  return <h3 className="modal-title" style={{ color: color || C.green800 }}>{children}</h3>;
+function ModalTitle({ children, colorClass }) {
+  return <h3 className={`modal-title ${colorClass || ""}`}>{children}</h3>;
 }
 function CloseBtn({ onClose }) {
   return <button className="modal-close-btn" onClick={onClose}><IcoX size={20} /></button>;
@@ -801,14 +782,13 @@ function InfoBlock({ children }) {
 function InfoRow({ label, children }) {
   return (
     <div className="info-row">
-      <span style={{ fontWeight: 700, color: "#888" }}>{label}</span>
-      <span style={{ fontWeight: 600 }}>{children}</span>
+      <span className="info-row-label">{label}</span>
+      <span className="info-row-value">{children}</span>
     </div>
   );
 }
 
-/* ── View Modal ── */
-function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onVerify, onStart }) {
+function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onVerify }) {
   const st    = r.status?.toLowerCase();
   const media = mediaFull(r);
   const pri   = getPriority(r);
@@ -834,22 +814,22 @@ function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onV
             <InfoRow label="Severity"><Badge text={severity(r)} className={`sev-badge sev-${sev}`} /></InfoRow>
             <InfoRow label="Priority"><Badge text={pri} className={`pri-badge pri-${pri}`} /></InfoRow>
             <InfoRow label="Assigned To">
-              {r.assigned_to ?? <span style={{ color: "#aaa", fontStyle: "italic" }}>Unassigned</span>}
+              {r.assigned_to ?? <span className="unassigned-text">Unassigned</span>}
             </InfoRow>
             {r.description && (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#888", marginBottom: 4 }}>Description</div>
+              <div className="description-block">
+                <div className="description-label">Description</div>
                 <div className="additional-info">{r.description}</div>
               </div>
             )}
           </div>
 
           <div className="location-info">
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <IcoMapPin size={16} style={{ color: C.green600 }} />
+            <div className="location-info-wrapper">
+              <IcoMapPin size={16} className="location-info-pin" />
               <div>
-                <div style={{ fontWeight: 700, fontSize: "0.9rem", color: C.green800 }}>{barangay(r)}</div>
-                {street(r) && <div style={{ fontSize: "0.8rem", color: "#666", marginTop: 2 }}>{street(r)}</div>}
+                <div className="location-info-barangay">{barangay(r)}</div>
+                {street(r) && <div className="location-info-street">{street(r)}</div>}
               </div>
             </div>
           </div>
@@ -857,16 +837,17 @@ function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onV
           <div className="modal-actions">
             {st === "pending"     && <button className="action-btn wide ab-verify"   onClick={() => onVerify(r.id)}><IcoShield size={14} /> Verify Report</button>}
             {st === "verified"    && <button className="action-btn wide ab-assign"   onClick={() => onAssign(r)}><IcoUsers size={14} /> Assign Worker / Team</button>}
-            {st === "assigned"    && <button className="action-btn wide ab-start"    onClick={() => onStart(r.id)}><IcoWrench size={14} /> Start Work</button>}
-            {st === "in_progress" && <button className="action-btn wide ab-complete" onClick={() => onMarkComplete(r)}><IcoCheck size={14} /> Mark as Completed</button>}
-            {!["resolved", "rejected"].includes(st) && (
+            {(st === "assigned" || st === "in_progress") && (
+              <button className="action-btn wide ab-complete" onClick={() => onMarkComplete(r)}><IcoCheck size={14} /> Mark as Completed</button>
+            )}
+            {!["resolved", "rejected", "cancelled"].includes(st) && (
               <button className="action-btn wide ab-reject" onClick={() => onCancel(r)}><IcoBan size={14} /> Cancel Report</button>
             )}
           </div>
         </div>
 
         <div className="modal-right">
-          <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#555", marginBottom: 8 }}>Report Photo</div>
+          <div className="modal-photo-label">Report Photo</div>
           <div className="modal-media">
             {media ? (
               media.type === "video"
@@ -874,7 +855,7 @@ function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onV
                 : <img src={media.url} alt="Report" />
             ) : (
               <div className="modal-no-media">
-                <IcoCamera size={36} style={{ marginBottom: 10 }} />
+                <IcoCamera size={36} />
                 <div>No media attached</div>
               </div>
             )}
@@ -885,7 +866,6 @@ function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onV
   );
 }
 
-/* ── Complete Modal ── */
 function CompleteModal({ report: r, onClose, onSuccess }) {
   const [proofFile, setProofFile] = useState(null);
   const [preview,   setPreview]   = useState(null);
@@ -927,7 +907,7 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
           <InfoBlock>
             <InfoRow label="Report">#{String(r.id).padStart(3, "0")}</InfoRow>
             <InfoRow label="Reporter">{r.owner?.full_name ?? "Anonymous"}</InfoRow>
-            <InfoRow label="Location"><span style={{ fontWeight: 700 }}>{barangay(r)}</span></InfoRow>
+            <InfoRow label="Location"><span className="info-row-highlight">{barangay(r)}</span></InfoRow>
             <InfoRow label="Assigned To">{r.assigned_to ?? "—"}</InfoRow>
           </InfoBlock>
 
@@ -939,10 +919,10 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
                 : <div className="proof-placeholder"><IcoCamera size={28} /><p>Click to upload repair photo</p></div>
               }
             </div>
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
+            <input ref={fileRef} type="file" accept="image/*" className="proof-file-input" onChange={handleFileChange} />
           </div>
 
-          <div className="completion-form" style={{ marginTop: 12 }}>
+          <div className="completion-form completion-form-gap">
             <div className="completion-label">Admin Note <span className="optional">(optional)</span></div>
             <textarea
               className="completion-comment"
@@ -955,25 +935,25 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
 
           {err && <div className="admin-error-banner">{err}</div>}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button className="complete-btn"      style={{ flex: 1 }} disabled={saving} onClick={handleSubmit}>
+          <div className="modal-actions-row">
+            <button className="complete-btn modal-action-btn" disabled={saving} onClick={handleSubmit}>
               {saving ? "Saving…" : "Confirm Completion"}
             </button>
-            <button className="admin-decline-btn" style={{ flex: 1, color: "#555", borderColor: "#ddd" }} disabled={saving} onClick={onClose}>
+            <button className="admin-decline-btn modal-action-btn" disabled={saving} onClick={onClose}>
               Cancel
             </button>
           </div>
         </div>
 
         <div className="modal-right">
-          <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#555", marginBottom: 8 }}>Original Report Photo</div>
+          <div className="modal-photo-label">Original Report Photo</div>
           <div className="modal-media">
             {media ? (
               media.type === "video"
                 ? <video src={media.url} controls />
                 : <img src={media.url} alt="Original" />
             ) : (
-              <div className="modal-no-media"><IcoCamera size={36} style={{ marginBottom: 10 }} /><div>No media attached</div></div>
+              <div className="modal-no-media"><IcoCamera size={36} /><div>No media attached</div></div>
             )}
           </div>
         </div>
@@ -982,7 +962,6 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
   );
 }
 
-/* ── Assign Modal ── */
 function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign }) {
   const [tab,        setTab]        = useState("existing");
   const [chosenTeam, setChosenTeam] = useState(null);
@@ -1016,25 +995,19 @@ function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign })
     setSaving(false);
   };
 
-  const tabStyle = (t) => ({
-    padding: "10px 20px", fontSize: "0.85rem", fontWeight: 700, border: "none", background: "none",
-    borderBottom: tab === t ? `2.5px solid ${C.green600}` : "2.5px solid transparent",
-    color: tab === t ? C.green700 : C.textSub, cursor: "pointer", flex: 1, textAlign: "center",
-  });
-
   return (
     <ModalShell maxWidth={520} onClose={onClose}>
       <CloseBtn onClose={onClose} />
       <ModalTitle>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <IcoUsers size={20} style={{ color: C.green600 }} /> {title}
+        <div className="assign-modal-title">
+          <IcoUsers size={20} className="assign-modal-title-icon" /> {title}
         </div>
       </ModalTitle>
 
-      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, margin: "0 -26px 16px" }}>
-        <button style={tabStyle("existing")} onClick={() => setTab("existing")}>Existing Teams</button>
-        <button style={tabStyle("create")}   onClick={() => setTab("create")}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+      <div className="tab-container">
+        <button className={`tab-btn ${tab === "existing" ? "tab-btn-active" : ""}`} onClick={() => setTab("existing")}>Existing Teams</button>
+        <button className={`tab-btn ${tab === "create" ? "tab-btn-active" : ""}`}   onClick={() => setTab("create")}>
+          <div className="label-with-icon">
             <IcoPlus size={14} /> Create New Team
           </div>
         </button>
@@ -1048,8 +1021,8 @@ function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign })
               <div key={t.id} className={`worker-card ${chosen ? "selected-worker" : ""}`} onClick={() => setChosenTeam(t)}>
                 <div className="worker-avatar">{initials(t.name)}</div>
                 <div className="worker-name">
-                  <div style={{ fontSize: "0.9rem" }}>{t.name}</div>
-                  <div style={{ fontSize: "0.75rem", color: "#777", fontWeight: 500, marginTop: 2 }}>
+                  <div className="team-name-text">{t.name}</div>
+                  <div className="team-meta-text">
                     Lead: {t.leader || "—"} · {t.members.length} member{t.members.length !== 1 ? "s" : ""}
                   </div>
                 </div>
@@ -1062,32 +1035,31 @@ function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign })
       )}
 
       {tab === "create" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="create-tab-container">
           <div className="completion-form">
-            <label className="completion-label">Team Name <span style={{ color: "#e74c3c" }}>*</span></label>
+            <label className="completion-label">Team Name <span className="required">*</span></label>
             <input
               value={newName}
               onChange={e => setNewName(e.target.value)}
               placeholder="e.g. Team Delta"
-              className="completion-comment"
-              style={{ padding: "10px 12px" }}
+              className="completion-comment form-input-styled"
             />
           </div>
           <div className="completion-form custom-select">
             <label className="completion-label">
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <IcoStar size={14} style={{ color: C.green600 }} /> Team Leader
+              <div className="label-with-icon">
+                <IcoStar size={14} className="label-icon" /> Team Leader
               </div>
             </label>
-            <select value={newLeader} onChange={e => setNewLeader(e.target.value)} className="completion-comment" style={{ padding: "10px 12px", width: "100%" }}>
+            <select value={newLeader} onChange={e => setNewLeader(e.target.value)} className="completion-comment select-fullwidth">
               <option value="">Select a team leader…</option>
               {WORKERS.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
             </select>
           </div>
           <div className="completion-form">
             <label className="completion-label">
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <IcoUsers size={14} style={{ color: C.green600 }} /> Team Members
+              <div className="label-with-icon">
+                <IcoUsers size={14} className="label-icon" /> Team Members
               </div>
             </label>
             <div className="worker-list">
@@ -1095,10 +1067,10 @@ function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign })
                 const checked  = newMembers.has(w.name);
                 const isLeader = w.name === newLeader;
                 return (
-                  <label key={w.id} className={`worker-card ${checked ? "selected-worker" : ""}`} style={{ cursor: isLeader ? "not-allowed" : "pointer" }}>
+                  <label key={w.id} className={`worker-card ${checked ? "selected-worker" : ""} ${isLeader ? "worker-card-leader" : ""}`}>
                     <input type="checkbox" className="amr-cb" checked={checked || isLeader} disabled={isLeader} onChange={() => !isLeader && toggleMember(w.name)} />
-                    <div className="worker-avatar" style={{ width: 28, height: 28, fontSize: "0.7rem", background: C.green100, color: C.green800 }}>{initials(w.name)}</div>
-                    <span className="worker-name" style={{ fontSize: "0.85rem" }}>{w.name}</span>
+                    <div className="worker-avatar worker-avatar-xs">{initials(w.name)}</div>
+                    <span className="worker-name worker-name-sm">{w.name}</span>
                     {isLeader && <Badge text="Leader" className="pri-badge pri-low" />}
                   </label>
                 );
@@ -1108,16 +1080,15 @@ function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign })
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+      <div className="modal-actions-row">
         <button
-          className="complete-btn"
-          style={{ flex: 1 }}
+          className="complete-btn modal-action-btn"
           disabled={saving || (tab === "existing" && !chosenTeam) || (tab === "create" && !newName.trim())}
           onClick={handleConfirm}
         >
           {saving ? "Assigning…" : tab === "create" ? "Create Team & Assign" : "Confirm Assignment"}
         </button>
-        <button className="admin-decline-btn" style={{ flex: 1, color: "#555", borderColor: "#ddd" }} onClick={onClose}>
+        <button className="admin-decline-btn modal-action-btn modal-decline-btn" onClick={onClose}>
           Cancel
         </button>
       </div>
@@ -1125,7 +1096,6 @@ function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign })
   );
 }
 
-/* ── Cancel Modal ── */
 function CancelModal({ report: r, onClose, onCancel }) {
   const [step,   setStep]   = useState(1);
   const [reason, setReason] = useState("");
@@ -1143,57 +1113,56 @@ function CancelModal({ report: r, onClose, onCancel }) {
 
       {step === 1 ? (
         <>
-          <div style={{ textAlign: "center", marginBottom: 20 }}>
-            <div style={{ width: 60, height: 60, borderRadius: "50%", background: "#fdecea", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", border: "2px solid #f5c6cb" }}>
-              <IcoBan size={28} style={{ color: "#c0392b" }} />
+          <div className="cancel-modal-center">
+            <div className="cancel-icon-wrapper">
+              <IcoBan size={28} className="cancel-icon" />
             </div>
-            <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#333", margin: "0 0 10px" }}>
+            <h3 className="cancel-modal-title">
               Cancel Report #{String(r.id).padStart(3, "0")}?
             </h3>
-            <p style={{ fontSize: "0.85rem", color: "#777", margin: 0, lineHeight: 1.6 }}>
+            <p className="cancel-modal-desc">
               This action marks the report as cancelled. It cannot be easily undone.
             </p>
           </div>
 
-          <div className="info-card" style={{ marginBottom: 24, background: "#f9f9f9" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <IcoMapPin size={16} style={{ color: C.green600 }} />
-              <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "#444" }}>{barangay(r)}</span>
+          <div className="info-card cancel-info-card">
+            <div className="cancel-location-row">
+              <IcoMapPin size={16} className="cancel-location-pin" />
+              <span className="cancel-barangay">{barangay(r)}</span>
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="cancel-badges-row">
               <Badge text={damageType(r)} className="sev-badge" />
               <Badge text={severity(r)}   className={`sev-badge sev-${severity(r).toLowerCase()}`} />
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button className="admin-decline-btn" style={{ flex: 1, color: "#555", borderColor: "#ddd" }} onClick={onClose}>Go Back</button>
-            <button className="complete-btn"       style={{ flex: 1, background: "#c0392b" }} onClick={() => setStep(2)}>Yes, Cancel</button>
+          <div className="modal-actions-row">
+            <button className="admin-decline-btn modal-action-btn modal-decline-btn" onClick={onClose}>Go Back</button>
+            <button className="complete-btn modal-action-btn cancel-confirm-btn" onClick={() => setStep(2)}>Yes, Cancel</button>
           </div>
         </>
       ) : (
         <>
-          <ModalTitle color="#c0392b">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <ModalTitle colorClass="modal-title-danger">
+            <div className="assign-modal-title">
               <IcoBan size={20} /> Confirm Cancellation
             </div>
           </ModalTitle>
 
-          <div className="completion-form" style={{ marginTop: 20 }}>
+          <div className="completion-form cancel-reason-form">
             <label className="completion-label">Reason for cancellation <span className="optional">(optional)</span></label>
             <textarea
-              className="completion-comment"
+              className="completion-comment cancel-reason-textarea"
               rows={4}
               value={reason}
               onChange={e => setReason(e.target.value)}
               placeholder="e.g. Duplicate report, incorrect location…"
-              style={{ background: "#fef2f2" }}
             />
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
-            <button className="admin-decline-btn" style={{ flex: 1, color: "#555", borderColor: "#ddd" }} onClick={() => setStep(1)}>Go Back</button>
-            <button className="complete-btn" style={{ flex: 1, background: "#c0392b" }} disabled={saving} onClick={handleFinal}>
+          <div className="modal-actions-row">
+            <button className="admin-decline-btn modal-action-btn modal-decline-btn" onClick={() => setStep(1)}>Go Back</button>
+            <button className="complete-btn modal-action-btn cancel-confirm-btn" disabled={saving} onClick={handleFinal}>
               {saving ? "Cancelling…" : "Confirm Cancellation"}
             </button>
           </div>

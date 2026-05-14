@@ -1,7 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import "./MapView.css";
-import Sidebar from "../../components/Sidebar.jsx";
-import AppHeader from "../../components/AppHeader.jsx";
 import {
   MapContainer, TileLayer, Marker, Popup,
   Polygon, useMap, Circle, ZoomControl,
@@ -14,14 +12,17 @@ import {
   MapPin, AlertTriangle, Clock, CheckCircle2,
   BarChart2, Layers, Search, X, Maximize2,
   Navigation, SlidersHorizontal, ChevronDown,
-  Flame, Circle as CircleIcon, Map,
+  Flame, Circle as CircleIcon, Map, RefreshCw,
 } from "lucide-react";
 
 // ─── Image helper ──────────────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 const getThumb = (r) => {
   const url = r?.media_attachments?.[0]?.file_url;
-  return url ? `${BASE_URL}${url}` : null;
+  if (!url) return null;
+  return url.startsWith("http")
+    ? url
+    : `${BASE_URL.replace(/\/$/, "")}${url}`;
 };
 
 // ─── Fix Leaflet default icon URLs ────────────────────────────────────────────
@@ -31,6 +32,11 @@ L.Icon.Default.mergeOptions({
   iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
+
+// ─── Normalization helpers ────────────────────────────────────────────────────
+const normSev    = (s) => (s || "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+const normStatus = (s) => (s || "").toLowerCase();
+const normDmg    = (s) => (s || "").toLowerCase();
 
 // ─── Custom SVG marker icons ───────────────────────────────────────────────────
 const makeSvgIcon = (color, pulse = false) =>
@@ -56,20 +62,35 @@ const ICONS = {
   unknown:      makeSvgIcon("#6b7280"),
 };
 
-const getIcon = (r) =>
-  ICONS[(r.ai_severity || "").toLowerCase().replace(/[^a-z_]/g, "")] || ICONS.unknown;
+const getIcon = (r) => ICONS[normSev(r.ai_severity)] || ICONS.unknown;
 
 const SEV_COLOR = { critical: "#ef4444", non_critical: "#f59e0b", unknown: "#6b7280" };
-const getSevColor = (s) =>
-  SEV_COLOR[(s || "").toLowerCase().replace(/[^a-z_]/g, "")] || SEV_COLOR.unknown;
+const getSevColor = (s) => SEV_COLOR[normSev(s)] || SEV_COLOR.unknown;
 
 const STATUS_LABEL = {
-  PENDING:     "Pending",
-  VERIFIED:    "Verified",
-  IN_PROGRESS: "In Progress",
-  RESOLVED:    "Resolved",
-  DECLINED:    "Declined",
+  pending:     "Pending",
+  verified:    "Verified",
+  in_progress: "In Progress",
+  resolved:    "Resolved",
+  declined:    "Declined",
 };
+
+const getStatusLabel = (s) => STATUS_LABEL[normStatus(s)] || s || "—";
+
+// ─── Date filter helper ───────────────────────────────────────────────────────
+const DATE_FILTERS = [
+  { label: "All time",   value: "all"   },
+  { label: "Last 24h",   value: "24h"   },
+  { label: "Last week",  value: "week"  },
+  { label: "Last month", value: "month" },
+];
+
+function passesDateFilter(r, range) {
+  if (range === "all") return true;
+  const created = new Date(r.created_at ?? r.date_reported ?? 0);
+  const ms = { "24h": 86_400_000, week: 604_800_000, month: 2_592_000_000 }[range];
+  return Date.now() - created.getTime() <= ms;
+}
 
 // ─── Map config ────────────────────────────────────────────────────────────────
 const MALABON_BOUNDARY = [
@@ -81,30 +102,35 @@ const MALABON_BOUNDARY = [
 ];
 const CENTER = [14.6615, 120.966];
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * TILE PROVIDERS — free, keyless endpoints
+ * ═══════════════════════════════════════════════════════════════════════════════
+ */
 const TILES = {
   street: {
     label: "Street", icon: <Map size={12} />,
     light: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    dark:  "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
-    attr:  "&copy; OpenStreetMap / Stadia Maps",
+    dark:  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attr:  '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> / CartoDB',
   },
   dark: {
     label: "Dark", icon: <Layers size={12} />,
-    light: "https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png",
-    dark:  "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
-    attr:  "&copy; Stadia Maps",
+    light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    dark:  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attr:  '&copy; <a href="https://carto.com/attributions">CartoDB</a> / OSM',
   },
   satellite: {
     label: "Satellite", icon: <CircleIcon size={12} />,
     light: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     dark:  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attr:  "&copy; Esri",
+    attr:  '&copy; Esri',
   },
   topo: {
     label: "Topo", icon: <BarChart2 size={12} />,
     light: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    dark:  "https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png",
-    attr:  "&copy; OpenTopoMap / Stadia Maps",
+    dark:  "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attr:  '&copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
   },
 };
 
@@ -115,6 +141,7 @@ const VIEW_MODES = [
 ];
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
+
 function FlyTo({ target }) {
   const map = useMap();
   useEffect(() => {
@@ -123,28 +150,95 @@ function FlyTo({ target }) {
   return null;
 }
 
+function MapBootstrap({ panelOpen }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    const container = map.getContainer();
+    const invalidate = () => {
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        map.invalidateSize({ animate: true, debounceMoveend: true });
+      }
+    };
+    const timers = [
+      setTimeout(invalidate, 0),
+      setTimeout(invalidate, 50),
+      setTimeout(invalidate, 150),
+      setTimeout(invalidate, 300),
+      setTimeout(invalidate, 600),
+      setTimeout(invalidate, 1000),
+    ];
+    const onResize = () => invalidate();
+    window.addEventListener("resize", onResize);
+    let ro;
+    if ("ResizeObserver" in window) {
+      ro = new ResizeObserver(() => invalidate());
+      ro.observe(container);
+    }
+    return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener("resize", onResize);
+      if (ro) ro.disconnect();
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (!map) return;
+    const timers = [
+      setTimeout(() => map.invalidateSize({ animate: true }), 50),
+      setTimeout(() => map.invalidateSize({ animate: true }), 350),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [panelOpen, map]);
+
+  return null;
+}
+
+function TileErrorHandler() {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    const onTileError = (e) => {
+      console.warn("[Snap2Fix] Tile failed:", e?.url);
+    };
+    map.on("tileerror", onTileError);
+    return () => map.off("tileerror", onTileError);
+  }, [map]);
+  return null;
+}
+
 function HeatmapLayer({ reports }) {
   const map = useMap();
-  const ref = useRef(null);
+  const layerRef = useRef(null);
   useEffect(() => {
     const pts = reports
       .filter((r) => r.latitude && r.longitude)
       .map((r) => {
         const w =
-          (r.ai_severity || "").toLowerCase() === "critical"     ? 1.0
-          : (r.ai_severity || "").toLowerCase() === "non_critical" ? 0.5 : 0.3;
+          normSev(r.ai_severity) === "critical"     ? 1.0
+          : normSev(r.ai_severity) === "non_critical" ? 0.5 : 0.3;
         return [parseFloat(r.latitude), parseFloat(r.longitude), w];
       });
-    if (!pts.length) return;
-    import("leaflet.heat").then(() => {
-      if (ref.current) map.removeLayer(ref.current);
-      ref.current = L.heatLayer(pts, {
-        radius: 35, blur: 25, maxZoom: 17,
-        gradient: { 0.2: "#3b82f6", 0.5: "#f59e0b", 1.0: "#ef4444" },
-      }).addTo(map);
-    });
+    if (!pts.length || !map) return;
+    let cancelled = false;
+    import("leaflet.heat")
+      .then(() => {
+        if (cancelled || !map || !L.heatLayer) return;
+        if (layerRef.current) map.removeLayer(layerRef.current);
+        layerRef.current = L.heatLayer(pts, {
+          radius: 35, blur: 25, maxZoom: 17,
+          gradient: { 0.2: "#3b82f6", 0.5: "#f59e0b", 1.0: "#ef4444" },
+        }).addTo(map);
+      })
+      .catch((err) => console.error("[Snap2Fix] leaflet.heat load failed:", err));
     return () => {
-      if (ref.current) { map.removeLayer(ref.current); ref.current = null; }
+      cancelled = true;
+      if (layerRef.current && map) {
+        map.removeLayer(layerRef.current);
+        layerRef.current = null;
+      }
     };
   }, [reports, map]);
   return null;
@@ -198,46 +292,51 @@ export default function MapView() {
 
   const [viewMode,     setViewMode]     = useState("markers");
   const [tileKey,      setTileKey]      = useState("street");
-  const [filterSev,    setFilterSev]    = useState("All");
-  const [filterStatus, setFilterStatus] = useState("All");
-  const [filterDmg,    setFilterDmg]    = useState("All");
+  const [filterDmg,    setFilterDmg]    = useState("all");
+  const [filterSev,    setFilterSev]    = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterDate,   setFilterDate]   = useState("all");
   const [search,       setSearch]       = useState("");
   const [flyTarget,    setFlyTarget]    = useState(null);
   const [lightbox,     setLightbox]     = useState(null);
   const [selected,     setSelected]     = useState(null);
   const [panelOpen,    setPanelOpen]    = useState(false);
   const [filtersOpen,  setFiltersOpen]  = useState(false);
-  const [sidebarOpen,  setSidebarOpen]  = useState(false);
 
-const { reports, loading, error, refetch } = useMapReports();
+  const { reports, loading, error, refetch } = useMapReports();
 
   // Derived state
   const safe   = Array.isArray(reports) ? reports : [];
   const mapped = safe.filter((r) => r.latitude && r.longitude);
   const q      = search.toLowerCase();
 
+  // ═══ FILTER LOGIC ═══
   const filtered = mapped.filter((r) => {
-    const sev    = (r.ai_severity || "").toLowerCase();
-    const status = r.status || "";
-    const dmg    = (r.ai_damage_type || "").toLowerCase();
-    const match  =
+    const dmg    = normDmg(r.ai_damage_type);
+    const sev    = normSev(r.ai_severity);
+    const status = normStatus(r.status);
+    const matchQ =
       !q ||
       (r.barangay    || "").toLowerCase().includes(q) ||
       (r.description || "").toLowerCase().includes(q) ||
       String(r.id).includes(q);
-    return (
-      match &&
-      (filterSev    === "All" || sev    === filterSev.toLowerCase()) &&
-      (filterStatus === "All" || status === filterStatus) &&
-      (filterDmg    === "All" || dmg    === filterDmg.toLowerCase())
-    );
+
+    const matchDmg    = filterDmg    === "all" || dmg    === filterDmg;
+    const matchSev    = filterSev    === "all" || sev    === filterSev;
+    const matchStatus = filterStatus === "all" || status === filterStatus;
+    const matchDate   = passesDateFilter(r, filterDate);
+
+    return matchQ && matchDmg && matchSev && matchStatus && matchDate;
   });
 
+  // Active filter count for badge
+  const activeFilters = [filterDmg, filterSev, filterStatus, filterDate].filter((f) => f !== "all").length;
+
   const counts = {
-    critical:    mapped.filter((r) => (r.ai_severity || "").toLowerCase() === "critical").length,
-    nonCritical: mapped.filter((r) => (r.ai_severity || "").toLowerCase() === "non_critical").length,
-    inProgress:  mapped.filter((r) => r.status === "IN_PROGRESS").length,
-    resolved:    mapped.filter((r) => r.status === "RESOLVED").length,
+    critical:    mapped.filter((r) => normSev(r.ai_severity) === "critical").length,
+    nonCritical: mapped.filter((r) => normSev(r.ai_severity) === "non_critical").length,
+    inProgress:  mapped.filter((r) => normStatus(r.status) === "in_progress").length,
+    resolved:    mapped.filter((r) => normStatus(r.status) === "resolved").length,
   };
 
   const openPanel = useCallback((r) => {
@@ -251,19 +350,9 @@ const { reports, loading, error, refetch } = useMapReports();
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    <>
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <AppHeader onMenuToggle={() => setSidebarOpen((p) => !p)} />
+    <div data-theme={theme} className="mv-shell">
 
-      {sidebarOpen && (
-        <div
-          className="mv-sidebar-backdrop"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      <div data-theme={theme} className="mv-root">
+      <div className="mv-root">
 
         {/* ── Top bar ── */}
         <header className="mv-topbar">
@@ -357,6 +446,15 @@ const { reports, loading, error, refetch } = useMapReports();
                 {filtered.length !== 1 ? "reports" : "report"}
               </span>
               <button
+                className="mv-ctrl-btn"
+                onClick={() => refetch?.()}
+                title="Refresh"
+              >
+                <RefreshCw size={14} />
+              </button>
+
+              {/* ═══ FILTERS DROPDOWN BUTTON ═══ */}
+              <button
                 className={`mv-filter-toggle${filtersOpen ? " mv-filter-toggle--active" : ""}`}
                 onClick={() => setFiltersOpen((p) => !p)}
                 aria-expanded={filtersOpen}
@@ -364,6 +462,9 @@ const { reports, loading, error, refetch } = useMapReports();
               >
                 <SlidersHorizontal size={14} />
                 <span>Filters</span>
+                {activeFilters > 0 && (
+                  <span className="mv-filter-badge">{activeFilters}</span>
+                )}
                 <ChevronDown
                   size={12}
                   className={`mv-chevron${filtersOpen ? " mv-chevron--open" : ""}`}
@@ -372,6 +473,7 @@ const { reports, loading, error, refetch } = useMapReports();
             </div>
           </div>
 
+          {/* ═══ FILTER DRAWER (dropdown) ═══ */}
           <div
             id="mv-filter-drawer"
             className={`mv-filter-drawer${filtersOpen ? " mv-filter-drawer--open" : ""}`}
@@ -379,9 +481,17 @@ const { reports, loading, error, refetch } = useMapReports();
           >
             <div className="mv-filter-inner">
               <label className="mv-filter-label">
+                <span>Damage Type</span>
+                <select className="mv-select" value={filterDmg} onChange={(e) => setFilterDmg(e.target.value)}>
+                  <option value="all">All Types</option>
+                  <option value="pothole">Pothole</option>
+                  <option value="crack">Crack</option>
+                </select>
+              </label>
+              <label className="mv-filter-label">
                 <span>Severity</span>
                 <select className="mv-select" value={filterSev} onChange={(e) => setFilterSev(e.target.value)}>
-                  <option value="All">All Severity</option>
+                  <option value="all">All Severity</option>
                   <option value="critical">Critical</option>
                   <option value="non_critical">Non-Critical</option>
                 </select>
@@ -389,25 +499,31 @@ const { reports, loading, error, refetch } = useMapReports();
               <label className="mv-filter-label">
                 <span>Status</span>
                 <select className="mv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                  <option value="All">All Status</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="VERIFIED">Verified</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="RESOLVED">Resolved</option>
-                  <option value="DECLINED">Declined</option>
+                  <option value="all">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="declined">Declined</option>
                 </select>
               </label>
               <label className="mv-filter-label">
-                <span>Damage</span>
-                <select className="mv-select" value={filterDmg} onChange={(e) => setFilterDmg(e.target.value)}>
-                  <option value="All">All Damage</option>
-                  <option value="pothole">Pothole</option>
-                  <option value="crack">Crack</option>
+                <span>Date Range</span>
+                <select className="mv-select" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}>
+                  {DATE_FILTERS.map(({ label, value }) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
               </label>
               <button
                 className="mv-filter-reset"
-                onClick={() => { setFilterSev("All"); setFilterStatus("All"); setFilterDmg("All"); }}
+                onClick={() => {
+                  setFilterDmg("all");
+                  setFilterSev("all");
+                  setFilterStatus("all");
+                  setFilterDate("all");
+                  setSearch("");
+                }}
               >
                 Reset
               </button>
@@ -432,12 +548,16 @@ const { reports, loading, error, refetch } = useMapReports();
               </div>
             ) : (
               <MapContainer
-                center={CENTER} zoom={14} minZoom={12}
+                center={CENTER}
+                zoom={14}
+                minZoom={12}
                 zoomControl={false}
-                style={{ height: "100%", width: "100%" }}
+                className="mv-leaflet-instance"
               >
                 <TileLayer key={tileUrl} url={tileUrl} attribution={tile.attr} />
                 <ZoomControl position="bottomright" />
+                <MapBootstrap panelOpen={panelOpen} />
+                <TileErrorHandler />
                 <FlyTo target={flyTarget} />
 
                 <Polygon
@@ -452,7 +572,7 @@ const { reports, loading, error, refetch } = useMapReports();
                 {viewMode === "density" && <DensityLayer reports={filtered} />}
 
                 {viewMode === "markers" && filtered.map((r) => {
-                  const thumb = getThumb(r); // ✅ fixed
+                  const thumb = getThumb(r);
                   return (
                     <Marker
                       key={r.id}
@@ -466,39 +586,51 @@ const { reports, loading, error, refetch } = useMapReports();
                             <span className="mv-popup-id">#{r.id}</span>
                             <span
                               className="mv-popup-sev"
-                              style={{ background: getSevColor(r.ai_severity) }}
+                              style={{ background: getSevColor(r.ai_severity), color: "#fff" }}
                             >
-                              {r.ai_severity || "Unknown"}
+                              {normSev(r.ai_severity) === "critical"
+                                ? "Critical"
+                                : normSev(r.ai_severity) === "non_critical"
+                                ? "Non-Critical"
+                                : "Unknown"}
                             </span>
                           </div>
-                          {thumb && ( // ✅ fixed
-                            <button
-                              className="mv-popup-img-btn"
-                              onClick={() => setLightbox(thumb)}
-                            >
-                              <img src={thumb} alt="Report evidence" />
-                              <span className="mv-popup-img-overlay">View Photo</span>
-                            </button>
-                          )}
+
                           <div className="mv-popup-body">
-                            <div className="mv-popup-row">
-                              <span>Location</span>
-                              <span>{r.barangay || r.street_name || "—"}</span>
-                            </div>
-                            <div className="mv-popup-row">
-                              <span>Damage</span>
-                              <span>{r.ai_damage_type || "—"}</span>
-                            </div>
-                            <div className="mv-popup-row">
-                              <span>Status</span>
-                              <span className={`mv-badge mv-badge--${(r.status || "").toLowerCase().replace("_", "-")}`}>
-                                {STATUS_LABEL[r.status] || r.status || "—"}
+                            <p className="mv-popup-desc">
+                              {(r.description || "").slice(0, 140)}
+                              {r.description?.length > 140 ? "…" : ""}
+                            </p>
+
+                            <div className="mv-popup-meta">
+                              <span className="mv-popup-status">
+                                {getStatusLabel(r.status)}
+                              </span>
+                              <span className="mv-popup-barangay">
+                                <MapPin size={10} strokeWidth={2} />
+                                {r.barangay || "—"}
                               </span>
                             </div>
+
+                            {thumb && (
+                              <div
+                                className="mv-popup-thumb"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightbox(thumb);
+                                }}
+                              >
+                                <img src={thumb} alt="Report evidence" />
+                              </div>
+                            )}
+
+                            <button
+                              className="mv-popup-btn"
+                              onClick={() => openPanel(r)}
+                            >
+                              View Details
+                            </button>
                           </div>
-                          <button className="mv-popup-cta" onClick={() => openPanel(r)}>
-                            View Details
-                          </button>
                         </div>
                       </Popup>
                     </Marker>
@@ -507,175 +639,175 @@ const { reports, loading, error, refetch } = useMapReports();
               </MapContainer>
             )}
 
-            {!loading && !error && (
-              <div className="mv-legend" aria-label="Severity legend">
-                <p className="mv-legend-title">Severity</p>
-                {[["#ef4444","Critical"],["#f59e0b","Non-Critical"],["#6b7280","Unknown"]].map(([c,l]) => (
-                  <div className="mv-legend-row" key={l}>
-                    <span className="mv-legend-dot" style={{ background: c }} aria-hidden="true" />
-                    <span>{l}</span>
-                  </div>
-                ))}
-                {viewMode === "heat" && (
-                  <p className="mv-legend-note">Intensity = density + severity</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ── Detail panel ── */}
-          <aside
-            className={`mv-panel${panelOpen ? " mv-panel--open" : ""}`}
-            aria-label="Report details"
-          >
-            <div className="mv-panel-drag" aria-hidden="true" />
-
-            {selected && (() => {
-              const selectedThumb = getThumb(selected); // ✅ fixed
-              return (
+            {/* ── Detail side-panel (always rendered for CSS transition) ── */}
+            <aside className={`mv-panel ${panelOpen ? "mv-panel--open" : ""}`}>
+              {selected && (
                 <>
-                  <div className="mv-panel-head">
-                    <div className="mv-panel-title-group">
-                      <h2 className="mv-panel-id">Report #{selected.id}</h2>
-                      <p className="mv-panel-loc">
-                        {selected.barangay || selected.street_name || "Malabon City"}
-                      </p>
-                    </div>
+                  <div className="mv-panel-header">
+                    <h2 className="mv-panel-title">Report #{selected.id}</h2>
                     <button
                       className="mv-panel-close"
-                      onClick={() => setPanelOpen(false)}
+                      onClick={() => {
+                        setPanelOpen(false);
+                        setSelected(null);
+                      }}
                       aria-label="Close panel"
                     >
-                      <X size={15} strokeWidth={2.5} />
+                      <X size={18} strokeWidth={2.5} />
                     </button>
                   </div>
 
-                  {selectedThumb && ( // ✅ fixed
-                    <button
-                      className="mv-panel-photo"
-                      onClick={() => setLightbox(selectedThumb)}
-                      aria-label="Expand photo"
-                    >
-                      <img src={selectedThumb} alt="Report evidence" />
-                      <span className="mv-panel-photo-overlay">
-                        <Maximize2 size={16} color="#fff" strokeWidth={2} aria-hidden="true" />
-                        <span>Expand</span>
+                  <div className="mv-panel-body">
+                    <div className="mv-panel-badges">
+                      <span
+                        className="mv-badge mv-badge--sev"
+                        style={{
+                          backgroundColor: getSevColor(selected.ai_severity) + "20",
+                          color: getSevColor(selected.ai_severity),
+                          border: `1px solid ${getSevColor(selected.ai_severity)}40`,
+                        }}
+                      >
+                        {normSev(selected.ai_severity) === "critical"
+                          ? "Critical"
+                          : normSev(selected.ai_severity) === "non_critical"
+                          ? "Non-Critical"
+                          : "Unknown"}
                       </span>
-                    </button>
-                  )}
+                      <span className="mv-badge mv-badge--status">
+                        {getStatusLabel(selected.status)}
+                      </span>
+                    </div>
 
-                  <div className="mv-panel-badges">
-                    <span
-                      className="mv-sev-chip"
-                      style={{
-                        background:  getSevColor(selected.ai_severity) + "18",
-                        color:       getSevColor(selected.ai_severity),
-                        borderColor: getSevColor(selected.ai_severity) + "40",
-                      }}
-                    >
-                      {selected.ai_severity || "Unknown"}
-                    </span>
-                    <span className={`mv-badge mv-badge--${(selected.status || "").toLowerCase().replace("_", "-")}`}>
-                      {STATUS_LABEL[selected.status] || selected.status || "—"}
-                    </span>
-                  </div>
-
-                  <div className="mv-panel-info">
-                    {[
-                      ["Damage Type", selected.ai_damage_type || "—"],
-                      ["Reporter",    selected.owner?.full_name || "—"],
-                      ["Barangay",    selected.barangay || "—"],
-                      ["Coordinates", selected.latitude
-                        ? `${parseFloat(selected.latitude).toFixed(5)}, ${parseFloat(selected.longitude).toFixed(5)}`
-                        : "—"],
-                      ["Submitted", selected.created_at
-                        ? new Date(selected.created_at).toLocaleDateString("en-PH", {
-                            year: "numeric", month: "long", day: "numeric",
-                          })
-                        : "—"],
-                    ].map(([label, value]) => (
-                      <div className="mv-info-row" key={label}>
-                        <span className="mv-info-label">{label}</span>
-                        <span className="mv-info-value">{value}</span>
-                      </div>
-                    ))}
-
-                    {selected.description && (
-                      <div className="mv-info-desc">
-                        <span className="mv-info-label">Description</span>
-                        <p>{selected.description}</p>
+                    {getThumb(selected) && (
+                      <div
+                        className="mv-panel-image"
+                        onClick={() => setLightbox(getThumb(selected))}
+                      >
+                        <img
+                          src={getThumb(selected)}
+                          alt="Report evidence"
+                          loading="lazy"
+                        />
+                        <div className="mv-panel-image-overlay">
+                          <Maximize2 size={20} color="#fff" />
+                        </div>
                       </div>
                     )}
-                  </div>
 
-                  <div className="mv-panel-actions">
-                    <button
-                      className="mv-fly-btn"
-                      onClick={() =>
-                        setFlyTarget([
-                          parseFloat(selected.latitude),
-                          parseFloat(selected.longitude),
-                        ])
-                      }
-                    >
-                      <Navigation size={14} strokeWidth={2.2} aria-hidden="true" />
-                      Fly to Location
-                    </button>
+                    <div className="mv-panel-section">
+                      <h3>Description</h3>
+                      <p>
+                        {selected.description || "No description provided."}
+                      </p>
+                    </div>
+
+                    <div className="mv-panel-section">
+                      <h3>Location</h3>
+                      <p className="mv-panel-row">
+                        <Navigation size={14} />
+                        {selected.barangay || "—"}
+                      </p>
+                      <p className="mv-panel-coords">
+                        {parseFloat(selected.latitude).toFixed(6)}°,{" "}
+                        {parseFloat(selected.longitude).toFixed(6)}°
+                      </p>
+                    </div>
+
+                    <div className="mv-panel-section">
+                      <h3>Damage Type</h3>
+                      <p>
+                        {selected.ai_damage_type
+                          ? selected.ai_damage_type
+                              .replace(/_/g, " ")
+                              .replace(/\b\w/g, (l) => l.toUpperCase())
+                          : "—"}
+                      </p>
+                    </div>
+
+                    <div className="mv-panel-section">
+                      <h3>Date Reported</h3>
+                      <p className="mv-panel-row">
+                        <Clock size={14} />
+                        {new Date(
+                          selected.created_at ?? selected.date_reported ?? 0
+                        ).toLocaleString("en-PH", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                    </div>
                   </div>
                 </>
-              );
-            })()}
-          </aside>
+              )}
+            </aside>
+          </div>
         </div>
 
-        {/* ── Bottom strip ── */}
-        <section className="mv-strip" aria-label="Recent reports">
-          <div className="mv-strip-label">
-            <span>Reports</span>
-          </div>
-          <div className="mv-strip-scroll" role="list">
-            {filtered.length === 0 && !loading ? (
-              <div className="mv-strip-empty">No reports match current filters.</div>
+        {/* ═══════════════════════════════════════════════════════════════════
+            BOTTOM STRIP — restored carousel of reports
+           ═══════════════════════════════════════════════════════════════════ */}
+        <div className="mv-strip">
+          <div className="mv-strip-label">Reports</div>
+          <div className="mv-strip-scroll">
+            {filtered.length === 0 ? (
+              <span className="mv-strip-empty">No reports match your filters</span>
             ) : (
-              filtered.slice(0, 20).map((r) => {
-                const thumb = getThumb(r); // ✅ fixed
+              filtered.map((r) => {
+                const thumb = getThumb(r);
                 return (
-                  <button
+                  <div
                     key={r.id}
                     className="mv-strip-card"
                     onClick={() => openPanel(r)}
-                    role="listitem"
-                    aria-label={`Report #${r.id} in ${r.barangay || "unknown location"}`}
                   >
-                    {thumb ? ( // ✅ fixed
-                      <img src={thumb} alt="" className="mv-strip-thumb" aria-hidden="true" />
+                    {thumb ? (
+                      <img
+                        className="mv-strip-thumb"
+                        src={thumb}
+                        alt=""
+                        loading="lazy"
+                      />
                     ) : (
-                      <div className="mv-strip-thumb mv-strip-thumb--empty" aria-hidden="true">
-                        <MapPin size={14} />
+                      <div className="mv-strip-thumb mv-strip-thumb--empty">
+                        <MapPin size={16} />
                       </div>
                     )}
                     <div className="mv-strip-info">
                       <span className="mv-strip-id">#{r.id}</span>
-                      <span className="mv-strip-loc">{r.barangay || "—"}</span>
+                      <span className="mv-strip-loc">
+                        {r.barangay || "—"}
+                      </span>
                       <span
                         className="mv-strip-sev"
                         style={{
-                          background: getSevColor(r.ai_severity) + "18",
-                          color:      getSevColor(r.ai_severity),
+                          background:
+                            normSev(r.ai_severity) === "critical"
+                              ? "rgba(239,68,68,0.15)"
+                              : normSev(r.ai_severity) === "non_critical"
+                              ? "rgba(245,158,11,0.15)"
+                              : "rgba(107,114,128,0.15)",
+                          color: getSevColor(r.ai_severity),
                         }}
                       >
-                        {r.ai_severity || "—"}
+                        {normSev(r.ai_severity) === "critical"
+                          ? "Critical"
+                          : normSev(r.ai_severity) === "non_critical"
+                          ? "Non-Critical"
+                          : "Unknown"}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 );
               })
             )}
           </div>
-        </section>
+        </div>
+
       </div>
 
-      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
-    </>
+      {lightbox && (
+        <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
+      )}
+    </div>
   );
 }

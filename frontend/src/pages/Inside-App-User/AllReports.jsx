@@ -6,13 +6,7 @@ import {
   Activity, Shield, TrendingUp, Database,
 } from "lucide-react";
 import "./AllReports.css";
-import Sidebar    from "../../components/Sidebar.jsx";
-import AppHeader  from "../../components/AppHeader.jsx";
 import { useReports } from "../../hooks/useReports";
-// NOTE: useAuthContext import removed — AllReports does not use `user` at all.
-// If you need user data here later, add:
-//   import { useAuthContext } from "../Contexts/AuthContext";
-// and call it INSIDE the AllReports() function body.
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
@@ -27,7 +21,6 @@ const getImageUrl = (report) => {
   return url ? `${BASE_URL}${url}` : null;
 };
 
-/* ── Pagination ──────────────────────────────────────────────── */
 function Pagination({ page, setPage, total, pageSize = 10 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
@@ -56,7 +49,6 @@ function Pagination({ page, setPage, total, pageSize = 10 }) {
   );
 }
 
-/* ── Report Modal ────────────────────────────────────────────── */
 function ReportModal({ report, onClose }) {
   const imageUrl = getImageUrl(report);
   const [imgError, setImgError] = useState(false);
@@ -81,18 +73,12 @@ function ReportModal({ report, onClose }) {
       aria-label="Report details"
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-
         <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
           <X size={18} />
         </button>
-
         <h3 className="modal-title">Report #{report.id}</h3>
-
         <div className="modal-body">
-
-          {/* ── Left column ── */}
           <div className="modal-left">
-
             <div className="reporter-info">
               <div className="info-row">
                 <strong>Report ID</strong>
@@ -105,7 +91,6 @@ function ReportModal({ report, onClose }) {
                 </div>
               )}
             </div>
-
             <div className="info-card">
               <div className="info-row">
                 <strong>Damage Type</strong>
@@ -123,14 +108,12 @@ function ReportModal({ report, onClose }) {
                   {report.status ?? "—"}
                 </span>
               </div>
-
               {report.status === "DECLINED" && report.decline_reason && (
                 <div className="decline-reason">
                   <AlertTriangle size={15} />
                   <span><strong>Reason:</strong> {report.decline_reason}</span>
                 </div>
               )}
-
               <div className="info-row">
                 <strong>AI Confidence</strong>
                 <span>
@@ -139,7 +122,6 @@ function ReportModal({ report, onClose }) {
                     : "—"}
                 </span>
               </div>
-
               {report.description && (
                 <div
                   className="info-row"
@@ -150,7 +132,6 @@ function ReportModal({ report, onClose }) {
                 </div>
               )}
             </div>
-
             <div className="location-info">
               <div className="info-row">
                 <strong>Barangay</strong>
@@ -173,7 +154,6 @@ function ReportModal({ report, onClose }) {
                 <span>{fmtDate(report.created_at)}</span>
               </div>
             </div>
-
             {report.is_flagged_fake && (
               <div className="ai-flag-badge" role="alert">
                 <AlertTriangle size={15} />
@@ -185,8 +165,6 @@ function ReportModal({ report, onClose }) {
               </div>
             )}
           </div>
-
-          {/* ── Right column (image) ── */}
           <div className="modal-right">
             <div className="modal-media">
               {imageUrl && !imgError ? (
@@ -211,73 +189,62 @@ function ReportModal({ report, onClose }) {
   );
 }
 
-/* ── Main Component ──────────────────────────────────────────── */
 function AllReports() {
-  // ✅ If you need user data, call hooks HERE — inside the component body:
-  // const { user } = useAuthContext();
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filters, setFilters] = useState({ type: "All", severity: "All", status: "All" });
   const [activeFilters, setActiveFilters] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { reports, loading, error, page, setPage, total, refetch } =
     useReports({
-      mine:     false,
-      status:   activeFilters.status   ?? null,
+      mine: false,
+      status: activeFilters.status ?? null,
       barangay: activeFilters.barangay ?? null,
     });
 
   const applyFilters = useCallback(() => {
     setPage(1);
     setActiveFilters({ status: filters.status !== "All" ? filters.status : null });
+    setDrawerOpen(false);
   }, [filters, setPage]);
 
   const resetFilters = useCallback(() => {
     setFilters({ type: "All", severity: "All", status: "All" });
     setActiveFilters({});
     setPage(1);
+    setDrawerOpen(false);
   }, [setPage]);
 
-  // Client-side type + severity filter (status is server-side via activeFilters)
   const filteredReports = reports.filter((r) => {
-    const type     = r.ai_damage_type ?? "";
-    const severity = r.ai_severity    ?? "";
+    const type = r.ai_damage_type ?? "";
+    const severity = r.ai_severity ?? "";
     return (
-      (filters.type     === "All" || type.toLowerCase()     === filters.type.toLowerCase()) &&
+      (filters.type === "All" || type.toLowerCase() === filters.type.toLowerCase()) &&
       (filters.severity === "All" || severity.toLowerCase() === filters.severity.toLowerCase())
     );
   });
 
   const handleRowClick = useCallback((report) => setSelectedReport(report), []);
-  const closeModal     = useCallback(() => setSelectedReport(null), []);
+  const closeModal = useCallback(() => setSelectedReport(null), []);
 
   return (
-    <>
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <AppHeader onMenuClick={() => setSidebarOpen(true)} />
-
-      {sidebarOpen && (
-        <div
-          className="sidebar-overlay active"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      <div className="allreports-container">
-
-        {/* ── Filter Panel ── */}
-        <div className="allreports-filters">
-          <div className="allreports-header">
-            <Database size={18} style={{ color: "var(--primary)", flexShrink: 0 }} />
-            <h2>All Reports</h2>
-            <span className="report-count">{total} total</span>
-          </div>
-
+    <div className="allreports-container">
+      <div className="allreports-filters">
+        <div className="allreports-header">
+          <Database size={18} style={{ color: "var(--primary)", flexShrink: 0 }} />
+          <h2>All Reports</h2>
+          <span className="report-count">{total} total</span>
+        </div>
+        <button
+          className="filter-toggle-btn"
+          onClick={() => setDrawerOpen(!drawerOpen)}
+          aria-expanded={drawerOpen}
+        >
+          <span>Filters</span>
+          <ChevronDown size={16} className={drawerOpen ? "chevron-rotate" : ""} />
+        </button>
+        <div className={`filter-drawer ${drawerOpen ? "open" : ""}`}>
           <div className="filters-row-allreports">
-
-            {/* Damage Type */}
             <div className="filter-group-allreports">
               <label>Damage Type</label>
               <div className="filter-buttons-allreports">
@@ -293,8 +260,6 @@ function AllReports() {
                 ))}
               </div>
             </div>
-
-            {/* Severity */}
             <div className="filter-group-allreports">
               <label htmlFor="ar-severity">Severity</label>
               <div className="custom-select-allreports">
@@ -310,8 +275,6 @@ function AllReports() {
                 <ChevronDown size={15} className="select-icon" />
               </div>
             </div>
-
-            {/* Status */}
             <div className="filter-group-allreports">
               <label htmlFor="ar-status">Status</label>
               <div className="custom-select-allreports">
@@ -330,120 +293,112 @@ function AllReports() {
                 <ChevronDown size={15} className="select-icon" />
               </div>
             </div>
-
-            {/* Apply / Reset */}
             <div className="filter-actions">
               <button className="apply-filter-btn" onClick={applyFilters}>Apply</button>
               <button className="reset-filter-btn" onClick={resetFilters}>Reset</button>
             </div>
           </div>
         </div>
-
-        {/* ── Error Banner ── */}
-        {error && (
-          <div className="reports-error-banner" role="alert">
-            <span className="flex-center">
-              <AlertTriangle size={17} className="inline-icon" />
-              {error}
-            </span>
-            <button onClick={refetch} className="retry-btn-small">Retry</button>
-          </div>
-        )}
-
-        {/* ── Table ── */}
-        <div className="allreports-table-container">
-          {loading ? (
-            <div className="table-skeleton">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="skeleton-row" />
-              ))}
-            </div>
-          ) : (
-            <table className="allreports-table" aria-label="All reports">
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Activity size={13} /> Report
-                    </span>
-                  </th>
-                  <th scope="col">Type</th>
-                  <th scope="col">
-                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <TrendingUp size={13} /> Severity
-                    </span>
-                  </th>
-                  <th scope="col">
-                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Shield size={13} /> Status
-                    </span>
-                  </th>
-                  <th scope="col">
-                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Calendar size={13} /> Date
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredReports.length > 0 ? (
-                  filteredReports.map((report) => (
-                    <tr
-                      key={report.id}
-                      onClick={() => handleRowClick(report)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          handleRowClick(report);
-                        }
-                      }}
-                      className="clickable-row"
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`View Report #${report.id}`}
-                    >
-                      <td>
-                        <strong>Report #{report.id}</strong>
-                        <div className="report-location-allreports" title={report.barangay}>
-                          <MapPin size={11} />
-                          {report.barangay ?? report.street_name ?? "—"}
-                        </div>
-                      </td>
-                      <td>{report.ai_damage_type ?? "—"}</td>
-                      <td>
-                        <span className={`severity ${toClass(report.ai_severity ?? "")}`}>
-                          {report.ai_severity ?? "—"}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`status ${toClass(report.status ?? "")}`}>
-                          {report.status ?? "—"}
-                        </span>
-                      </td>
-                      <td>{fmtDate(report.created_at)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="no-data-allreports">
-                      No reports found matching the selected filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
+      </div>
+      {error && (
+        <div className="reports-error-banner" role="alert">
+          <span className="flex-center">
+            <AlertTriangle size={17} className="inline-icon" />
+            {error}
+          </span>
+          <button onClick={refetch} className="retry-btn-small">Retry</button>
         </div>
-
-        {!loading && (
-          <Pagination page={page} setPage={setPage} total={total} pageSize={10} />
+      )}
+      <div className="allreports-table-container">
+        {loading ? (
+          <div className="table-skeleton">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="skeleton-row" />
+            ))}
+          </div>
+        ) : (
+          <table className="allreports-table" aria-label="All reports">
+            <thead>
+              <tr>
+                <th scope="col">
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Activity size={13} /> Report
+                  </span>
+                </th>
+                <th scope="col">Type</th>
+                <th scope="col">
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <TrendingUp size={13} /> Severity
+                  </span>
+                </th>
+                <th scope="col">
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Shield size={13} /> Status
+                  </span>
+                </th>
+                <th scope="col">
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Calendar size={13} /> Date
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredReports.length > 0 ? (
+                filteredReports.map((report) => (
+                  <tr
+                    key={report.id}
+                    onClick={() => handleRowClick(report)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleRowClick(report);
+                      }
+                    }}
+                    className="clickable-row"
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`View Report #${report.id}`}
+                  >
+                    <td>
+                      <strong>Report #{report.id}</strong>
+                      <div className="report-location-allreports" title={report.barangay}>
+                        <MapPin size={11} />
+                        {report.barangay ?? report.street_name ?? "—"}
+                      </div>
+                    </td>
+                    <td>{report.ai_damage_type ?? "—"}</td>
+                    <td>
+                      <span className={`severity ${toClass(report.ai_severity ?? "")}`}>
+                        {report.ai_severity ?? "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`status ${toClass(report.status ?? "")}`}>
+                        {report.status ?? "—"}
+                      </span>
+                    </td>
+                    <td>{fmtDate(report.created_at)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="no-data-allreports">
+                    No reports found matching the selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         )}
       </div>
-
+      {!loading && (
+        <Pagination page={page} setPage={setPage} total={total} pageSize={10} />
+      )}
       {selectedReport && (
         <ReportModal report={selectedReport} onClose={closeModal} />
       )}
-    </>
+    </div>
   );
 }
 

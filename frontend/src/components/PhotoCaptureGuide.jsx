@@ -1,5 +1,3 @@
-
-
 import React, {
   useState, useRef, useEffect, useCallback, useMemo,
 } from "react";
@@ -8,36 +6,35 @@ import { FaCamera, FaTimes, FaCheckCircle, FaBolt } from "react-icons/fa";
 import { MdSelectAll } from "react-icons/md";
 import "./PhotoCaptureGuide.css";
 
-// ─── Checklist data ────────────────────────────────────────────────────────────
 const CHECKLIST = [
   {
     id: "lighting",
     label: "Good lighting",
-    detail: "Use daylight or a well-lit area — avoid shadows over the damage",
+    detail: "Use daylight or a well-lit area — avoid harsh shadows over the damage",
     color: "amber",
   },
   {
     id: "distance",
-    label: "Proper distance (~1–3 m)",
-    detail: "Stand close enough for the damage to fill most of the frame",
+    label: "Proper distance (~1.5 m)",
+    detail: "Stand ~1.5 meters back so damage fills the reference circle",
     color: "blue",
+  },
+  {
+    id: "angle",
+    label: "Correct angle (45°–75°)",
+    detail: "Tilt phone down 45°–75° so camera points at the road surface",
+    color: "teal",
   },
   {
     id: "framing",
     label: "Full damage visible",
     detail: "Capture the entire damaged section with some surrounding road",
-    color: "teal",
+    color: "purple",
   },
   {
     id: "steady",
     label: "Steady, sharp image",
     detail: "Hold your device still — blurry photos reduce AI accuracy",
-    color: "purple",
-  },
-  {
-    id: "clear",
-    label: "No obstructions",
-    detail: "No vehicles or people blocking the damage area",
     color: "coral",
   },
   {
@@ -50,7 +47,6 @@ const CHECKLIST = [
 
 const TOTAL = CHECKLIST.length;
 
-// ─── Tiny confetti burst (CSS-driven, no library) ──────────────────────────────
 function ConfettiBurst() {
   const particles = useMemo(() => {
     return Array.from({ length: 18 }, (_, i) => ({
@@ -83,7 +79,6 @@ function ConfettiBurst() {
   );
 }
 
-// ─── Circular progress ring ────────────────────────────────────────────────────
 function ProgressRing({ value, max, size = 56, stroke = 4 }) {
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
@@ -128,20 +123,18 @@ function ProgressRing({ value, max, size = 56, stroke = 4 }) {
   );
 }
 
-// ─── Main component ────────────────────────────────────────────────────────────
 function PhotoCaptureGuide({ onContinue, onClose }) {
   const dialogRef  = useRef(null);
   const firstFocus = useRef(null);
   const [checked, setChecked] = useState({});
-  const [justSelected, setJustSelected] = useState(null); // id of last-tapped item
+  const [justSelected, setJustSelected] = useState(null);
   const [allJustSelected, setAllJustSelected] = useState(false);
-  const [completing, setCompleting] = useState(false);   // brief delay before proceed button active
+  const [completing, setCompleting] = useState(false);
 
   const count    = useMemo(() => Object.values(checked).filter(Boolean).length, [checked]);
   const allDone  = count === TOTAL;
   const progress = (count / TOTAL) * 100;
 
-  // ── Focus trap ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const el = dialogRef.current;
     if (!el) return;
@@ -166,14 +159,12 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
     return () => el.removeEventListener("keydown", trap);
   }, []);
 
-  // ── Escape key to close ───────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose?.();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // ── Completion delay (satisfying moment before button activates) ──────────────
   useEffect(() => {
     if (allDone) {
       const t = setTimeout(() => setCompleting(true), 420);
@@ -182,7 +173,6 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
     setCompleting(false);
   }, [allDone]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────────
   const toggle = useCallback((id) => {
     setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
     setJustSelected(id);
@@ -201,7 +191,6 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
     if (allDone && completing) onContinue?.();
   }, [allDone, completing, onContinue]);
 
-  // ── Render ────────────────────────────────────────────────────────────────────
   return ReactDOM.createPortal(
     <div
       className="pcg-backdrop"
@@ -212,7 +201,6 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
     >
       <div className="pcg-modal" ref={dialogRef} tabIndex={-1}>
 
-        {/* ── Close ───────────────────────────────────────────────────────────── */}
         <button
           className="pcg-close"
           onClick={onClose}
@@ -222,7 +210,6 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
           <FaTimes />
         </button>
 
-        {/* ── Header ──────────────────────────────────────────────────────────── */}
         <div className="pcg-header">
           <div className={`pcg-icon-wrap${allDone ? " done" : ""}`} aria-hidden="true">
             {allDone && <ConfettiBurst />}
@@ -249,7 +236,6 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
           )}
         </div>
 
-        {/* ── Progress area ────────────────────────────────────────────────────── */}
         <div className="pcg-progress-section" aria-label={`${count} of ${TOTAL} items checked`}>
           <div className="pcg-progress-meta">
             <div className="pcg-progress-left">
@@ -264,7 +250,6 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
               </div>
             </div>
 
-            {/* Select All */}
             {!allDone && (
               <button
                 className={`pcg-select-all${allJustSelected ? " burst" : ""}`}
@@ -278,7 +263,6 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
             )}
           </div>
 
-          {/* Linear bar */}
           <div
             className="pcg-bar-track"
             role="progressbar"
@@ -293,7 +277,6 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
           </div>
         </div>
 
-        {/* ── Checklist ────────────────────────────────────────────────────────── */}
         <ul className="pcg-list" role="list">
           {CHECKLIST.map((item, idx) => {
             const isChecked  = !!checked[item.id];
@@ -315,35 +298,29 @@ function PhotoCaptureGuide({ onContinue, onClose }) {
                 tabIndex={0}
                 onKeyDown={(e) => (e.key === " " || e.key === "Enter") && toggle(item.id)}
               >
-                {/* Checkbox bubble */}
                 <span className={`pcg-cb${isChecked ? " checked" : ""}`} aria-hidden="true">
                   {isChecked && <FaCheckCircle className="pcg-cb-icon" />}
                 </span>
 
-                {/* Emoji */}
                 <span className="pcg-emoji" aria-hidden="true">{item.emoji}</span>
 
-                {/* Text */}
                 <span className="pcg-item-text">
                   <span className="pcg-item-label">{item.label}</span>
                   <span className="pcg-item-detail">{item.detail}</span>
                 </span>
 
-                {/* Done flash */}
                 <span className="pcg-ripple" aria-hidden="true" />
               </li>
             );
           })}
         </ul>
 
-        {/* ── Hint (only when incomplete) ──────────────────────────────────────── */}
         {!allDone && (
           <p className="pcg-hint" aria-live="polite">
             ✦ Check all {TOTAL} items — or tap <strong>Select All</strong> to continue
           </p>
         )}
 
-        {/* ── CTA ─────────────────────────────────────────────────────────────── */}
         <div className="pcg-actions">
           <button
             className={[

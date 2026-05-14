@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./MyProfile.css";
 
-import Sidebar from "../../components/Sidebar.jsx";
-import AppHeader from "../../components/AppHeader.jsx";
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 
 import { ImLocation } from "react-icons/im";
@@ -18,6 +16,7 @@ import {
   FaTimes,
   FaStar,
   FaSortAmountDown,
+  FaChevronDown,
 } from "react-icons/fa";
 import { IoPersonSharp } from "react-icons/io5";
 import { MdLocationOn } from "react-icons/md";
@@ -146,7 +145,6 @@ function ReportDetailModal({ report, onClose, BASE_URL }) {
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="modal-box report-detail-modal">
-        {/* Fixed header — never scrolls */}
         <div className="modal-header-band">
           <h3 className="modal-title">
             <FaSearch />
@@ -157,7 +155,6 @@ function ReportDetailModal({ report, onClose, BASE_URL }) {
           </button>
         </div>
 
-        {/* Scrollable content */}
         <div className="modal-scroll-body">
           {imageUrl && (
             <img
@@ -300,37 +297,45 @@ function MyProfile() {
   const { profile, loading: profileLoading, update, saving } = useUser();
   const { reports, loading: reportsLoading } = useReports({ mine: true });
 
-  // UI state
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showConfirm, setShowConfirm]   = useState(false);
   const [activeTab, setActiveTab]       = useState("feed");
 
-  // Feed state
   const [reportFilter, setReportFilter] = useState("all");
   const [sortOption, setSortOption]     = useState("newest");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  // Settings form state
+  const [showFilters, setShowFilters] = useState(false);
+  const filtersRef = useRef(null);
+
   const [formData, setFormData]     = useState(null);
   const [saveError, setSaveError]   = useState("");
   const [formErrors, setFormErrors] = useState({});
 
-  // Password state
   const [pwData, setPwData]     = useState({ current: "", newPw: "", confirm: "" });
   const [pwErrors, setPwErrors] = useState({});
   const [showPw, setShowPw]     = useState({ current: false, newPw: false, confirm: false });
 
-  // Avatar upload state
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [uploading, setUploading]         = useState(false);
   const avatarInputRef                    = useRef(null);
 
-  // Modals
   const [selectedReport, setSelectedReport] = useState(null);
   const [showRepModal, setShowRepModal]     = useState(false);
 
-  // Toast
   const [toasts, setToasts] = useState([]);
+
+  /* Filter dropdown click-outside */
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (filtersRef.current && !filtersRef.current.contains(e.target)) {
+        setShowFilters(false);
+      }
+    };
+    if (showFilters) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showFilters]);
 
   /* Toast helpers */
   const showToast = (message, type = "info") => {
@@ -484,16 +489,12 @@ function MyProfile() {
     return url ? `${BASE_URL}${url}` : null;
   };
 
-  /* ─── Loading state ─── */
+  /* ─── Loading state (no layout wrappers) ─── */
   if (profileLoading)
     return (
-      <>
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <AppHeader onMenuClick={() => setSidebarOpen(true)} />
-        <div className="myprofile-container">
-          <p className="loading-text">Loading profile…</p>
-        </div>
-      </>
+      <div className="myprofile-container">
+        <p className="loading-text">Loading profile…</p>
+      </div>
     );
 
   const profilePicSrc =
@@ -501,28 +502,12 @@ function MyProfile() {
 
   return (
     <>
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <AppHeader onMenuClick={() => setSidebarOpen(true)} />
-
-      {sidebarOpen && (
-        <div
-          className="sidebar-overlay active"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
       <Toast toasts={toasts} removeToast={removeToast} />
 
       <div className="myprofile-container">
-
         {/* ── PROFILE HEADER ── */}
         <div className="profile-header">
-          <img
-            src={profilePicSrc}
-            alt="Profile"
-            className="profile-avatar"
-          />
+          <img src={profilePicSrc} alt="Profile" className="profile-avatar" />
 
           <div className="profile-info">
             <h2>{profile?.full_name || "—"}</h2>
@@ -591,24 +576,36 @@ function MyProfile() {
               </div>
 
               <div className="feed-controls">
-                <div className="feed-filters">
-                  {[
-                    { key: "all",         label: "All" },
-                    { key: "pending",     label: "Pending" },
-                    { key: "in_progress", label: "In Progress" },
-                    { key: "resolved",    label: "Resolved" },
-                  ].map(({ key, label }) => (
-                    <button
-                      key={key}
-                      className={reportFilter === key ? "active" : ""}
-                      onClick={() => {
-                        setReportFilter(key);
-                        setVisibleCount(PAGE_SIZE);
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                <div
+                  className={`filter-dropdown ${showFilters ? "open" : ""}`}
+                  ref={filtersRef}
+                >
+                  <button
+                    className="filter-toggle"
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    Filters <FaChevronDown />
+                  </button>
+                  <div className="filter-dropdown-panel">
+                    {[
+                      { key: "all",         label: "All" },
+                      { key: "pending",     label: "Pending" },
+                      { key: "in_progress", label: "In Progress" },
+                      { key: "resolved",    label: "Resolved" },
+                    ].map(({ key, label }) => (
+                      <button
+                        key={key}
+                        className={reportFilter === key ? "active" : ""}
+                        onClick={() => {
+                          setReportFilter(key);
+                          setVisibleCount(PAGE_SIZE);
+                          setShowFilters(false);
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="feed-sort">
@@ -732,14 +729,10 @@ function MyProfile() {
             <h3>Profile Settings</h3>
             <p>Customize your profile in Snap2Fix</p>
 
-            {/* Avatar */}
             <div className="settings-avatar">
               <div className="avatar-wrapper">
                 <img src={profilePicSrc} alt="Profile" />
-                <label
-                  className="camera-btn"
-                  title="Change profile picture"
-                >
+                <label className="camera-btn" title="Change profile picture">
                   <FaCamera className="change-camera-icon" />
                   <input
                     ref={avatarInputRef}
@@ -760,7 +753,6 @@ function MyProfile() {
               )}
             </div>
 
-            {/* Profile Form */}
             <div className="settings-form">
               <label>Full Name</label>
               <div className="input-with-icon">
@@ -777,9 +769,7 @@ function MyProfile() {
                 />
               </div>
               {formErrors.full_name && (
-                <p className="field-error">
-                  <BiError /> {formErrors.full_name}
-                </p>
+                <p className="field-error"><BiError /> {formErrors.full_name}</p>
               )}
 
               <label>Barangay</label>
@@ -797,9 +787,7 @@ function MyProfile() {
                 />
               </div>
               {formErrors.barangay && (
-                <p className="field-error">
-                  <BiError /> {formErrors.barangay}
-                </p>
+                <p className="field-error"><BiError /> {formErrors.barangay}</p>
               )}
 
               <label>City</label>
@@ -817,19 +805,14 @@ function MyProfile() {
                 />
               </div>
               {formErrors.city && (
-                <p className="field-error">
-                  <BiError /> {formErrors.city}
-                </p>
+                <p className="field-error"><BiError /> {formErrors.city}</p>
               )}
             </div>
 
             {saveError && <p className="save-error">{saveError}</p>}
 
             <div className="settings-actions">
-              <button
-                className="discard"
-                onClick={() => setActiveTab("feed")}
-              >
+              <button className="discard" onClick={() => setActiveTab("feed")}>
                 Discard
               </button>
               <button
@@ -841,11 +824,8 @@ function MyProfile() {
               </button>
             </div>
 
-            {/* ── Change Password ── */}
             <div className="change-password-section">
-              <h4>
-                <FaLock /> Change Password
-              </h4>
+              <h4><FaLock /> Change Password</h4>
 
               <div className="settings-form">
                 <label>Current Password</label>
@@ -864,17 +844,13 @@ function MyProfile() {
                   <button
                     type="button"
                     className="pw-toggle"
-                    onClick={() =>
-                      setShowPw((s) => ({ ...s, current: !s.current }))
-                    }
+                    onClick={() => setShowPw((s) => ({ ...s, current: !s.current }))}
                   >
                     {showPw.current ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
                 {pwErrors.current && (
-                  <p className="field-error">
-                    <BiError /> {pwErrors.current}
-                  </p>
+                  <p className="field-error"><BiError /> {pwErrors.current}</p>
                 )}
 
                 <label>New Password</label>
@@ -893,17 +869,13 @@ function MyProfile() {
                   <button
                     type="button"
                     className="pw-toggle"
-                    onClick={() =>
-                      setShowPw((s) => ({ ...s, newPw: !s.newPw }))
-                    }
+                    onClick={() => setShowPw((s) => ({ ...s, newPw: !s.newPw }))}
                   >
                     {showPw.newPw ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
                 {pwErrors.newPw && (
-                  <p className="field-error">
-                    <BiError /> {pwErrors.newPw}
-                  </p>
+                  <p className="field-error"><BiError /> {pwErrors.newPw}</p>
                 )}
 
                 <label>Confirm Password</label>
@@ -922,17 +894,13 @@ function MyProfile() {
                   <button
                     type="button"
                     className="pw-toggle"
-                    onClick={() =>
-                      setShowPw((s) => ({ ...s, confirm: !s.confirm }))
-                    }
+                    onClick={() => setShowPw((s) => ({ ...s, confirm: !s.confirm }))}
                   >
                     {showPw.confirm ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
                 {pwErrors.confirm && (
-                  <p className="field-error">
-                    <BiError /> {pwErrors.confirm}
-                  </p>
+                  <p className="field-error"><BiError /> {pwErrors.confirm}</p>
                 )}
               </div>
 

@@ -1,64 +1,20 @@
 import "./AppHeader.css";
-import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { FaUserCircle, FaSignOutAlt, FaBars } from "react-icons/fa";
+import { FaBars } from "react-icons/fa";
 
-import ConfirmChangesModal from "../pages/PopUps/ConfirmChangesModal";
-
-function AppHeader() {
-  const navigate = useNavigate();
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
-  const handleLogout = () => {
-    navigate("/");
-  };
-
-  const toggleSidebar = () => {
-    document.querySelector(".app-sidebar").classList.toggle("active");
-    document.querySelector(".sidebar-overlay").classList.toggle("active");
-  };
-
+function AppHeader({ onMenuClick, isCollapsed }) {
   return (
-    <header className="app-header">
-
+    <header className={`app-header ${isCollapsed ? "collapsed" : ""}`}>
       {/* LEFT SIDE */}
       <div className="app-header-left">
-
-        {/* BURGER BUTTON */}
-        <button className="burger-btn" onClick={toggleSidebar}>
+        <button className="burger-btn" onClick={onMenuClick} aria-label="Toggle sidebar">
           <FaBars />
         </button>
 
         <h2>Snap2Fix</h2>
       </div>
 
-      {/* RIGHT SIDE */}
-      <div className="app-header-right">
-        <span className="user-name">User</span>
-
-        <img 
-          src="/snap.jpg"
-          alt="Profile"
-          className="profile-image"
-        />
-
-        <button className="logout-btn" onClick={() => setShowLogoutConfirm(true)}>
-          <FaSignOutAlt />
-          Logout
-        </button>
-      </div>
-
-      {showLogoutConfirm && (
-        <ConfirmChangesModal
-          title="Log Out?"
-          message="Are you sure you want to log out of your account?"
-          confirmText="Log Out"
-          variant="danger"
-          onCancel={() => setShowLogoutConfirm(false)}
-          onConfirm={handleLogout}
-        />
-      )}
-
+      {/* Right side intentionally left empty */}
+      <div className="app-header-right" />
     </header>
   );
 }

@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdminAllReports.css";
-import AdminSidebar from "../../components/AdminSidebar.jsx";
-import AdminHeader  from "../../components/AdminHeader.jsx";
 import { getReports, updateReport, deleteReport, addComment } from "../../api/reports";
 import { sendNotification } from "../../api/notifications";
+import {
+  Search, X, Download, Check, XCircle, Trash2, Settings, MapPin, ArrowUpRight,
+  Loader2, ChevronFirst, ChevronLeft, ChevronRight, ChevronLast, User,
+  AlertTriangle, Calendar, FileText, Wrench, Image, Camera, Paperclip,
+  Mail, MailOpen, Send, CheckCircle, ClipboardList, ArrowDown, ArrowUp,
+  ArrowUpDown, Circle, StickyNote, Ban, UserCog, RotateCcw, ChevronUp, ChevronDown,
+} from "lucide-react";
 
-/* ─── constants ────────────────────────────────────────────────────────────── */
 const BASE_URL    = import.meta.env.VITE_API_URL || "";
 const PAGE_SIZE   = 20;
 const TYPE_OPTIONS   = ["All", "Crack", "Pothole"];
@@ -28,15 +32,13 @@ const STATUS_TRANSITIONS = {
 };
 const STATUS_FLOW_ORDER = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
 
-// Notification messages sent to reporters on each status change
 const NOTIF_TEMPLATES = {
-  VERIFIED:    (r) => ({ title: "Your report has been verified ✓",       message: `Report ${padId(r.id)} at ${location(r)} has been verified by our team.`,                  type: "success" }),
-  IN_PROGRESS: (r) => ({ title: "Repairs are underway 🔧",               message: `Work has started on the road damage at ${location(r)} that you reported.`,                type: "info"    }),
-  RESOLVED:    (r) => ({ title: "Your report has been resolved ✅",       message: `The road damage at ${location(r)} has been fully repaired. Thank you for reporting!`,     type: "success" }),
+  VERIFIED:    (r) => ({ title: "Your report has been verified",       message: `Report ${padId(r.id)} at ${location(r)} has been verified by our team.`,                  type: "success" }),
+  IN_PROGRESS: (r) => ({ title: "Repairs are underway",               message: `Work has started on the road damage at ${location(r)} that you reported.`,                type: "info"    }),
+  RESOLVED:    (r) => ({ title: "Your report has been resolved",       message: `The road damage at ${location(r)} has been fully repaired. Thank you for reporting!`,     type: "success" }),
   DECLINED:    (r, reason) => ({ title: "Your report has been declined",  message: reason ? `Your report was declined: ${reason}` : "Your report was reviewed and declined.", type: "warning" }),
 };
 
-/* ─── helpers ──────────────────────────────────────────────────────────────── */
 const toClass  = (s = "") => s.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 const fmtDate  = (iso) => iso ? new Date(iso).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "—";
 const padId    = (id) => `RPT-${String(id).padStart(4, "0")}`;
@@ -90,11 +92,9 @@ function exportCSV(rows) {
   URL.revokeObjectURL(url);
 }
 
-/* ─── main component ───────────────────────────────────────────────────────── */
 export default function AdminAllReports() {
   const navigate = useNavigate();
 
-  /* filters */
   const [search,      setSearch]      = useState("");
   const [dSearch,     setDSearch]     = useState("");
   const [filters,     setFilters]     = useState({
@@ -105,7 +105,6 @@ export default function AdminAllReports() {
   const [criticalOnly,setCriticalOnly]= useState(false);
   const [page,        setPage]        = useState(1);
 
-  /* data */
   const [rawReports, setRawReports] = useState([]);
   const [reports,   setReports]   = useState([]);
   const [total,     setTotal]     = useState(0);
@@ -113,7 +112,6 @@ export default function AdminAllReports() {
   const [error,     setError]     = useState(null);
   const [barangays, setBarangays] = useState(["All"]);
 
-  /* UI */
   const [selectedIds,    setSelectedIds]    = useState(new Set());
   const [bulkLoading,    setBulkLoading]    = useState(false);
   const [actionLoading,  setActionLoading]  = useState({});
@@ -126,94 +124,89 @@ export default function AdminAllReports() {
     setTimeout(() => setToast(null), 3_500);
   };
 
-  /* debounce search */
   useEffect(() => {
     const t = setTimeout(() => { setDSearch(search); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
 
-  /* fetch */
-// Fetches from server — only re-runs when page or server-side status changes
-const fetchReports = useCallback(async () => {
-  setLoading(true);
-  setError(null);
-  const params = { page, page_size: PAGE_SIZE };
-  if (filters.status !== "All") params.status = filters.status;
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const params = { page, page_size: PAGE_SIZE };
+    if (filters.status !== "All") params.status = filters.status;
 
-  const res = await getReports(params);
-  if (!res.success) {
-    setError(res.error);
+    const res = await getReports(params);
+    if (!res.success) {
+      setError(res.error);
+      setLoading(false);
+      return;
+    }
+
+    const data = res.data?.results ?? [];
+    setTotal(res.data?.total ?? 0);
+    setRawReports(data);
+
+    const bSet = new Set(["All"]);
+    data.forEach((r) => { if (r.barangay) bSet.add(r.barangay); });
+    setBarangays([...bSet]);
+
     setLoading(false);
-    return;
-  }
+  }, [page, filters.status]);
 
-  const data = res.data?.results ?? [];
-  setTotal(res.data?.total ?? 0);
-  setRawReports(data);
+  useEffect(() => {
+    let data = [...rawReports];
 
-  const bSet = new Set(["All"]);
-  data.forEach((r) => { if (r.barangay) bSet.add(r.barangay); });
-  setBarangays([...bSet]);
+    if (filters.type !== "All")
+      data = data.filter((r) => damageType(r).toLowerCase() === filters.type.toLowerCase());
+    if (filters.severity !== "All")
+      data = data.filter((r) => severity(r).toLowerCase() === filters.severity.toLowerCase());
+    if (criticalOnly)
+      data = data.filter((r) => severity(r).toLowerCase() === "critical");
+    if (filters.barangay !== "All")
+      data = data.filter((r) => r.barangay === filters.barangay);
+    if (filters.dateFrom) {
+      const from = new Date(filters.dateFrom);
+      data = data.filter((r) => r.created_at && new Date(r.created_at) >= from);
+    }
+    if (filters.dateTo) {
+      const to = new Date(filters.dateTo); to.setHours(23, 59, 59);
+      data = data.filter((r) => r.created_at && new Date(r.created_at) <= to);
+    }
+    data = data.filter((r) => {
+      const c = confVal(r);
+      return c === null || (c >= filters.confMin && c <= filters.confMax);
+    });
+    if (dSearch) {
+      const q = dSearch.toLowerCase();
+      data = data.filter((r) =>
+        padId(r.id).toLowerCase().includes(q) ||
+        (r.street_name ?? "").toLowerCase().includes(q) ||
+        (r.barangay ?? "").toLowerCase().includes(q) ||
+        location(r).toLowerCase().includes(q) ||
+        (r.owner?.full_name ?? "").toLowerCase().includes(q)
+      );
+    }
 
-  setLoading(false);
-}, [page, filters.status]);
+    const { field, dir } = sort;
+    data = [...data].sort((a, b) => {
+      let av, bv;
+      if (field === "created_at")      { av = new Date(a.created_at || 0); bv = new Date(b.created_at || 0); }
+      else if (field === "severity")   { av = sevWeight(a);     bv = sevWeight(b);     }
+      else if (field === "confidence") { av = confVal(a) ?? -1; bv = confVal(b) ?? -1; }
+      else if (field === "status") {
+        const o = { PENDING: 0, VERIFIED: 1, IN_PROGRESS: 2, RESOLVED: 3, DECLINED: 4 };
+        av = o[a.status] ?? 99; bv = o[b.status] ?? 99;
+      } else { av = a[field] ?? ""; bv = b[field] ?? ""; }
+      if (av < bv) return dir === "asc" ? -1 : 1;
+      if (av > bv) return dir === "asc" ?  1 : -1;
+      return 0;
+    });
 
-// Client-side filtering + sorting — runs instantly, never triggers a fetch
-useEffect(() => {
-  let data = [...rawReports];
-
-  if (filters.type !== "All")
-    data = data.filter((r) => damageType(r).toLowerCase() === filters.type.toLowerCase());
-  if (filters.severity !== "All")
-    data = data.filter((r) => severity(r).toLowerCase() === filters.severity.toLowerCase());
-  if (criticalOnly)
-    data = data.filter((r) => severity(r).toLowerCase() === "critical");
-  if (filters.barangay !== "All")
-    data = data.filter((r) => r.barangay === filters.barangay);
-  if (filters.dateFrom) {
-    const from = new Date(filters.dateFrom);
-    data = data.filter((r) => r.created_at && new Date(r.created_at) >= from);
-  }
-  if (filters.dateTo) {
-    const to = new Date(filters.dateTo); to.setHours(23, 59, 59);
-    data = data.filter((r) => r.created_at && new Date(r.created_at) <= to);
-  }
-  data = data.filter((r) => {
-    const c = confVal(r);
-    return c === null || (c >= filters.confMin && c <= filters.confMax);
-  });
-  if (dSearch) {
-    const q = dSearch.toLowerCase();
-    data = data.filter((r) =>
-      padId(r.id).toLowerCase().includes(q) ||
-      (r.street_name ?? "").toLowerCase().includes(q) ||
-      (r.barangay ?? "").toLowerCase().includes(q) ||
-      location(r).toLowerCase().includes(q) ||
-      (r.owner?.full_name ?? "").toLowerCase().includes(q)
-    );
-  }
-
-  const { field, dir } = sort;
-  data = [...data].sort((a, b) => {
-    let av, bv;
-    if (field === "created_at")      { av = new Date(a.created_at || 0); bv = new Date(b.created_at || 0); }
-    else if (field === "severity")   { av = sevWeight(a);     bv = sevWeight(b);     }
-    else if (field === "confidence") { av = confVal(a) ?? -1; bv = confVal(b) ?? -1; }
-    else if (field === "status") {
-      const o = { PENDING: 0, VERIFIED: 1, IN_PROGRESS: 2, RESOLVED: 3, DECLINED: 4 };
-      av = o[a.status] ?? 99; bv = o[b.status] ?? 99;
-    } else { av = a[field] ?? ""; bv = b[field] ?? ""; }
-    if (av < bv) return dir === "asc" ? -1 : 1;
-    if (av > bv) return dir === "asc" ?  1 : -1;
-    return 0;
-  });
-
-  setReports(data);
-}, [rawReports, filters, dSearch, sort, criticalOnly]);
+    setReports(data);
+  }, [rawReports, filters, dSearch, sort, criticalOnly]);
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
-  /* sort */
   const toggleSort = (field) =>
     setSort((p) => p.field === field
       ? { field, dir: p.dir === "asc" ? "desc" : "asc" }
@@ -222,17 +215,15 @@ useEffect(() => {
 
   const SortIcon = ({ field }) =>
     sort.field !== field
-      ? <span className="sort-neutral">↕</span>
-      : <span className="sort-active">{sort.dir === "asc" ? "↑" : "↓"}</span>;
+      ? <ArrowUpDown size={14} className="sort-neutral" />
+      : (sort.dir === "asc" ? <ArrowUp size={14} className="sort-active" /> : <ArrowDown size={14} className="sort-active" />);
 
-  /* filter helpers */
   const setFilter    = (k, v) => { setFilters((p) => ({ ...p, [k]: v })); setPage(1); };
   const resetFilters = () => {
     setFilters({ type: "All", severity: "All", status: "All", barangay: "All", dateFrom: "", dateTo: "", confMin: 0, confMax: 100 });
     setSearch(""); setPage(1); setCriticalOnly(false);
   };
 
-  /* status change + notify */
   const handleStatusChange = async (reportId, newStatus, declineReason = "") => {
     setActionLoading((p) => ({ ...p, [reportId]: true }));
 
@@ -251,7 +242,6 @@ useEffect(() => {
       if (selectedReport?.id === reportId)
         setSelectedReport((p) => ({ ...p, status: newStatus }));
 
-      // Notify the report owner
       const report = reports.find((r) => r.id === reportId);
       if (report?.owner?.id) {
         const tmplFn = NOTIF_TEMPLATES[newStatus];
@@ -263,7 +253,7 @@ useEffect(() => {
         }
       }
 
-      showToast(`${padId(reportId)} → ${STATUS_LABELS[newStatus]} ✓`);
+      showToast(`${padId(reportId)} → ${STATUS_LABELS[newStatus]}`);
     } else {
       showToast(res.error || "Update failed.", "error");
     }
@@ -272,7 +262,6 @@ useEffect(() => {
     return res;
   };
 
-  /* bulk */
   const toggleSelect = (id) =>
     setSelectedIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = () =>
@@ -290,16 +279,14 @@ useEffect(() => {
     setSelectedIds(new Set());
     await fetchReports();
     setBulkLoading(false);
-    showToast(`Bulk action applied to ${ids.length} report(s) ✓`);
+    showToast(`Bulk action applied to ${ids.length} report(s)`);
   };
 
-  /* map nav */
   const viewOnMap = (r, e) => {
     e.stopPropagation();
     navigate("/admin/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } });
   };
 
-  /* pagination */
   const pageCount   = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageStart   = (page - 1) * PAGE_SIZE + 1;
   const pageEnd     = Math.min(page * PAGE_SIZE, total);
@@ -313,7 +300,6 @@ useEffect(() => {
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   })();
 
-  /* stats */
   const stats = {
     total:    total,
     critical: rawReports.filter((r) => severity(r).toLowerCase() === "critical").length,
@@ -323,10 +309,6 @@ useEffect(() => {
 
   return (
     <>
-      <AdminSidebar />
-      <AdminHeader />
-
-      {/* Toast */}
       {toast && (
         <div className={`aar-toast aar-toast--${toast.type}`}>
           {toast.msg}
@@ -334,8 +316,6 @@ useEffect(() => {
       )}
 
       <div className="aar-container">
-
-        {/* ── Stats ── */}
         <div className="aar-stats-row">
           <div className="aar-stat aar-stat--total">
             <div className="aar-stat-value">{stats.total.toLocaleString()}</div>
@@ -355,7 +335,6 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* ── Topbar ── */}
         <div className="aar-topbar">
           <div className="aar-title-group">
             <h1 className="aar-title">Reports Database</h1>
@@ -363,38 +342,32 @@ useEffect(() => {
           </div>
 
           <div className="aar-search-wrap">
-            <svg className="search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
+            <Search className="search-ico" size={18} />
             <input
               className="aar-search"
               placeholder="Search ID, street, barangay, reporter…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            {search && <button className="search-clear" onClick={() => setSearch("")}>×</button>}
+            {search && <button className="search-clear" onClick={() => setSearch("")}><X size={20} /></button>}
           </div>
 
           <div className="aar-topbar-actions">
             <button
               className={`btn-critical-toggle ${criticalOnly ? "active" : ""}`}
               onClick={() => { setCriticalOnly((p) => !p); setPage(1); }}
-            >
-              🔴 Critical Only
-            </button>
+            ><Circle size={16} className="icon-critical" /> Critical Only</button>
             <button className="btn-filter-toggle" onClick={() => setShowFilters((p) => !p)}>
-              ⚙ Filters {showFilters ? "▲" : "▼"}
+              <Settings size={16} /> Filters {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
             <button className="btn-export" onClick={() => exportCSV(reports)}>
-              ↓ Export CSV
+              <Download size={16} /> Export CSV
             </button>
           </div>
         </div>
 
-        {/* ── Filters Panel ── */}
         <div className={`aar-filters-panel ${showFilters ? "open" : "closed"}`}>
           <div className="aar-filters-grid">
-
             <div className="filter-group">
               <label>Damage Type</label>
               <div className="filter-btn-row">
@@ -460,34 +433,32 @@ useEffect(() => {
               </div>
             </div>
 
-            <button className="btn-reset" onClick={resetFilters}>↺ Reset All</button>
+            <button className="btn-reset" onClick={resetFilters}><RotateCcw size={16} /> Reset All</button>
           </div>
         </div>
 
-        {/* ── Bulk Bar ── */}
         {selectedIds.size > 0 && (
           <div className="aar-bulk-bar">
             <span className="bulk-count"><strong>{selectedIds.size}</strong> selected</span>
             <div className="bulk-actions">
-              <button onClick={() => bulkAction("VERIFIED")}    disabled={bulkLoading} className="bulk-btn bulk-verify">✓ Verify</button>
-              <button onClick={() => bulkAction("IN_PROGRESS")} disabled={bulkLoading} className="bulk-btn bulk-progress">⚙ In Progress</button>
-              <button onClick={() => bulkAction("RESOLVED")}    disabled={bulkLoading} className="bulk-btn bulk-resolve">✔ Resolve</button>
-              <button onClick={() => bulkAction("DECLINED")}    disabled={bulkLoading} className="bulk-btn bulk-decline">✗ Decline</button>
-              <button onClick={() => bulkAction("delete")}      disabled={bulkLoading} className="bulk-btn bulk-delete">🗑 Delete</button>
+              <button onClick={() => bulkAction("VERIFIED")}    disabled={bulkLoading} className="bulk-btn bulk-verify"><Check size={16} /> Verify</button>
+              <button onClick={() => bulkAction("IN_PROGRESS")} disabled={bulkLoading} className="bulk-btn bulk-progress"><Wrench size={16} /> In Progress</button>
+              <button onClick={() => bulkAction("RESOLVED")}    disabled={bulkLoading} className="bulk-btn bulk-resolve"><CheckCircle size={16} /> Resolve</button>
+              <button onClick={() => bulkAction("DECLINED")}    disabled={bulkLoading} className="bulk-btn bulk-decline"><XCircle size={16} /> Decline</button>
+              <button onClick={() => bulkAction("delete")}      disabled={bulkLoading} className="bulk-btn bulk-delete"><Trash2 size={16} /> Delete</button>
             </div>
-            <button className="bulk-cancel" onClick={() => setSelectedIds(new Set())}>✕ Cancel</button>
+            <button className="bulk-cancel" onClick={() => setSelectedIds(new Set())}><X size={16} /> Cancel</button>
             {bulkLoading && <span className="bulk-spinner">Processing…</span>}
           </div>
         )}
 
         {error && (
           <div className="aar-error">
-            <span>⚠ {error}</span>
+            <span><AlertTriangle size={16} /> {error}</span>
             <button onClick={fetchReports}>Retry</button>
           </div>
         )}
 
-        {/* ── Table ── */}
         <div className="aar-table-card">
           <div className="aar-table-scroll">
             <table className="aar-table">
@@ -536,7 +507,7 @@ useEffect(() => {
                   <tr>
                     <td colSpan="10" className="aar-empty">
                       <div className="empty-state">
-                        <span className="empty-icon">📋</span>
+                        <span className="empty-icon"><ClipboardList size={32} /></span>
                         <p>No reports match your current filters</p>
                         <button onClick={resetFilters}>Clear Filters</button>
                       </div>
@@ -561,28 +532,24 @@ useEffect(() => {
                         className={`aar-row ${isSelected ? "row-selected" : ""} ${isCritical ? "row-critical" : ""}`}
                         onClick={() => setSelectedReport(r)}
                       >
-                        {/* Checkbox */}
                         <td className="td-check" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(r.id)} />
                         </td>
 
-                        {/* Report ID */}
                         <td className="td-report">
                           <span className="report-id">{padId(r.id)}</span>
                           <span className="report-loc" title={location(r)}>{location(r)}</span>
                           <div className="report-flags">
                             {isNew      && <span className="flag flag-new">NEW</span>}
-                            {lowConf    && <span className="flag flag-review">⚠ Low AI</span>}
-                            {isCritical && <span className="flag flag-critical">🔴</span>}
+                            {lowConf    && <span className="flag flag-review"><AlertTriangle size={12} /> Low AI</span>}
+                            {isCritical && <span className="flag flag-critical"><Circle size={12} className="icon-critical" /></span>}
                           </div>
                         </td>
 
-                        {/* Reporter */}
                         <td className="td-reporter">
                           <span className="reporter-name">{r.owner?.full_name ?? "—"}</span>
                         </td>
 
-                        {/* Thumbnail */}
                         <td className="td-thumb" onClick={(e) => e.stopPropagation()}>
                           {thumbUrl ? (
                             <img
@@ -597,15 +564,12 @@ useEffect(() => {
                           )}
                         </td>
 
-                        {/* Type */}
                         <td className="td-type">{damageType(r)}</td>
 
-                        {/* Severity */}
                         <td className="td-sev">
                           <span className={`sev-pill ${toClass(sev)}`}>{sev}</span>
                         </td>
 
-                        {/* AI Confidence */}
                         <td className="td-conf">
                           {conf !== null ? (
                             <div className="conf-display">
@@ -617,19 +581,16 @@ useEffect(() => {
                           ) : <span className="conf-na">—</span>}
                         </td>
 
-                        {/* Status */}
                         <td className="td-status">
                           <span className={`status-pill ${toClass(r.status ?? "")}`}>
                             {STATUS_LABELS[r.status] ?? r.status ?? "—"}
                           </span>
                         </td>
 
-                        {/* Date */}
                         <td className="td-date">
                           {r.created_at ? new Date(r.created_at).toLocaleDateString("en-PH") : "—"}
                         </td>
 
-                        {/* Actions */}
                         <td className="td-actions" onClick={(e) => e.stopPropagation()}>
                           <div className="inline-actions">
                             {transitions.length > 0 && (
@@ -647,9 +608,9 @@ useEffect(() => {
                                 ))}
                               </select>
                             )}
-                            <button className="act-map-btn"    onClick={(e) => viewOnMap(r, e)} title="View on Map">📍</button>
-                            <button className="act-detail-btn" onClick={() => setSelectedReport(r)} title="View Details">↗</button>
-                            {isActing && <span className="act-spinner">⟳</span>}
+                            <button className="act-map-btn"    onClick={(e) => viewOnMap(r, e)} title="View on Map"><MapPin size={14} /></button>
+                            <button className="act-detail-btn" onClick={() => setSelectedReport(r)} title="View Details"><ArrowUpRight size={14} /></button>
+                            {isActing && <span className="act-spinner"><Loader2 size={14} className="spin" /></span>}
                           </div>
                         </td>
                       </tr>
@@ -661,27 +622,25 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* ── Pagination ── */}
         <div className="aar-pagination">
           <span className="page-info">
             Showing <strong>{total ? pageStart : 0}–{pageEnd}</strong> of <strong>{total.toLocaleString()}</strong> reports
           </span>
           <div className="page-controls">
-            <button className="page-btn" disabled={page === 1}         onClick={() => setPage(1)}              title="First">«</button>
-            <button className="page-btn" disabled={page === 1}         onClick={() => setPage((p) => p - 1)}   title="Previous">‹</button>
+            <button className="page-btn" disabled={page === 1}         onClick={() => setPage(1)}              title="First"><ChevronFirst size={16} /></button>
+            <button className="page-btn" disabled={page === 1}         onClick={() => setPage((p) => p - 1)}   title="Previous"><ChevronLeft size={16} /></button>
             {visiblePages.map((p) => (
               <button key={p} className={`page-btn ${page === p ? "page-active" : ""}`} onClick={() => setPage(p)}>
                 {p}
               </button>
             ))}
-            <button className="page-btn" disabled={page >= pageCount}  onClick={() => setPage((p) => p + 1)}   title="Next">›</button>
-            <button className="page-btn" disabled={page >= pageCount}  onClick={() => setPage(pageCount)}      title="Last">»</button>
+            <button className="page-btn" disabled={page >= pageCount}  onClick={() => setPage((p) => p + 1)}   title="Next"><ChevronRight size={16} /></button>
+            <button className="page-btn" disabled={page >= pageCount}  onClick={() => setPage(pageCount)}      title="Last"><ChevronLast size={16} /></button>
           </div>
           <span className="page-size-info">Page {page} of {pageCount}</span>
         </div>
       </div>
 
-      {/* ── Detail Modal ── */}
       {selectedReport && (
         <ReportModal
           report={selectedReport}
@@ -694,9 +653,7 @@ useEffect(() => {
     </>
   );
 }
-/* ────────────────────────────────────────────────────────────────────────────
-   REPORT DETAIL MODAL
-──────────────────────────────────────────────────────────────────────────── */
+
 function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navigate }) {
   const [r,             setR]             = useState(initial);
   const [activeTab,     setTab]           = useState("details");
@@ -747,34 +704,30 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   };
 
   const doAddNote = async () => {
-  if (!newNote.trim()) return;
-  setNoteLoading(true);
-  const trimmed = newNote.trim();
-  try {
-    const res = await addComment(r.id, trimmed);
-    // addComment may return { success, data } OR just the comment object directly
-    const comment = res?.data ?? res;
-    if (comment?.id || res?.success) {
-      setComments((p) => [...p, comment]);
-      setNewNote("");
+    if (!newNote.trim()) return;
+    setNoteLoading(true);
+    const trimmed = newNote.trim();
+    try {
+      const res = await addComment(r.id, trimmed);
+      const comment = res?.data ?? res;
+      if (comment?.id || res?.success) {
+        setComments((p) => [...p, comment]);
+        setNewNote("");
+      }
+      if (r.owner?.id) {
+        await sendNotification({
+          user_id:   r.owner.id,
+          report_id: r.id,
+          title:     `Admin message on your report ${padId(r.id)}`,
+          message:   trimmed.length > 120 ? trimmed.slice(0, 117) + "…" : trimmed,
+          type:      "comment",
+        });
+      }
+    } catch (e) {
+      console.error("doAddNote failed:", e);
     }
-    // Send notification regardless of response shape — comment was saved if we got here
-    if (r.owner?.id) {
-      await sendNotification({
-        user_id:   r.owner.id,
-        report_id: r.id,
-        title:     `Admin message on your report ${padId(r.id)}`,
-        message:   trimmed.length > 120 ? trimmed.slice(0, 117) + "…" : trimmed,
-        type:      "comment",
-      });
-    } else {
-      console.warn("doAddNote: r.owner?.id is missing, cannot notify reporter", r);
-    }
-  } catch (e) {
-    console.error("doAddNote failed:", e);
-  }
-  setNoteLoading(false);
-};
+    setNoteLoading(false);
+  };
 
   const doAssign = async () => {
     setSubmitting(true);
@@ -782,7 +735,8 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
     setR((p) => ({ ...p, assigned_to: assignedTo }));
     setSubmitting(false);
   };
-const loadUpdates = useCallback(async () => {
+
+  const loadUpdates = useCallback(async () => {
     setUpdatesLoading(true);
     try {
       const token = localStorage.getItem("access_token");
@@ -819,7 +773,6 @@ const loadUpdates = useCallback(async () => {
     setUpdatesLoading(false);
   };
 
-
   const flowIndex = STATUS_FLOW_ORDER.indexOf(r.status);
 
   const TABS = [
@@ -833,8 +786,6 @@ const loadUpdates = useCallback(async () => {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-
-        {/* Header */}
         <div className="modal-hdr">
           <div className="modal-hdr-left">
             <span className="modal-id">{padId(r.id)}</span>
@@ -847,10 +798,9 @@ const loadUpdates = useCallback(async () => {
               </span>
             )}
           </div>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Close">×</button>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close"><X size={20} /></button>
         </div>
 
-        {/* Tabs */}
         <div className="modal-tabs">
           {TABS.map(({ id, label, badge }) => (
             <button
@@ -864,21 +814,18 @@ const loadUpdates = useCallback(async () => {
           ))}
         </div>
 
-        {/* Tab Content */}
         <div className="modal-content-area">
-
-          {/* ── DETAILS ── */}
           {activeTab === "details" && (
             <div className="tab-pane">
               <div className="detail-grid">
                 <div className="detail-card">
-                  <h5 className="detail-card-title">👤 Reporter</h5>
+                  <h5 className="detail-card-title"><User size={16} /> Reporter</h5>
                   <div className="detail-row"><span>Name</span>   <strong>{r.owner?.full_name ?? "Anonymous"}</strong></div>
                   <div className="detail-row"><span>Contact</span><strong>{r.owner?.phone ?? "—"}</strong></div>
                   <div className="detail-row"><span>Email</span>  <strong>{r.owner?.email ?? "—"}</strong></div>
                 </div>
                 <div className="detail-card">
-                  <h5 className="detail-card-title">🛣 Damage Info</h5>
+                  <h5 className="detail-card-title"><AlertTriangle size={16} /> Damage Info</h5>
                   <div className="detail-row"><span>Type</span>   <strong>{damageType(r)}</strong></div>
                   <div className="detail-row">
                     <span>Severity</span>
@@ -892,13 +839,13 @@ const loadUpdates = useCallback(async () => {
                   )}
                 </div>
                 <div className="detail-card">
-                  <h5 className="detail-card-title">📍 Location</h5>
+                  <h5 className="detail-card-title"><MapPin size={16} /> Location</h5>
                   <div className="detail-row"><span>Address</span> <strong>{r.location_address ?? "—"}</strong></div>
                   <div className="detail-row"><span>Street</span>  <strong>{r.street_name ?? "—"}</strong></div>
                   <div className="detail-row"><span>Barangay</span><strong>{r.barangay ?? "—"}</strong></div>
                 </div>
                 <div className="detail-card">
-                  <h5 className="detail-card-title">📅 Timeline</h5>
+                  <h5 className="detail-card-title"><Calendar size={16} /> Timeline</h5>
                   <div className="detail-row"><span>Submitted</span><strong>{fmtDate(r.created_at)}</strong></div>
                   <div className="detail-row"><span>Updated</span>  <strong>{fmtDate(r.updated_at)}</strong></div>
                 </div>
@@ -906,20 +853,19 @@ const loadUpdates = useCallback(async () => {
 
               {r.description && (
                 <div className="detail-desc-card">
-                  <h5 className="detail-card-title">📄 Description</h5>
+                  <h5 className="detail-card-title"><FileText size={16} /> Description</h5>
                   <p>{r.description}</p>
                 </div>
               )}
 
               {r.status === "DECLINED" && r.decline_reason && (
                 <div className="decline-notice">
-                  <strong>⛔ Decline Reason:</strong> {r.decline_reason}
+                  <strong><Ban size={16} /> Decline Reason:</strong> {r.decline_reason}
                 </div>
               )}
 
-              {/* Assignment */}
               <div className="detail-card assign-card">
-                <h5 className="detail-card-title">🧑‍🔧 Assignment</h5>
+                <h5 className="detail-card-title"><UserCog size={16} /> Assignment</h5>
                 <div className="assign-row">
                   <select value={assignedTo} onChange={(e) => setAssigned(e.target.value)}>
                     {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -934,25 +880,22 @@ const loadUpdates = useCallback(async () => {
                 <button
                   className="btn-view-map"
                   onClick={() => navigate("/admin/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } })}
-                >
-                  📍 View on Map
-                </button>
+                ><MapPin size={16} /> View on Map</button>
               </div>
             </div>
           )}
 
-          {/* ── MEDIA ── */}
           {activeTab === "media" && (
             <div className="tab-pane media-pane">
               {attachments.length === 0 ? (
-                <div className="no-media-state"><span>🖼</span><p>No media attachments for this report</p></div>
+                <div className="no-media-state"><span><Image size={32} /></span><p>No media attachments for this report</p></div>
               ) : (
                 <div className="media-grid">
                   {attachments.map((att, i) => {
                     const url   = imgErrors[i] ? null : mediaUrl(att);
-                    const label = i === 0 ? "📸 Damage Photo"
-                      : (i === 1 && r.status === "RESOLVED") ? "✅ Repair Proof"
-                      : `📎 Attachment ${i + 1}`;
+                    const label = i === 0 ? <><Camera size={14} /> Damage Photo</>
+                      : (i === 1 && r.status === "RESOLVED") ? <><CheckCircle size={14} /> Repair Proof</>
+                      : <><Paperclip size={14} /> Attachment {i + 1}</>;
                     return (
                       <div key={i} className="media-item-card">
                         <p className="media-item-label">{label}</p>
@@ -972,12 +915,11 @@ const loadUpdates = useCallback(async () => {
             </div>
           )}
 
-          {/* ── NOTES ── */}
           {activeTab === "notes" && (
             <div className="tab-pane notes-pane">
               <div className="notes-timeline">
                 {comments.length === 0 ? (
-                  <div className="no-notes"><span>📝</span><p>No admin notes yet. Be the first to add one.</p></div>
+                  <div className="no-notes"><span><StickyNote size={32} /></span><p>No admin notes yet. Be the first to add one.</p></div>
                 ) : (
                   comments.map((c, i) => (
                     <div key={c.id ?? i} className="note-entry">
@@ -1012,7 +954,6 @@ const loadUpdates = useCallback(async () => {
             </div>
           )}
 
-          {/* ── ACTIONS ── */}
           {activeTab === "actions" && (
             <div className="tab-pane actions-pane">
               <div className="workflow-section">
@@ -1024,7 +965,7 @@ const loadUpdates = useCallback(async () => {
                     return (
                       <React.Fragment key={s}>
                         <div className={`workflow-node ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}>
-                          <div className="wf-dot">{isDone ? "✓" : i + 1}</div>
+                          <div className="wf-dot">{isDone ? <Check size={12} /> : i + 1}</div>
                           <span className="wf-label">{STATUS_LABELS[s]}</span>
                         </div>
                         {i < STATUS_FLOW_ORDER.length - 1 && (
@@ -1035,7 +976,7 @@ const loadUpdates = useCallback(async () => {
                   })}
                 </div>
                 {r.status === "DECLINED" && (
-                  <div className="workflow-declined-badge">⛔ This report was declined</div>
+                  <div className="workflow-declined-badge"><Ban size={16} /> This report was declined</div>
                 )}
               </div>
 
@@ -1043,7 +984,7 @@ const loadUpdates = useCallback(async () => {
                 <div className="action-section">
                   <h5>Change Status</h5>
                   <p className="action-note">
-                    📬 The reporter will receive an in-app notification for every status change.
+                    <Mail size={16} /> The reporter will receive an in-app notification for every status change.
                   </p>
                   {transitions.includes("DECLINED") && (
                     <div className="decline-reason-input">
@@ -1071,20 +1012,18 @@ const loadUpdates = useCallback(async () => {
                 </div>
               ) : (
                 <div className="actions-terminal">
-                  <span>✔</span>
+                  <span><CheckCircle size={24} /></span>
                   <p>This report is in a final state — no further status changes are allowed.</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* ── MESSAGE ── */}
-{/* ── UPDATES ── */}
           {activeTab === "message" && (
             <div className="tab-pane message-pane">
               {!r.owner?.id ? (
                 <div className="no-notes">
-                  <span>📭</span>
+                  <span><MailOpen size={32} /></span>
                   <p>This report has no linked reporter account. Updates cannot be sent.</p>
                 </div>
               ) : (
@@ -1094,15 +1033,14 @@ const loadUpdates = useCallback(async () => {
                     {r.owner?.email && <span style={{ color: "var(--subtext)", marginLeft: 6 }}>{r.owner.email}</span>}
                   </div>
 
-                  {/* Quick-send template buttons */}
                   <p className="msg-label" style={{ marginBottom: 8 }}>Quick updates</p>
                   <div className="msg-quick-replies">
                     {[
-                      { label: "✅ Under Review",          title: "Your report is under review",             text: "Your report is currently being reviewed by our team. We will update you shortly.", type: "info"    },
-                      { label: "📷 Need Clearer Photo",    title: "Additional information needed",            text: "Thank you for your report. Could you please provide a clearer photo of the damage?", type: "warning" },
-                      { label: "🔧 Scheduled for Repair",  title: "Repair has been scheduled",               text: "Your report has been reviewed and a repair has been scheduled. Thank you!", type: "info"    },
-                      { label: "✔ Repair Complete",        title: "Road damage has been repaired",           text: "The damage you reported has been fully repaired. Thank you for helping keep our roads safe!", type: "success" },
-                      { label: "📋 Duplicate Report",      title: "Your report is a duplicate",              text: "This damage has already been reported and is being addressed. Thank you for your vigilance!", type: "warning" },
+                      { label: <><CheckCircle size={14} /> Under Review</>,          title: "Your report is under review",             text: "Your report is currently being reviewed by our team. We will update you shortly.", type: "info"    },
+                      { label: <><Camera size={14} /> Need Clearer Photo</>,    title: "Additional information needed",            text: "Thank you for your report. Could you please provide a clearer photo of the damage?", type: "warning" },
+                      { label: <><Wrench size={14} /> Scheduled for Repair</>,  title: "Repair has been scheduled",               text: "Your report has been reviewed and a repair has been scheduled. Thank you!", type: "info"    },
+                      { label: <><CheckCircle size={14} /> Repair Complete</>,        title: "Road damage has been repaired",           text: "The damage you reported has been fully repaired. Thank you for helping keep our roads safe!", type: "success" },
+                      { label: <><ClipboardList size={14} /> Duplicate Report</>,      title: "Your report is a duplicate",              text: "This damage has already been reported and is being addressed. Thank you for your vigilance!", type: "warning" },
                     ].map((tpl) => (
                       <button
                         key={tpl.label}
@@ -1115,7 +1053,6 @@ const loadUpdates = useCallback(async () => {
                     ))}
                   </div>
 
-                  {/* Custom message */}
                   <label className="msg-label" style={{ marginTop: 14 }}>Custom message (optional)</label>
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                     <textarea
@@ -1133,22 +1070,21 @@ const loadUpdates = useCallback(async () => {
                       onClick={() => doSendUpdate(`Update on ${padId(r.id)}`, customMsg, "info")}
                       disabled={updatesLoading || !customMsg.trim()}
                     >
-                      {updatesLoading ? "Sending…" : "✉ Send"}
+                      {updatesLoading ? "Sending…" : <><Send size={14} /> Send</>}
                     </button>
                   </div>
 
                   {updateSent && (
-                    <div className="msg-sent-banner">✓ Update sent to reporter successfully!</div>
+                    <div className="msg-sent-banner"><Check size={14} /> Update sent to reporter successfully!</div>
                   )}
 
-                  {/* Update history */}
                   <div style={{ marginTop: 20 }}>
                     <p className="msg-label">Update history ({updates.length})</p>
                     {updatesLoading ? (
                       <p style={{ color: "var(--subtext)", fontSize: "0.84rem" }}>Loading…</p>
                     ) : updates.length === 0 ? (
                       <div className="no-notes" style={{ padding: "16px 0" }}>
-                        <span>📭</span>
+                        <span><MailOpen size={32} /></span>
                         <p>No updates sent yet for this report.</p>
                       </div>
                     ) : (
@@ -1174,7 +1110,6 @@ const loadUpdates = useCallback(async () => {
               )}
             </div>
           )}
-
         </div>
       </div>
     </div>

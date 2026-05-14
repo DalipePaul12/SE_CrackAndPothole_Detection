@@ -4,7 +4,6 @@ import OTPboxes from "./OTPboxes.jsx";
 
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 
-// Icons
 import { BsFillPersonFill } from "react-icons/bs";
 import { MdEmail } from "react-icons/md";
 import { FaKey } from "react-icons/fa6";
@@ -15,8 +14,19 @@ import { BsFillEyeFill, BsFillEyeSlashFill } from "react-icons/bs";
 
 import { register, verifyOtp } from "../../api/auth";
 
+function extractErrorMessage(err) {
+  if (err?.response?.status === 422) {
+    const detail = err?.response?.data?.detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d) => d.msg || d.message || JSON.stringify(d)).join(" ");
+    }
+    if (typeof detail === "string") return detail;
+  }
+  return err?.detail || err?.message || null;
+}
+
 function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
-  const [step, setStep] = useState(1); // Step 1 = form, Step 2 = OTP
+  const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -44,7 +54,6 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // STEP 1: Register — calls POST /auth/register
   const handleSignUpSubmit = async (e) => {
     e.preventDefault();
 
@@ -55,7 +64,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
 
     setLoading(true);
     try {
-      await register({
+      const res = await register({
         full_name: formData.full_name,
         email: formData.email,
         password: formData.password,
@@ -64,17 +73,20 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
         street: formData.street || undefined,
       });
 
+      if (!res.success) {
+        throw res.error || new Error("Registration failed.");
+      }
+
       showModal("OTP Sent", `A verification code has been sent to ${formData.email}.`, "info", () => setModal({ ...modal, show: false }));
       setStep(2);
     } catch (err) {
-      const msg = err.detail || "Registration failed. The email may already be in use.";
+      const msg = extractErrorMessage(err) || "Registration failed. The email may already be in use.";
       showModal("Sign Up Failed", msg, "warning", () => setModal({ ...modal, show: false }));
     } finally {
       setLoading(false);
     }
   };
 
-  // STEP 2: Verify OTP — calls POST /auth/otp/verify
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
 
@@ -85,7 +97,11 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
 
     setLoading(true);
     try {
-      await verifyOtp(formData.email, formData.otp, "email_verify");
+      const res = await verifyOtp(formData.email, formData.otp, "email_verify");
+
+      if (!res.success) {
+        throw res.error || new Error("Verification failed.");
+      }
 
       showModal(
         "Account Created!",
@@ -100,14 +116,13 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
         }
       );
     } catch (err) {
-      const msg = err.detail || "Invalid or expired OTP. Please try again.";
+      const msg = extractErrorMessage(err) || "Invalid or expired OTP. Please try again.";
       showModal("Verification Failed", msg, "warning", () => setModal({ ...modal, show: false }));
     } finally {
       setLoading(false);
     }
   };
 
-  // Resend OTP — calls POST /auth/otp/request
   const handleResendOtp = async () => {
     try {
       const { requestOtp } = await import("../../api/auth");
@@ -123,7 +138,6 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
     <div className="sign-up-overlay" onClick={onClose}>
       <div className={`sign-up-content ${step === 2 ? "signup-small" : ""}`} onClick={(e) => e.stopPropagation()}>
 
-        {/* LEFT COLUMN */}
         <div className="sign-up-left">
           <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />
           <h1 className="sign-up-title">Snap2Fix</h1>
@@ -132,10 +146,8 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
           </p>
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="sign-up-right">
 
-          {/* ── STEP 1: Registration Form ── */}
           {step === 1 && (
             <>
               <h2>Join Us!</h2>
@@ -268,7 +280,6 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
             </>
           )}
 
-          {/* ── STEP 2: OTP Verification ── */}
           {step === 2 && (
             <>
               <div className="otp-title-signup">
@@ -310,7 +321,6 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
           )}
         </div>
 
-        {/* ── Shared Modal ── */}
         {modal.show && (
           <ConfirmChangesModal
             title={modal.title}

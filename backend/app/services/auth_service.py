@@ -14,11 +14,12 @@ from app.core.config import settings
 from app.core.security import get_password_hash, verify_password as _passlib_verify
 from app.models.otp import OTP
 from app.models.refresh_token import RefreshToken
+from app.models.revoked_token import RevokedToken
 from app.models.user import User
 from app.models.enums import OTPPurpose
 
-
 _OTP_BCRYPT_ROUNDS = 10
+OTP_RESEND_COOLDOWN_SECONDS = 60
 
 
 class TokenReuseError(Exception):
@@ -26,7 +27,6 @@ class TokenReuseError(Exception):
 
 
 def _ensure_utc(dt: datetime) -> datetime:
-    """Ensure a datetime is timezone-aware (UTC). Fixes naive datetimes from DB."""
     if dt is None:
         return dt
     if dt.tzinfo is None:
@@ -34,7 +34,6 @@ def _ensure_utc(dt: datetime) -> datetime:
     return dt
 
 
-# unified password hashing via passlib
 def hash_password(plain: str) -> str:
     return get_password_hash(plain)
 
@@ -62,6 +61,27 @@ def decode_access_token(token: str) -> dict:
 
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+async def revoke_access_token(db: AsyncSession, jti: str, expires_at: datetime) -> None:
+    existing = await db.execute(
+        select(RevokedToken).where(RevokedToken.jti == jti)
+    )
+    if existing.scalar_one_or_none():
+        return
+
+    db.add(RevokedToken(jti=jti, expires_at=expires_at))
+    await db.commit()
+
+
+async def cleanup_expired_revoked_tokens(db: AsyncSession) -> None:
+    from sqlalchemy import delete
+    await db.execute(
+        delete(RevokedToken).where(
+            RevokedToken.expires_at < datetime.now(timezone.utc)
+        )
+    )
+    await db.commit()
 
 
 async def create_refresh_token(
@@ -109,7 +129,6 @@ async def rotate_refresh_token(
     if db_token.is_revoked:
         raise TokenReuseError("Token reuse detected")
 
-    # FIX: ensure timezone-aware comparison to avoid TypeError with naive datetimes
     if _ensure_utc(db_token.expires_at) < datetime.now(timezone.utc):
         raise ValueError("Refresh token expired")
 
@@ -179,15 +198,24 @@ async def create_otp(
     purpose: OTPPurpose,
     user_id: Optional[int] = None,
 ) -> str:
-    existing = await db.execute(
+    existing_result = await db.execute(
         select(OTP).where(
             OTP.email == email,
             OTP.purpose == purpose,
             OTP.is_used == False,  # noqa
-        )
+        ).order_by(OTP.created_at.desc())
     )
+    existing_otps = existing_result.scalars().all()
 
-    for old in existing.scalars().all():
+    if existing_otps:
+        most_recent = existing_otps[0]
+        created = _ensure_utc(most_recent.created_at)
+        cooldown_until = created + timedelta(seconds=OTP_RESEND_COOLDOWN_SECONDS)
+        if datetime.now(timezone.utc) < cooldown_until:
+            remaining = int((cooldown_until - datetime.now(timezone.utc)).total_seconds())
+            raise ValueError(f"Please wait {remaining} seconds before requesting a new code.")
+
+    for old in existing_otps:
         old.is_used = True
 
     code = _generate_otp_code()
@@ -229,7 +257,6 @@ async def verify_otp(
     if not db_otp:
         raise ValueError("No active OTP")
 
-    # FIX: ensure timezone-aware comparison to avoid TypeError with naive datetimes
     if _ensure_utc(db_otp.expires_at) < datetime.now(timezone.utc):
         raise ValueError("OTP expired")
 

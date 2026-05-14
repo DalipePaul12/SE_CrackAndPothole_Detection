@@ -1,25 +1,3 @@
-/**
- * ml.js — Road damage analysis API client
- *
- * analyzeMedia(file)              — full image pipeline (HF + YOLO, concurrent)
- * analyzeVideo(file, onProgress)  — temporal video pipeline with filmstrip
- * analyzeRealtimeFrame(frame)     — live camera frame (lightweight, 10s timeout)
- * classifyMedia(mediaId)          — background worker polling shim
- * analyzeFile(file, onProgress)   — smart router: picks image vs video automatically
- *
- * KEY FIXES vs previous version:
- *   FIX-1: analyzeMedia timeout raised to 90s.
- *           Image pipeline = HF (up to 12s) + YOLO (up to 15s) running concurrently
- *           on backend. Frontend was aborting at 15s before backend could finish.
- *   FIX-2: _authHeaders() always reads from localStorage at call time (not module
- *           init time), so a page refresh after login always gets a fresh token.
- *   FIX-3: Non-200 responses from HF during image analysis no longer surface as
- *           "Analysis timed out" — proper error codes mapped to user-friendly messages.
- *   FIX-4: analyzeVideo guards against total_frames=0 before random.sample() crash.
- *   FIX-5: analyzeRealtimeFrame: AbortError on 900ms frame timeout is swallowed
- *           silently (expected behaviour during live loop) — not treated as an error.
- */
-
 const BASE_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 const ENDPOINTS = {
@@ -28,29 +6,16 @@ const ENDPOINTS = {
   realtime: `${BASE_URL}/api/v1/ml/analyze/realtime`,
 };
 
-// FIX-1: Image timeout raised from whatever it was to 90s.
-// Backend runs HF (≤12s) + YOLO (≤15s) concurrently, so worst case ≈ 27s.
-// 90s gives headroom for slow hardware and large images without false timeouts.
 const TIMEOUTS = {
-  image:    90_000,   // was too short — caused the "timed out" error in screenshot
-  video:    300_000,  // 5 min for long clips
-  realtime: 900,      // tight — dropped realtime frames are acceptable
+  image:    90_000,
+  video:    300_000,
+  realtime: 900,
 };
 
-
-// ── Auth token helper ─────────────────────────────────────────────────────────
-
-// FIX-2: Read token at call-time, not module-load-time.
-// Reading at module load would capture whatever token existed when the JS bundle
-// was first evaluated — meaning a freshly-logged-in user gets no auth header
-// until the next full page reload.
 function _authHeaders() {
   const token = localStorage.getItem("access_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
-
-
-// ── Generic helpers ───────────────────────────────────────────────────────────
 
 function _errorResponse(message) {
   return { success: false, data: null, error: message };
@@ -64,9 +29,6 @@ async function _parseBody(response) {
   }
 }
 
-// FIX-3: Expanded HTTP error map.
-// 401 was missing — backend returns 401 when JWT is missing/expired on /ml/analyze.
-// 504 is returned by backend when model inference itself times out server-side.
 function _httpError(status, body) {
   const serverMsg = body?.detail || body?.error || `Server error ${status}`;
   const MAP = {
@@ -82,19 +44,6 @@ function _httpError(status, body) {
   return MAP[status] || serverMsg;
 }
 
-
-// ── Image analysis (full HF + YOLO pipeline) ──────────────────────────────────
-
-/**
- * analyzeMedia
- *
- * Sends an image to POST /ml/analyze.
- * Backend runs HF AI-check + both YOLO models concurrently (after fix to
- * ml_service.py). Total backend time ≈ max(HF_time, YOLO_time) ≤ ~20s.
- *
- * @param {File} file
- * @returns {Promise<{ success: boolean, data: object|null, error: string|null }>}
- */
 export async function analyzeMedia(file) {
   if (!file) return _errorResponse("No file provided.");
 
@@ -109,15 +58,12 @@ export async function analyzeMedia(file) {
   formData.append("file", file);
 
   const controller = new AbortController();
-  // FIX-1: 90s timeout — enough for cold-start HF + YOLO on slow hardware.
   const timer = setTimeout(() => controller.abort(), TIMEOUTS.image);
 
   try {
     const response = await fetch(ENDPOINTS.image, {
       method:  "POST",
       signal:  controller.signal,
-      // FIX-2: _authHeaders() called here, not at module init.
-      // Never set Content-Type for FormData — browser must set it with the boundary.
       headers: _authHeaders(),
       body:    formData,
     });
@@ -141,6 +87,8 @@ export async function analyzeMedia(file) {
           is_ai_generated: payload.ai_validation?.is_ai_generated ?? false,
           confidence:      payload.ai_validation?.confidence      ?? 0,
           status:          payload.ai_validation?.status          ?? "unknown",
+          model:           payload.ai_validation?.model           ?? null,
+          raw_scores:      payload.ai_validation?.raw_scores      ?? {},
         },
         prediction: payload.prediction
           ? {
@@ -158,7 +106,6 @@ export async function analyzeMedia(file) {
 
   } catch (err) {
     if (err.name === "AbortError") {
-      // This means our 90s timer fired — the server is genuinely overloaded.
       return _errorResponse(
         "Analysis timed out. The server may be under load — please try again."
       );
@@ -171,29 +118,6 @@ export async function analyzeMedia(file) {
   }
 }
 
-
-// ── Video analysis (temporal multi-frame pipeline) ────────────────────────────
-
-/**
- * analyzeVideo
- *
- * @param {File}     file
- * @param {Function} [onProgress]  — called with status strings during processing
- * @returns {Promise<{ success: boolean, data: object|null, error: string|null }>}
- *
- * data shape on success:
- * {
- *   detected: boolean,
- *   prediction: {
- *     label, confidence, severity, frames_seen,
- *     boxes, norm_bbox, distance, inference_time_ms
- *   } | null,
- *   analytics: {
- *     frames_processed, frames_skipped_blur, elapsed_seconds,
- *     frame_stats, detection_snapshots: [{ frame, label, confidence, image_b64 }]
- *   }
- * }
- */
 export async function analyzeVideo(file, onProgress = null) {
   if (!file) return _errorResponse("No file provided.");
 
@@ -211,8 +135,6 @@ export async function analyzeVideo(file, onProgress = null) {
   const controller = new AbortController();
   const timer      = setTimeout(() => controller.abort(), TIMEOUTS.video);
 
-  // Simulated progress stages — video analysis takes 10-120s so we
-  // show user-friendly status messages at regular intervals.
   let progressInterval = null;
   const stages = [
     "Extracting frames…",
@@ -296,19 +218,6 @@ export async function analyzeVideo(file, onProgress = null) {
   }
 }
 
-
-// ── Realtime single-frame analysis ───────────────────────────────────────────
-
-/**
- * analyzeRealtimeFrame
- *
- * Sends a single JPEG/PNG frame to the lightweight realtime endpoint.
- * Designed to be called on a tight interval (~300ms) from useMLPrediction.
- * AbortErrors from the 900ms timeout are swallowed — dropped frames are normal.
- *
- * @param {Blob|File} frame — JPEG/PNG frame blob from canvas.toBlob()
- * @returns {Promise<{ success: boolean, data: object|null, error: string|null }>}
- */
 export async function analyzeRealtimeFrame(frame) {
   if (!frame) return _errorResponse("No frame provided.");
 
@@ -357,10 +266,8 @@ export async function analyzeRealtimeFrame(frame) {
     };
 
   } catch (err) {
-    // FIX-5: AbortError during realtime loop = frame was dropped due to 900ms
-    // timeout. This is expected and normal — do NOT surface it as an error.
     if (err.name === "AbortError") {
-      return { success: false, data: null, error: null }; // silently dropped
+      return { success: false, data: null, error: null };
     }
     return _errorResponse("Realtime connection failed.");
   } finally {
@@ -368,33 +275,11 @@ export async function analyzeRealtimeFrame(frame) {
   }
 }
 
-
-// ── Background worker polling shim ────────────────────────────────────────────
-
-/**
- * classifyMedia — polling flow compatibility shim.
- * Used by legacy usePipeline.js flows that upload media first, then poll.
- * @param {number|string} mediaId
- */
 export async function classifyMedia(mediaId) {
-  // Lazy import to avoid circular dependency with client.js
   const { api } = await import("./client.js");
   return api.post("/ml/classify", { media_id: mediaId });
 }
 
-
-// ── Smart router ──────────────────────────────────────────────────────────────
-
-/**
- * analyzeFile — convenience wrapper that routes image vs video automatically.
- *
- * Usage:
- *   const result = await analyzeFile(file, (msg) => setStatus(msg));
- *
- * @param {File}     file
- * @param {Function} [onProgress]  — receives status strings during video processing
- * @returns {Promise<{ success: boolean, data: object|null, error: string|null }>}
- */
 export async function analyzeFile(file, onProgress = null) {
   if (!file) return _errorResponse("No file provided.");
 
@@ -408,21 +293,6 @@ export async function analyzeFile(file, onProgress = null) {
   return analyzeMedia(file);
 }
 
-
-// ── WebSocket realtime overlay ────────────────────────────────────────────────
-
-/**
- * RealtimeDetectionSocket
- *
- * Manages a WebSocket connection to /ml/ws/realtime-overlay.
- * Sends raw JPEG frames and receives annotated JPEG frames as binary blobs.
- *
- * Usage:
- *   const sock = new RealtimeDetectionSocket((imgElement) => canvas.draw(imgElement));
- *   sock.connect();
- *   sock.sendFrame(jpegBlob);
- *   sock.disconnect();
- */
 export class RealtimeDetectionSocket {
   constructor(onFrame) {
     this.ws      = null;
@@ -442,7 +312,7 @@ export class RealtimeDetectionSocket {
       const objUrl = URL.createObjectURL(new Blob([e.data]));
       img.onload = () => {
         this.onFrame(img);
-        URL.revokeObjectURL(objUrl); // prevent memory leak
+        URL.revokeObjectURL(objUrl);
       };
       img.src = objUrl;
     };

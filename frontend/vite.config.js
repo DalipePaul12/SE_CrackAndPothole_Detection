@@ -36,28 +36,24 @@ export default defineConfig({
   plugins: [react()],
 
   server: {
-    port: 5173,
-    proxy: {
-      // All /api requests → FastAPI backend
-      "/api": {
-        target: "http://127.0.0.1:8000",
-        changeOrigin: true,
-        secure: false,
-      },
-      // Static uploaded files (images/videos served by FastAPI)
-      "/uploads": {
-        target: "http://127.0.0.1:8000",
-        changeOrigin: true,
-        secure: false,
-      },
-      // WebSocket (ws.router)
-      "/ws": {
-        target: "ws://127.0.0.1:8000",
-        ws: true,
-        changeOrigin: true,
-      },
+  proxy: {
+    "/api": {
+      target: "http://localhost:8000",  // ← was 127.0.0.1
+      changeOrigin: true,
+      secure: false,
+    },
+    "/uploads": {
+      target: "http://localhost:8000",  // ← was 127.0.0.1
+      changeOrigin: true,
+      secure: false,
+    },
+    "/ws": {
+      target: "ws://localhost:8000",  // ← was 127.0.0.1
+      ws: true,
+      changeOrigin: true,
     },
   },
+},
 
   build: {
     outDir: "dist",

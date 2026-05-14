@@ -1,18 +1,12 @@
-"""
-Structured logging setup.
-Import configure_logging() in main.py startup.
-"""
 import logging
 import sys
+
 from app.core.config import settings
+
+logger = logging.getLogger("snap2fix")
 
 
 def configure_logging() -> None:
-    """
-    Sets up root logger with consistent format.
-    In production, swap the StreamHandler for a JSON handler
-    (e.g. python-json-logger) to feed into your log aggregator.
-    """
     level = logging.DEBUG if settings.ENVIRONMENT == "development" else logging.INFO
 
     fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
@@ -25,7 +19,6 @@ def configure_logging() -> None:
         stream=sys.stdout,
     )
 
-    # Quiet noisy libraries
     logging.getLogger("sqlalchemy.engine").setLevel(
         logging.INFO if settings.ENVIRONMENT == "development" else logging.WARNING
     )
@@ -33,5 +26,7 @@ def configure_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     logging.getLogger(__name__).info(
-        f"Logging configured — level={logging.getLevelName(level)} env={settings.ENVIRONMENT}"
+        "Logging configured | level=%s | env=%s",
+        logging.getLevelName(level),
+        settings.ENVIRONMENT,
     )

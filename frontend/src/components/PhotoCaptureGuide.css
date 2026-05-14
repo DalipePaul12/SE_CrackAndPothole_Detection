@@ -1,11 +1,5 @@
-/* ── PhotoCaptureGuide.css ────────────────────────────────────────────────────
-   Snap2Fix · Pre-report checklist modal
-   Compact · No-scroll mobile · Sticky close · Sleek dark
-   ─────────────────────────────────────────────────────────────────────────── */
-
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@500&display=swap');
 
-/* ── Local tokens — light mode defaults ──────────────────────────────────── */
 :root {
   --pcg-accent:        var(--primary, #2d6a4f);
   --pcg-accent-done:   #22c55e;
@@ -26,7 +20,6 @@
   --pcg-green:  #22c55e;
 }
 
-/* ── Dark mode — body.dark from index.css ────────────────────────────────── */
 body.dark {
   --pcg-accent:        var(--primary, #52b788);
   --pcg-accent-glow:   var(--primary-subtle2, rgba(82, 183, 136, 0.18));
@@ -39,7 +32,6 @@ body.dark {
   --pcg-item-border:   var(--border, #1f4a2e);
 }
 
-/* ── Backdrop ─────────────────────────────────────────────────────────────── */
 .pcg-backdrop {
   position: fixed;
   inset: 0;
@@ -59,7 +51,6 @@ body.dark {
   to   { opacity: 1; }
 }
 
-/* ── Modal shell ──────────────────────────────────────────────────────────── */
 .pcg-modal {
   background: var(--pcg-modal-bg);
   color: var(--pcg-text);
@@ -83,7 +74,6 @@ body.dark {
   transition: background var(--transition-med, 0.25s), color var(--transition-med, 0.25s);
 }
 
-/* Top shimmer line */
 .pcg-modal::before {
   content: "";
   position: absolute;
@@ -99,7 +89,6 @@ body.dark {
   to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 
-/* ── Close — absolutely pinned to modal, always visible ──────────────────── */
 .pcg-close {
   position: absolute;
   top: 1rem;
@@ -139,14 +128,12 @@ body.dark .pcg-close:hover {
   outline-offset: 2px;
 }
 
-/* ── Header ───────────────────────────────────────────────────────────────── */
 .pcg-header {
   text-align: center;
   margin-bottom: 0.9rem;
   flex-shrink: 0;
 }
 
-/* ── Icon wrap ────────────────────────────────────────────────────────────── */
 .pcg-icon-wrap {
   width: 52px;
   height: 52px;
@@ -187,7 +174,6 @@ body.dark .pcg-close:hover {
   z-index: 1;
 }
 
-/* ── Confetti ─────────────────────────────────────────────────────────────── */
 .pcg-confetti {
   position: absolute;
   inset: 0;
@@ -208,7 +194,6 @@ body.dark .pcg-close:hover {
   100% { transform: translate(-50%,-50%) rotate(var(--angle)) translateX(calc(var(--dist)*1.3)) scale(0.4);         opacity: 0; }
 }
 
-/* ── Titles ───────────────────────────────────────────────────────────────── */
 .pcg-title {
   font-size: 1.05rem;
   font-weight: 700;
@@ -238,7 +223,6 @@ body.dark .pcg-close:hover {
   to   { opacity: 1; transform: scale(1)    translateY(0);   }
 }
 
-/* ── Progress section ─────────────────────────────────────────────────────── */
 .pcg-progress-section {
   margin-bottom: 0.7rem;
   flex-shrink: 0;
@@ -281,7 +265,6 @@ body.dark .pcg-close:hover {
   font-weight: 600;
 }
 
-/* ── Select All ──────────────────────────────────────────────────────────── */
 .pcg-select-all {
   display: flex;
   align-items: center;
@@ -316,7 +299,6 @@ body.dark .pcg-close:hover {
 }
 .pcg-select-all:focus-visible { outline: 2px solid var(--pcg-accent); outline-offset: 2px; }
 
-/* ── Progress bar ────────────────────────────────────────────────────────── */
 .pcg-bar-track {
   width: 100%;
   height: 4px;
@@ -349,7 +331,6 @@ body.dark .pcg-close:hover {
 }
 .pcg-bar-fill.complete::after { display: none; }
 
-/* ── Checklist ────────────────────────────────────────────────────────────── */
 .pcg-list {
   list-style: none;
   padding: 0;
@@ -423,7 +404,6 @@ body.dark .pcg-close:hover {
 .pcg-item.just-tapped .pcg-ripple { opacity: 0.06; }
 .pcg-item.is-checked   .pcg-ripple { opacity: 0.03; }
 
-/* ── Checkbox bubble ──────────────────────────────────────────────────────── */
 .pcg-cb {
   width: 19px; height: 19px;
   border-radius: 50%;
@@ -451,14 +431,12 @@ body.dark .pcg-cb {
   to   { transform: scale(1) rotate(0deg);  }
 }
 
-/* ── Emoji ───────────────────────────────────────────────────────────────── */
 .pcg-emoji {
   font-size: 1rem; flex-shrink: 0; transition: transform 0.18s; line-height: 1;
 }
 .pcg-item:hover .pcg-emoji      { transform: scale(1.15) rotate(-4deg); }
 .pcg-item.is-checked .pcg-emoji { transform: scale(1.1); }
 
-/* ── Item text ───────────────────────────────────────────────────────────── */
 .pcg-item-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .pcg-item-label {
   font-size: 0.775rem; font-weight: 600; color: var(--pcg-text); line-height: 1.2; transition: color 0.2s;
@@ -468,7 +446,6 @@ body.dark .pcg-item.is-checked .pcg-item-label { color: var(--primary-light, #74
 
 .pcg-item-detail { font-size: 0.665rem; color: var(--pcg-subtext); line-height: 1.32; opacity: 0.76; }
 
-/* ── Hint ────────────────────────────────────────────────────────────────── */
 .pcg-hint {
   text-align: center; font-size: 0.67rem; color: var(--pcg-subtext); opacity: 0.62;
   margin: 0 0 0.6rem; font-family: 'DM Mono', monospace; letter-spacing: 0.01em; line-height: 1.38;
@@ -476,10 +453,8 @@ body.dark .pcg-item.is-checked .pcg-item-label { color: var(--primary-light, #74
 }
 .pcg-hint strong { color: var(--pcg-accent); font-weight: 700; }
 
-/* ── Actions ─────────────────────────────────────────────────────────────── */
 .pcg-actions { display: flex; flex-direction: column; flex-shrink: 0; padding-top: 0.5rem; gap: 0.5rem; }
 
-/* ── Primary button ──────────────────────────────────────────────────────── */
 .pcg-btn-primary {
   width: 100%; padding: 0.72rem 1rem; border: none; border-radius: 12px;
   font-size: 0.87rem; font-weight: 700; cursor: pointer;
@@ -488,7 +463,6 @@ body.dark .pcg-item.is-checked .pcg-item-label { color: var(--primary-light, #74
   letter-spacing: -0.01em; position: relative; overflow: hidden;
 }
 
-/* Locked */
 .pcg-btn-primary.locked {
   background: var(--primary-subtle, rgba(45, 106, 79, 0.08));
   color: var(--subtext, #52735f);
@@ -501,7 +475,6 @@ body.dark .pcg-btn-primary.locked {
   border: 1.5px dashed var(--border-strong, #2d6a4f);
 }
 
-/* Lock icon */
 .pcg-lock-icon {
   font-size: 0.95rem; display: inline-block;
   filter: drop-shadow(0 0 5px var(--primary, #52b788));
@@ -512,13 +485,11 @@ body.dark .pcg-btn-primary.locked {
   50%       { opacity: 1;    transform: scale(1.16); }
 }
 
-/* Completing */
 .pcg-btn-primary.completing {
   background: linear-gradient(135deg, #155318, #22c55e);
   color: #fff; opacity: 0.82; cursor: wait; border: none;
 }
 
-/* Ready */
 .pcg-btn-primary.ready {
   background: linear-gradient(135deg, #155318, #2ba81d);
   color: #fff; border: none;
@@ -548,10 +519,6 @@ body.dark .pcg-btn-primary.locked {
 
 .pcg-btn-icon { font-size: 0.85rem; }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   MOBILE — all 6 items visible at once, zero scrolling
-   Tested against 390×844 (iPhone 14) and 360×780 (Android standard)
-══════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 480px) {
   .pcg-backdrop { padding: 0.5rem; }
 
@@ -575,7 +542,6 @@ body.dark .pcg-btn-primary.locked {
   .pcg-progress-label   { font-size: 0.54rem; }
   .pcg-progress-sub     { font-size: 0.62rem; }
 
-  /* Select All: icon only on mobile */
   .pcg-select-all span { display: none; }
   .pcg-select-all { padding: 5px 8px; gap: 0; }
   .pcg-select-all svg { font-size: 1rem; }
@@ -595,7 +561,6 @@ body.dark .pcg-btn-primary.locked {
   .pcg-close { width: 26px; height: 26px; font-size: 0.62rem; top: 0.7rem; right: 0.7rem; }
 }
 
-/* Very small phones (360px and below) */
 @media (max-width: 360px) {
   .pcg-modal    { padding: 0.85rem 0.8rem 0.8rem; }
   .pcg-item     { padding: 5.5px 8px; }
@@ -605,4 +570,221 @@ body.dark .pcg-btn-primary.locked {
   .pcg-subtitle { font-size: 0.635rem; }
   .pcg-icon-wrap { width: 36px; height: 36px; }
   .pcg-camera-icon { font-size: 0.95rem; }
+}
+
+/* ── Angle HUD styles for CreateReport.jsx ───────────────────────────────── */
+
+.angle-hud {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 6px 14px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  backdrop-filter: blur(8px);
+  border: 1.5px solid;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.angle-hud.good {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.angle-hud.bad {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: #ef4444;
+  color: #ef4444;
+  animation: anglePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes anglePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ── Reference circle overlay ────────────────────────────────────────────── */
+
+.reference-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 180px;
+  height: 180px;
+  border: 2px dashed rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.reference-circle-label {
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* ── HF confidence bar ───────────────────────────────────────────────────── */
+
+.hf-bar-track {
+  width: 100%;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hf-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.hf-bar-fill.low {
+  background: #ef4444;
+}
+
+.hf-bar-fill.medium {
+  background: #f59e0b;
+}
+
+.hf-bar-fill.high {
+  background: #22c55e;
+}
+
+/* ── Liability disclaimer ────────────────────────────────────────────────── */
+
+.liability-disclaimer {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.75rem;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.liability-disclaimer-icon {
+  color: #f59e0b;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+body.dark .liability-disclaimer {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+/* ── Review warning badge ──────────────────────────────────────────────────── */
+
+.review-warning {
+  background: #fee2e2;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #991b1b;
+  font-size: 0.8rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-warning-icon {
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+body.dark .review-warning {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+/* ── HF status badge variants ────────────────────────────────────────────── */
+
+.badge-hf-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #ef4444;
+}
+
+.badge-hf-pending {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+}
+
+.badge-hf-approved {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #22c55e;
+}
+
+.badge-hf-skipped {
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #9ca3af;
+}
+
+body.dark .badge-hf-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+body.dark .badge-hf-pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+body.dark .badge-hf-approved {
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+body.dark .badge-hf-skipped {
+  background: rgba(156, 163, 175, 0.12);
+  color: #d1d5db;
+  border-color: rgba(156, 163, 175, 0.3);
+}
+
+/* ── Capture button disabled state ───────────────────────────────────────── */
+
+.capture-btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+/* ── Distance reference overlay ──────────────────────────────────────────── */
+
+.distance-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }

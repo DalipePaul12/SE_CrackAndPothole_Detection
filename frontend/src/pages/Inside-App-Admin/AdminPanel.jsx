@@ -1,34 +1,6 @@
-/**
- * AdminPanel.jsx — Command Center Dashboard
- *
- * NAVIGATION FIXES (all targets now match routes defined in App.jsx)
- * ──────────────────────────────────────────────────────────────────────────
- * Button              | Before (broken)           | After (correct)
- * ─────────────────── | ────────────────────────── | ──────────────────────
- * View Map            | /adminpanel/map            | /adminpanel/map  ✓
- * Reports             | /adminpanel/reports        | /adminpanel/reports  ✓
- * Urgent Actions      | /adminpanel/reports?filter=urgent | same  ✓
- * View on Map →       | /adminpanel/map            | /adminpanel/map  ✓
- * Critical in <bgy>   | /adminpanel/reports?...    | /adminpanel/map?barangay=X&severity=critical
- *                     |   (wrong page for map ctx) |   (correct — shows map filtered)
- * Pending > 3 days    | /adminpanel/reports?filter=stale | same  ✓
- * Low AI confidence   | /adminpanel/reports?filter=low_confidence | same  ✓
- * Overdue past SLA    | /adminpanel/reports?filter=overdue | same  ✓
- * View all →          | /adminpanel/reports        | /adminpanel/reports  ✓
- * Report row click    | /adminpanel/reports/:id    | /adminpanel/reports/:id  ✓ (now registered in App.jsx)
- * Full log →          | /adminpanel/audit-log      | /adminpanel/audit-log  ✓ (now registered in App.jsx)
- *
- * OTHER FIXES
- * - statusKey() normaliser fixes Recharts Cell colour crash (bars showing 0)
- * - useAnalytics() used as single source of truth for chart data
- */
-
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdminPanel.css";
-
-import AdminSidebar from "../../components/AdminSidebar.jsx";
-import AdminHeader  from "../../components/AdminHeader.jsx";
 
 import {
   PieChart, Pie, Cell,
@@ -40,7 +12,7 @@ import {
 import {
   LayoutDashboard, CheckCircle2, AlertCircle, AlertTriangle,
   Clock, Settings2, Map, ClipboardList, Zap, SlidersHorizontal,
-  Flame, BarChart2, MapPin, Timer, PieChartIcon, TrendingUp,
+  Flame, BarChart2, MapPin, Timer, PieChartIcon, TrendingUp, TrendingDown,
   BrainCircuit, Radio, FolderOpen, RefreshCw,
 } from "lucide-react";
 
@@ -53,7 +25,6 @@ import {
   getPriorityFlags,
 } from "../../api/analytics";
 
-// ── constants ─────────────────────────────────────────────────────────────
 const DAMAGE_COLORS = ["#2ba81d", "#134d05"];
 const TREND_RANGES  = ["Daily", "Weekly", "Monthly"];
 const BARANGAYS     = ["All", "Panghulo", "Dampalit", "Catmon", "Tonsuya", "Tañong", "Tambobong"];
@@ -61,11 +32,6 @@ const DATE_RANGES   = ["All time", "This week", "This month", "Last 3 months"];
 const SEVERITY_OPTS = ["All", "Critical", "Medium", "Low"];
 const POLL_MS       = 60_000;
 
-/**
- * Normalise any status string to a compact lowercase key for colour lookup.
- * "In Progress" → "inprogress"
- * "in_progress" → "inprogress"
- */
 function statusKey(s) {
   return (s ?? "").toLowerCase().replace(/[\s_]+/g, "");
 }
@@ -87,7 +53,6 @@ const ACTIVITY_DOT_MAP = {
   declined: "dot-gray",
 };
 
-// ── helpers ───────────────────────────────────────────────────────────────
 function Skeleton({ w = "100%", h = 32, radius = 8 }) {
   return <div className="ap-skeleton" style={{ width: w, height: h, borderRadius: radius }} />;
 }
@@ -107,11 +72,9 @@ function confColor(pct) {
   return "#c62828";
 }
 
-// ── component ─────────────────────────────────────────────────────────────
 export default function AdminPanel() {
   const navigate = useNavigate();
 
-  // ── shared analytics hook ─────────────────────────────────────────────
   const {
     summary,
     damageStats,
@@ -122,7 +85,6 @@ export default function AdminPanel() {
     loading: loadingAnalytics,
   } = useAnalytics();
 
-  // ── extra endpoints not covered by useAnalytics ───────────────────────
   const [sla,           setSla]           = useState(null);
   const [aiInsights,    setAiInsights]    = useState(null);
   const [recentReports, setRecentReports] = useState([]);
@@ -139,7 +101,6 @@ export default function AdminPanel() {
 
   const cancelRef = useRef(false);
 
-  // live clock
   useEffect(() => {
     const tick = () =>
       setClock(new Date().toLocaleTimeString("en-PH", {
@@ -183,12 +144,10 @@ export default function AdminPanel() {
 
   const loadingMain = loadingAnalytics || loadingExtra;
 
-  // severity map { critical: N, medium: N, low: N }
   const severityMap = Object.fromEntries(
     (severityStats || []).map(({ name, value }) => [name.toLowerCase(), value])
   );
 
-  // trend data
   const trendData = (() => {
     if (!monthlyData.length) return [];
     if (trendRange === "Monthly") return monthlyData.slice(-6);
@@ -235,467 +194,441 @@ export default function AdminPanel() {
     { id: "inprogress", label: "In Progress",     value: summary?.in_progress ?? 0,                            accent: "#7b1fa2", Icon: Settings2,       delta: null },
   ];
 
-  // ── navigation helpers ────────────────────────────────────────────────
-  // Build a query string and navigate — keeps URLs clean and readable.
   function goTo(path, params = {}) {
     const qs = new URLSearchParams(params).toString();
     navigate(qs ? `${path}?${qs}` : path);
   }
 
   return (
-    <>
-      <AdminHeader />
-      <AdminSidebar />
+    <div className="ap-root">
 
-      <div className="ap-root">
-
-        {/* Error banner */}
-        {Object.keys(errors).length > 0 && (
-          <div className="ap-error-banner" role="alert">
-            <span>
-              <AlertTriangle size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />
-              Some data failed to load.
-            </span>
-            <button className="ap-retry-btn" onClick={loadExtra}>Retry</button>
-          </div>
-        )}
-
-        {/* ── TOP BAR ── */}
-        <div className="ap-topbar">
-          <div>
-            <h1 className="ap-topbar-title">Command Center</h1>
-            <p className="ap-topbar-sub">
-              <span className="ap-clock-dot" />
-              Live · {clock}
-              <span className="ap-sep">·</span>
-              <button className="ap-refresh-btn" onClick={loadExtra}>
-                <RefreshCw size={11} style={{ marginRight: 3, verticalAlign: "middle" }} />
-                Sync now
-              </button>
-            </p>
-          </div>
-          <div className="ap-quick-actions">
-            {/* → /adminpanel/map */}
-            <button className="ap-qa-btn" onClick={() => goTo("/adminpanel/map")}>
-              <Map size={14} /> View Map
-            </button>
-            {/* → /adminpanel/reports */}
-            <button className="ap-qa-btn" onClick={() => goTo("/adminpanel/reports")}>
-              <ClipboardList size={14} /> Reports
-            </button>
-            {/* → /adminpanel/reports?filter=urgent */}
-            <button className="ap-qa-btn ap-qa-primary" onClick={() => goTo("/adminpanel/reports", { filter: "urgent" })}>
-              <Zap size={14} /> Urgent Actions
-            </button>
-          </div>
-        </div>
-
-        {/* ── FILTER BAR ── */}
-        <div className="ap-filter-bar">
-          <span className="ap-filter-label">
-            <SlidersHorizontal size={12} style={{ marginRight: 4, verticalAlign: "middle" }} />Filter
+      {Object.keys(errors).length > 0 && (
+        <div className="ap-error-banner" role="alert">
+          <span>
+            <AlertTriangle size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />
+            Some data failed to load.
           </span>
+          <button className="ap-retry-btn" onClick={loadExtra}>Retry</button>
+        </div>
+      )}
+
+      <div className="ap-topbar">
+        <div>
+          <h1 className="ap-topbar-title">Command Center</h1>
+          <p className="ap-topbar-sub">
+            <span className="ap-clock-dot" />
+            Live · {clock}
+            <span className="ap-sep">·</span>
+            <button className="ap-refresh-btn" onClick={loadExtra}>
+              <RefreshCw size={11} style={{ marginRight: 3, verticalAlign: "middle" }} />
+              Sync now
+            </button>
+          </p>
+        </div>
+        <div className="ap-quick-actions">
+          <button className="ap-qa-btn" onClick={() => goTo("/adminpanel/map")}>
+            <Map size={14} /> View Map
+          </button>
+          <button className="ap-qa-btn" onClick={() => goTo("/adminpanel/reports")}>
+            <ClipboardList size={14} /> Reports
+          </button>
+          <button className="ap-qa-btn ap-qa-primary" onClick={() => goTo("/adminpanel/reports", { filter: "urgent" })}>
+            <Zap size={14} /> Urgent Actions
+          </button>
+        </div>
+      </div>
+
+      <div className="ap-filter-bar">
+        <span className="ap-filter-label">
+          <SlidersHorizontal size={12} style={{ marginRight: 4, verticalAlign: "middle" }} />Filter
+        </span>
+        {[
+          { id: "bar",  val: filterBarangay, set: setFilterBarangay, opts: BARANGAYS,     label: "Barangay" },
+          { id: "date", val: filterDate,     set: setFilterDate,     opts: DATE_RANGES,   label: "Date" },
+          { id: "sev",  val: filterSeverity, set: setFilterSeverity, opts: SEVERITY_OPTS, label: "Severity" },
+        ].map(({ id, val, set, opts, label }) => (
+          <select key={id} className="ap-select" value={val} onChange={(e) => set(e.target.value)} aria-label={label}>
+            {opts.map((o) => <option key={o}>{o}</option>)}
+          </select>
+        ))}
+        <span className="ap-filter-result">
           {[
-            { id: "bar",  val: filterBarangay, set: setFilterBarangay, opts: BARANGAYS,     label: "Barangay" },
-            { id: "date", val: filterDate,     set: setFilterDate,     opts: DATE_RANGES,   label: "Date" },
-            { id: "sev",  val: filterSeverity, set: setFilterSeverity, opts: SEVERITY_OPTS, label: "Severity" },
-          ].map(({ id, val, set, opts, label }) => (
-            <select key={id} className="ap-select" value={val} onChange={(e) => set(e.target.value)} aria-label={label}>
-              {opts.map((o) => <option key={o}>{o}</option>)}
-            </select>
-          ))}
-          <span className="ap-filter-result">
-            {[
-              filterBarangay !== "All" && filterBarangay,
-              filterSeverity !== "All" && filterSeverity,
-              filterDate     !== "All time" && filterDate,
-            ].filter(Boolean).join(" · ") || "Showing all reports"}
-          </span>
+            filterBarangay !== "All" && filterBarangay,
+            filterSeverity !== "All" && filterSeverity,
+            filterDate     !== "All time" && filterDate,
+          ].filter(Boolean).join(" · ") || "Showing all reports"}
+        </span>
+      </div>
+
+      <div className="ap-priority-panel" role="region" aria-label="Urgent actions">
+        <div className="ap-pp-header">
+          <span className="ap-pp-dot" />
+          <Flame size={15} color="#e65100" />
+          <span className="ap-pp-title">Urgent Actions Required</span>
         </div>
-
-        {/* ── PRIORITY PANEL ── */}
-        <div className="ap-priority-panel" role="region" aria-label="Urgent actions">
-          <div className="ap-pp-header">
-            <span className="ap-pp-dot" />
-            <Flame size={15} color="#e65100" />
-            <span className="ap-pp-title">Urgent Actions Required</span>
-          </div>
-          <div className="ap-pp-items">
-            {loadingMain
-              ? [1, 2, 3].map((i) => (
-                  <div key={i} className="ap-pp-item ap-pp-skeleton">
-                    <Skeleton h={18} radius={5} />
-                  </div>
-                ))
-              : (
-                <>
-                  {topCritical && (
-                    // → /adminpanel/map?barangay=Panghulo&severity=critical
-                    // Opens map pre-filtered to that barangay + critical severity.
-                    <button
-                      className="ap-pp-item ap-pp-danger"
-                      onClick={() => goTo("/adminpanel/map", {
-                        barangay: topCritical.barangay,
-                        severity: "critical",
-                      })}
-                    >
-                      <span className="ap-pp-badge ap-pp-badge-red">{topCritical.count}</span>
-                      Critical in {topCritical.barangay}
-                    </button>
-                  )}
-                  {priorityFlags?.pending_over_3days > 0 && (
-                    // → /adminpanel/reports?filter=stale
-                    <button
-                      className="ap-pp-item ap-pp-warn"
-                      onClick={() => goTo("/adminpanel/reports", { filter: "stale" })}
-                    >
-                      <span className="ap-pp-badge ap-pp-badge-orange">{priorityFlags.pending_over_3days}</span>
-                      Pending &gt; 3 days
-                    </button>
-                  )}
-                  {priorityFlags?.low_confidence_count > 0 && (
-                    // → /adminpanel/reports?filter=low_confidence
-                    <button
-                      className="ap-pp-item ap-pp-info"
-                      onClick={() => goTo("/adminpanel/reports", { filter: "low_confidence" })}
-                    >
-                      <span className="ap-pp-badge ap-pp-badge-blue">{priorityFlags.low_confidence_count}</span>
-                      Low AI confidence
-                    </button>
-                  )}
-                  {priorityFlags?.overdue_count > 0 && (
-                    // → /adminpanel/reports?filter=overdue
-                    <button
-                      className="ap-pp-item ap-pp-warn"
-                      onClick={() => goTo("/adminpanel/reports", { filter: "overdue" })}
-                    >
-                      <span className="ap-pp-badge ap-pp-badge-orange">{priorityFlags.overdue_count}</span>
-                      Overdue past SLA
-                    </button>
-                  )}
-                  {!priorityFlags && (
-                    <span className="ap-pp-empty">No urgent actions right now</span>
-                  )}
-                </>
-              )}
-          </div>
-        </div>
-
-        {/* ── SUMMARY CARDS ── */}
-        <div className="ap-summary-grid">
-          {summaryCards.map(({ id, label, value, accent, Icon, delta, deltaClass }) => (
-            <div key={id} className="ap-scard">
-              <div className="ap-scard-bar" style={{ background: accent }} />
-              <div className="ap-scard-header">
-                <span className="ap-scard-label">{label}</span>
-                <span className="ap-scard-icon" style={{ color: accent }}>
-                  <Icon size={16} strokeWidth={2} />
-                </span>
-              </div>
-              <div className="ap-scard-value">
-                {loadingMain ? <Skeleton w={52} h={30} /> : value}
-              </div>
-              {delta && <div className={`ap-scard-delta ${deltaClass ?? ""}`}>{delta}</div>}
-            </div>
-          ))}
-        </div>
-
-        {/* ── ROW 1: Status Summary + Hotspots ── */}
-        <div className="ap-row-2col">
-
-          <div className="ap-panel">
-            <div className="ap-panel-title">
-              <span className="ap-panel-icon-pill ap-pill-green">
-                <BarChart2 size={13} color="#1b5e20" />
-              </span>
-              Status Summary
-            </div>
-            {loadingMain ? <Skeleton h={220} /> : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={statusStats} barSize={36} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="status" tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "#aaa" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }}
-                    cursor={{ fill: "rgba(21,83,24,0.05)" }}
-                  />
-                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                    {statusStats.map((entry, i) => (
-                      <Cell key={i} fill={STATUS_COLOR_MAP[statusKey(entry.status)] ?? "#155318"} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          <div className="ap-panel">
-            <div className="ap-panel-title">
-              <span className="ap-panel-icon-pill ap-pill-red">
-                <MapPin size={13} color="#b71c1c" />
-              </span>
-              Top Hotspot Areas
-              {/* → /adminpanel/map */}
-              <button className="ap-panel-link" onClick={() => goTo("/adminpanel/map")}>
-                View on Map →
-              </button>
-            </div>
-            {loadingMain
-              ? [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} h={22} style={{ marginBottom: 8 }} />)
-              : barangayRanking.length === 0
-                ? <p className="ap-empty">No hotspot data available.</p>
-                : (
-                  <div className="ap-hs-list">
-                    {barangayRanking.slice(0, 5).map((h, i) => {
-                      const pct = Math.round((h.count / (barangayRanking[0]?.count || 1)) * 100);
-                      return (
-                        // Each row navigates to the map filtered by that barangay
-                        <div
-                          key={h.barangay}
-                          className="ap-hs-row ap-hs-row-clickable"
-                          onClick={() => goTo("/adminpanel/map", { barangay: h.barangay })}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => e.key === "Enter" && goTo("/adminpanel/map", { barangay: h.barangay })}
-                        >
-                          <span className={`ap-hs-rank ${i === 0 ? "ap-hs-rank-top" : ""}`}>{i + 1}</span>
-                          <span className="ap-hs-name">{h.barangay}</span>
-                          <div className="ap-hs-track">
-                            <div className="ap-hs-fill" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="ap-hs-count">{h.count}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-          </div>
-        </div>
-
-        {/* ── ROW 2: SLA + Damage Doughnut ── */}
-        <div className="ap-row-2col">
-
-          <div className="ap-panel">
-            <div className="ap-panel-title">
-              <span className="ap-panel-icon-pill ap-pill-blue">
-                <Timer size={13} color="#1565c0" />
-              </span>
-              SLA &amp; Delay Tracking
-            </div>
-            {loadingMain
-              ? <div className="ap-sla-grid"><Skeleton h={80} /><Skeleton h={80} /><Skeleton h={80} /><Skeleton h={80} /></div>
-              : (
-                <div className="ap-sla-grid">
-                  {[
-                    { val: sla?.avg_resolution_days != null ? `${sla.avg_resolution_days.toFixed(1)}d` : "—", label: "Avg resolution time", cls: "" },
-                    { val: sla?.overdue_count ?? 0,           label: "Overdue reports",  cls: (sla?.overdue_count ?? 0) > 0 ? "sla-danger" : "" },
-                    { val: sla?.pending_over_3days ?? 0,      label: "Pending > 3 days", cls: (sla?.pending_over_3days ?? 0) > 0 ? "sla-warn" : "" },
-                    { val: sla?.on_time_rate_pct != null ? `${sla.on_time_rate_pct}%` : "—", label: "On-time rate", cls: "" },
-                  ].map(({ val, label, cls }, i) => (
-                    <div key={i} className={`ap-sla-card ${cls}`}>
-                      <div className="ap-sla-val">{val}</div>
-                      <div className="ap-sla-label">{label}</div>
-                    </div>
-                  ))}
+        <div className="ap-pp-items">
+          {loadingMain
+            ? [1, 2, 3].map((i) => (
+                <div key={i} className="ap-pp-item ap-pp-skeleton">
+                  <Skeleton h={18} radius={5} />
                 </div>
-              )}
-          </div>
-
-          <div className="ap-panel">
-            <div className="ap-panel-title">
-              <span className="ap-panel-icon-pill ap-pill-purple">
-                <PieChartIcon size={13} color="#6a1b9a" />
-              </span>
-              Damage Categories
-            </div>
-            {loadingMain ? <Skeleton h={200} /> : (
-              <ResponsiveContainer width="100%" height={210}>
-                <PieChart>
-                  <Pie data={damageStats} dataKey="value" nameKey="name" cx="50%" cy="44%" innerRadius={56} outerRadius={82} paddingAngle={4}>
-                    {damageStats.map((_, i) => (
-                      <Cell key={i} fill={DAMAGE_COLORS[i % DAMAGE_COLORS.length]} stroke="none" />
-                    ))}
-                  </Pie>
-                  <Legend verticalAlign="bottom" iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12, color: "#666" }} />
-                  <Tooltip contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
+              ))
+            : (
+              <>
+                {topCritical && (
+                  <button
+                    className="ap-pp-item ap-pp-danger"
+                    onClick={() => goTo("/adminpanel/map", {
+                      barangay: topCritical.barangay,
+                      severity: "critical",
+                    })}
+                  >
+                    <span className="ap-pp-badge ap-pp-badge-red">{topCritical.count}</span>
+                    Critical in {topCritical.barangay}
+                  </button>
+                )}
+                {priorityFlags?.pending_over_3days > 0 && (
+                  <button
+                    className="ap-pp-item ap-pp-warn"
+                    onClick={() => goTo("/adminpanel/reports", { filter: "stale" })}
+                  >
+                    <span className="ap-pp-badge ap-pp-badge-orange">{priorityFlags.pending_over_3days}</span>
+                    Pending &gt; 3 days
+                  </button>
+                )}
+                {priorityFlags?.low_confidence_count > 0 && (
+                  <button
+                    className="ap-pp-item ap-pp-info"
+                    onClick={() => goTo("/adminpanel/reports", { filter: "low_confidence" })}
+                  >
+                    <span className="ap-pp-badge ap-pp-badge-blue">{priorityFlags.low_confidence_count}</span>
+                    Low AI confidence
+                  </button>
+                )}
+                {priorityFlags?.overdue_count > 0 && (
+                  <button
+                    className="ap-pp-item ap-pp-warn"
+                    onClick={() => goTo("/adminpanel/reports", { filter: "overdue" })}
+                  >
+                    <span className="ap-pp-badge ap-pp-badge-orange">{priorityFlags.overdue_count}</span>
+                    Overdue past SLA
+                  </button>
+                )}
+                {!priorityFlags && (
+                  <span className="ap-pp-empty">No urgent actions right now</span>
+                )}
+              </>
             )}
-          </div>
         </div>
+      </div>
 
-        {/* ── TREND CHART ── */}
-        <div className="ap-panel ap-panel-full">
+      <div className="ap-summary-grid">
+        {summaryCards.map(({ id, label, value, accent, Icon, delta, deltaClass }) => (
+          <div key={id} className="ap-scard">
+            <div className="ap-scard-bar" style={{ background: accent }} />
+            <div className="ap-scard-header">
+              <span className="ap-scard-label">{label}</span>
+              <span className="ap-scard-icon" style={{ color: accent }}>
+                <Icon size={16} strokeWidth={2} />
+              </span>
+            </div>
+            <div className="ap-scard-value">
+              {loadingMain ? <Skeleton w={52} h={30} /> : value}
+            </div>
+            {delta && <div className={`ap-scard-delta ${deltaClass ?? ""}`}>{delta}</div>}
+          </div>
+        ))}
+      </div>
+
+      <div className="ap-row-2col">
+
+        <div className="ap-panel">
           <div className="ap-panel-title">
             <span className="ap-panel-icon-pill ap-pill-green">
-              <TrendingUp size={13} color="#1b5e20" />
+              <BarChart2 size={13} color="#1b5e20" />
             </span>
-            Submission Trends
-            <div className="ap-trend-controls">
-              {TREND_RANGES.map((r) => (
-                <button key={r} className={`ap-trend-btn ${trendRange === r ? "active" : ""}`} onClick={() => setTrendRange(r)}>
-                  {r}
-                </button>
-              ))}
-            </div>
+            Status Summary
           </div>
-          {loadingMain ? <Skeleton h={180} /> : (
-            <>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={trendData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="period" tick={{ fill: "#888", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "#aaa" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }} />
-                  <Line type="monotone" dataKey="Reports" stroke="#155318" strokeWidth={2.5} dot={{ r: 4, fill: "#155318", strokeWidth: 0 }} activeDot={{ r: 6 }} />
-                </LineChart>
-              </ResponsiveContainer>
-              {trendInsight && (
-                <div className="ap-trend-chips">
-                  <span className={`ap-chip ${trendInsight.pct >= 0 ? "chip-up" : "chip-down"}`}>
-                    {trendInsight.pct >= 0 ? "▲" : "▼"} {trendInsight.pct >= 0 ? "+" : ""}{trendInsight.pct}% vs previous
-                  </span>
-                  <span className="ap-chip chip-neutral">Peak: <strong>{trendInsight.peak}</strong></span>
-                  <span className="ap-chip chip-neutral">Avg: <strong>{trendInsight.avg}</strong> / period</span>
-                </div>
-              )}
-            </>
+          {loadingMain ? <Skeleton h={220} /> : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={statusStats} barSize={36} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <XAxis dataKey="status" tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#aaa" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }}
+                  cursor={{ fill: "rgba(21,83,24,0.05)" }}
+                />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                  {statusStats.map((entry, i) => (
+                    <Cell key={i} fill={STATUS_COLOR_MAP[statusKey(entry.status)] ?? "#155318"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
 
-        {/* ── ROW 3: AI Insights + Activity Feed ── */}
-        <div className="ap-row-2col">
-
-          <div className="ap-panel">
-            <div className="ap-panel-title">
-              <span className="ap-panel-icon-pill ap-pill-purple">
-                <BrainCircuit size={13} color="#6a1b9a" />
-              </span>
-              AI Insights
-              <span className="ap-badge-pill">ml_service</span>
-            </div>
-            {loadingMain
-              ? [1, 2, 3, 4].map((i) => <Skeleton key={i} h={44} style={{ marginBottom: 8 }} />)
-              : (
-                <div className="ap-ai-list">
-                  {aiInsights?.low_confidence_pct != null && (
-                    <div className="ap-ai-row ai-warn">
-                      <span className="ap-ai-tag tag-warn">Warning</span>
-                      {aiInsights.low_confidence_pct.toFixed(0)}% of reports have low AI confidence (&lt;50%)
-                    </div>
-                  )}
-                  {aiInsights?.crack_change_pct != null && (
-                    <div className={`ap-ai-row ${aiInsights.crack_change_pct > 0 ? "ai-danger" : "ai-info"}`}>
-                      <span className={`ap-ai-tag ${aiInsights.crack_change_pct > 0 ? "tag-danger" : "tag-ok"}`}>Trend</span>
-                      Crack reports {aiInsights.crack_change_pct > 0 ? "increased" : "decreased"} by {aiInsights.crack_change_pct > 0 ? "+" : ""}{aiInsights.crack_change_pct.toFixed(0)}% this week
-                    </div>
-                  )}
-                  {aiInsights?.duplicate_count > 0 && (
-                    <div className="ap-ai-row ai-info">
-                      <span className="ap-ai-tag tag-info">Duplicate</span>
-                      {aiInsights.duplicate_count} location{aiInsights.duplicate_count > 1 ? "s" : ""} reported multiple times
-                    </div>
-                  )}
-                  {aiInsights?.avg_model_accuracy != null && (
-                    <div className="ap-ai-row ai-ok">
-                      <span className="ap-ai-tag tag-ok">Model</span>
-                      Model accuracy stable at {aiInsights.avg_model_accuracy.toFixed(0)}% avg this period
-                    </div>
-                  )}
-                  {!aiInsights && <p className="ap-empty">AI insights unavailable.</p>}
-                </div>
-              )}
-          </div>
-
-          <div className="ap-panel">
-            <div className="ap-panel-title">
-              <span className="ap-panel-icon-pill ap-pill-blue">
-                <Radio size={13} color="#1565c0" />
-              </span>
-              Live Activity Feed
-              {/* → /adminpanel/audit-log (registered in App.jsx) */}
-              <button className="ap-panel-link" onClick={() => goTo("/adminpanel/audit-log")}>
-                Full log →
-              </button>
-            </div>
-            {loadingMain
-              ? [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} h={28} style={{ marginBottom: 8 }} />)
-              : activityFeed.length === 0
-                ? <p className="ap-empty">No recent activity.</p>
-                : (
-                  <ul className="ap-feed">
-                    {activityFeed.map((item, i) => (
-                      <li key={i} className="ap-feed-item">
-                        <span className={`ap-feed-dot ${ACTIVITY_DOT_MAP[item.type] ?? "dot-gray"}`} />
-                        <span className="ap-feed-text">{item.message}</span>
-                        <span className="ap-feed-time">{timeAgo(item.timestamp)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-          </div>
-        </div>
-
-        {/* ── RECENT REPORTS TABLE ── */}
-        <div className="ap-panel ap-panel-full">
+        <div className="ap-panel">
           <div className="ap-panel-title">
-            <span className="ap-panel-icon-pill ap-pill-green">
-              <FolderOpen size={13} color="#1b5e20" />
+            <span className="ap-panel-icon-pill ap-pill-red">
+              <MapPin size={13} color="#b71c1c" />
             </span>
-            Recent Reports
-            {/* → /adminpanel/reports */}
-            <button className="ap-panel-link" onClick={() => goTo("/adminpanel/reports")}>
-              View all →
+            Top Hotspot Areas
+            <button className="ap-panel-link" onClick={() => goTo("/adminpanel/map")}>
+              View on Map →
             </button>
           </div>
           {loadingMain
-            ? <Skeleton h={200} />
-            : filteredReports.length === 0
-              ? <p className="ap-empty">No reports match the current filters.</p>
+            ? [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} h={22} style={{ marginBottom: 8 }} />)
+            : barangayRanking.length === 0
+              ? <p className="ap-empty">No hotspot data available.</p>
               : (
-                <div className="ap-table-wrap">
-                  <table className="ap-table">
-                    <thead>
-                      <tr>
-                        {["Report ID", "Type", "Location", "Severity", "Status", "AI Confidence", "Submitted"].map((h) => (
-                          <th key={h}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredReports.map((r) => (
-                        <tr
-                          key={r.id}
-                          className="ap-table-row"
-                          // → /adminpanel/reports/:id (registered in App.jsx)
-                          onClick={() => goTo(`/adminpanel/reports/${r.id}`)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => e.key === "Enter" && goTo(`/adminpanel/reports/${r.id}`)}
-                        >
-                          <td className="ap-td-id">{r.id}</td>
-                          <td>{r.type}</td>
-                          <td>{r.location}</td>
-                          <td><span className={`ap-badge badge-${r.severity?.toLowerCase()}`}>{r.severity}</span></td>
-                          <td><span className={`ap-badge badge-${r.status?.toLowerCase()}`}>{r.status}</span></td>
-                          <td>
-                            <span className="ap-confidence" style={{ color: confColor(r.confidence ?? 0) }}>
-                              {r.confidence != null ? `${r.confidence}%` : "—"}
-                            </span>
-                          </td>
-                          <td className="ap-td-date">
-                            {r.submitted
-                              ? new Date(r.submitted).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
-                              : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="ap-hs-list">
+                  {barangayRanking.slice(0, 5).map((h, i) => {
+                    const pct = Math.round((h.count / (barangayRanking[0]?.count || 1)) * 100);
+                    return (
+                      <div
+                        key={h.barangay}
+                        className="ap-hs-row ap-hs-row-clickable"
+                        onClick={() => goTo("/adminpanel/map", { barangay: h.barangay })}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === "Enter" && goTo("/adminpanel/map", { barangay: h.barangay })}
+                      >
+                        <span className={`ap-hs-rank ${i === 0 ? "ap-hs-rank-top" : ""}`}>{i + 1}</span>
+                        <span className="ap-hs-name">{h.barangay}</span>
+                        <div className="ap-hs-track">
+                          <div className="ap-hs-fill" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="ap-hs-count">{h.count}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
         </div>
-
       </div>
-    </>
+
+      <div className="ap-row-2col">
+
+        <div className="ap-panel">
+          <div className="ap-panel-title">
+            <span className="ap-panel-icon-pill ap-pill-blue">
+              <Timer size={13} color="#1565c0" />
+            </span>
+            SLA &amp; Delay Tracking
+          </div>
+          {loadingMain
+            ? <div className="ap-sla-grid"><Skeleton h={80} /><Skeleton h={80} /><Skeleton h={80} /><Skeleton h={80} /></div>
+            : (
+              <div className="ap-sla-grid">
+                {[
+                  { val: sla?.avg_resolution_days != null ? `${sla.avg_resolution_days.toFixed(1)}d` : "—", label: "Avg resolution time", cls: "" },
+                  { val: sla?.overdue_count ?? 0,           label: "Overdue reports",  cls: (sla?.overdue_count ?? 0) > 0 ? "sla-danger" : "" },
+                  { val: sla?.pending_over_3days ?? 0,      label: "Pending > 3 days", cls: (sla?.pending_over_3days ?? 0) > 0 ? "sla-warn" : "" },
+                  { val: sla?.on_time_rate_pct != null ? `${sla.on_time_rate_pct}%` : "—", label: "On-time rate", cls: "" },
+                ].map(({ val, label, cls }, i) => (
+                  <div key={i} className={`ap-sla-card ${cls}`}>
+                    <div className="ap-sla-val">{val}</div>
+                    <div className="ap-sla-label">{label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+
+        <div className="ap-panel">
+          <div className="ap-panel-title">
+            <span className="ap-panel-icon-pill ap-pill-purple">
+              <PieChartIcon size={13} color="#6a1b9a" />
+            </span>
+            Damage Categories
+          </div>
+          {loadingMain ? <Skeleton h={200} /> : (
+            <ResponsiveContainer width="100%" height={210}>
+              <PieChart>
+                <Pie data={damageStats} dataKey="value" nameKey="name" cx="50%" cy="44%" innerRadius={56} outerRadius={82} paddingAngle={4}>
+                  {damageStats.map((_, i) => (
+                    <Cell key={i} fill={DAMAGE_COLORS[i % DAMAGE_COLORS.length]} stroke="none" />
+                  ))}
+                </Pie>
+                <Legend verticalAlign="bottom" iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12, color: "#666" }} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      <div className="ap-panel ap-panel-full">
+        <div className="ap-panel-title">
+          <span className="ap-panel-icon-pill ap-pill-green">
+            <TrendingUp size={13} color="#1b5e20" />
+          </span>
+          Submission Trends
+          <div className="ap-trend-controls">
+            {TREND_RANGES.map((r) => (
+              <button key={r} className={`ap-trend-btn ${trendRange === r ? "active" : ""}`} onClick={() => setTrendRange(r)}>
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+        {loadingMain ? <Skeleton h={180} /> : (
+          <>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={trendData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <XAxis dataKey="period" tick={{ fill: "#888", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#aaa" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }} />
+                <Line type="monotone" dataKey="Reports" stroke="#155318" strokeWidth={2.5} dot={{ r: 4, fill: "#155318", strokeWidth: 0 }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+            {trendInsight && (
+              <div className="ap-trend-chips">
+                <span className={`ap-chip ${trendInsight.pct >= 0 ? "chip-up" : "chip-down"}`}>
+                  {trendInsight.pct >= 0
+                    ? <TrendingUp size={11} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} />
+                    : <TrendingDown size={11} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} />
+                  }
+                  {trendInsight.pct >= 0 ? "+" : ""}{trendInsight.pct}% vs previous
+                </span>
+                <span className="ap-chip chip-neutral">Peak: <strong>{trendInsight.peak}</strong></span>
+                <span className="ap-chip chip-neutral">Avg: <strong>{trendInsight.avg}</strong> / period</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="ap-row-2col">
+
+        <div className="ap-panel">
+          <div className="ap-panel-title">
+            <span className="ap-panel-icon-pill ap-pill-purple">
+              <BrainCircuit size={13} color="#6a1b9a" />
+            </span>
+            AI Insights
+            <span className="ap-badge-pill">ml_service</span>
+          </div>
+          {loadingMain
+            ? [1, 2, 3, 4].map((i) => <Skeleton key={i} h={44} style={{ marginBottom: 8 }} />)
+            : (
+              <div className="ap-ai-list">
+                {aiInsights?.low_confidence_pct != null && (
+                  <div className="ap-ai-row ai-warn">
+                    <span className="ap-ai-tag tag-warn">Warning</span>
+                    {aiInsights.low_confidence_pct.toFixed(0)}% of reports have low AI confidence (&lt;50%)
+                  </div>
+                )}
+                {aiInsights?.crack_change_pct != null && (
+                  <div className={`ap-ai-row ${aiInsights.crack_change_pct > 0 ? "ai-danger" : "ai-info"}`}>
+                    <span className={`ap-ai-tag ${aiInsights.crack_change_pct > 0 ? "tag-danger" : "tag-ok"}`}>Trend</span>
+                    Crack reports {aiInsights.crack_change_pct > 0 ? "increased" : "decreased"} by {aiInsights.crack_change_pct > 0 ? "+" : ""}{aiInsights.crack_change_pct.toFixed(0)}% this week
+                  </div>
+                )}
+                {aiInsights?.duplicate_count > 0 && (
+                  <div className="ap-ai-row ai-info">
+                    <span className="ap-ai-tag tag-info">Duplicate</span>
+                    {aiInsights.duplicate_count} location{aiInsights.duplicate_count > 1 ? "s" : ""} reported multiple times
+                  </div>
+                )}
+                {aiInsights?.avg_model_accuracy != null && (
+                  <div className="ap-ai-row ai-ok">
+                    <span className="ap-ai-tag tag-ok">Model</span>
+                    Model accuracy stable at {aiInsights.avg_model_accuracy.toFixed(0)}% avg this period
+                  </div>
+                )}
+                {!aiInsights && <p className="ap-empty">AI insights unavailable.</p>}
+              </div>
+            )}
+        </div>
+
+        <div className="ap-panel">
+          <div className="ap-panel-title">
+            <span className="ap-panel-icon-pill ap-pill-blue">
+              <Radio size={13} color="#1565c0" />
+            </span>
+            Live Activity Feed
+            <button className="ap-panel-link" onClick={() => goTo("/adminpanel/audit-log")}>
+              Full log →
+            </button>
+          </div>
+          {loadingMain
+            ? [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} h={28} style={{ marginBottom: 8 }} />)
+            : activityFeed.length === 0
+              ? <p className="ap-empty">No recent activity.</p>
+              : (
+                <ul className="ap-feed">
+                  {activityFeed.map((item, i) => (
+                    <li key={i} className="ap-feed-item">
+                      <span className={`ap-feed-dot ${ACTIVITY_DOT_MAP[item.type] ?? "dot-gray"}`} />
+                      <span className="ap-feed-text">{item.message}</span>
+                      <span className="ap-feed-time">{timeAgo(item.timestamp)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+        </div>
+      </div>
+
+      <div className="ap-panel ap-panel-full">
+        <div className="ap-panel-title">
+          <span className="ap-panel-icon-pill ap-pill-green">
+            <FolderOpen size={13} color="#1b5e20" />
+          </span>
+          Recent Reports
+          <button className="ap-panel-link" onClick={() => goTo("/adminpanel/reports")}>
+            View all →
+          </button>
+        </div>
+        {loadingMain
+          ? <Skeleton h={200} />
+          : filteredReports.length === 0
+            ? <p className="ap-empty">No reports match the current filters.</p>
+            : (
+              <div className="ap-table-wrap">
+                <table className="ap-table">
+                  <thead>
+                    <tr>
+                      {["Report ID", "Type", "Location", "Severity", "Status", "AI Confidence", "Submitted"].map((h) => (
+                        <th key={h}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredReports.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="ap-table-row"
+                        onClick={() => goTo(`/adminpanel/reports/${r.id}`)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === "Enter" && goTo(`/adminpanel/reports/${r.id}`)}
+                      >
+                        <td className="ap-td-id">{r.id}</td>
+                        <td>{r.type}</td>
+                        <td>{r.location}</td>
+                        <td><span className={`ap-badge badge-${r.severity?.toLowerCase()}`}>{r.severity}</span></td>
+                        <td><span className={`ap-badge badge-${r.status?.toLowerCase()}`}>{r.status}</span></td>
+                        <td>
+                          <span className="ap-confidence" style={{ color: confColor(r.confidence ?? 0) }}>
+                            {r.confidence != null ? `${r.confidence}%` : "—"}
+                          </span>
+                        </td>
+                        <td className="ap-td-date">
+                          {r.submitted
+                            ? new Date(r.submitted).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+      </div>
+
+    </div>
   );
 }
