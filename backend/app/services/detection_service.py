@@ -147,7 +147,7 @@ def analyze_image(image_path: str) -> dict:
                         if has_segments and i < len(p_results[0].masks.xy):
                             seg = p_results[0].masks.xy[i]
                             if len(seg) >= 3:
-                                det["segments"] = [[(float(x), float(y)) for x, y in seg]]
+                                det["segments"] = [[float(x), float(y)] for x, y in seg]
                                 det["segments_norm"] = [
                                     [round(float(x) / w, 4), round(float(y) / h, 4)]
                                     for x, y in seg
@@ -201,7 +201,7 @@ def analyze_image(image_path: str) -> dict:
                         if has_segments and i < len(c_results[0].masks.xy):
                             seg = c_results[0].masks.xy[i]
                             if len(seg) >= 3:
-                                det["segments"] = [[(float(x), float(y)) for x, y in seg]]
+                                det["segments"] = [[float(x), float(y)] for x, y in seg]
                                 det["segments_norm"] = [
                                     [round(float(x) / w, 4), round(float(y) / h, 4)]
                                     for x, y in seg
