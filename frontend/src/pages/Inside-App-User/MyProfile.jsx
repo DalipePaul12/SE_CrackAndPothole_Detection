@@ -294,7 +294,8 @@ function ReputationModal({ score, onClose }) {
 
 /* ─── Main Component ─── */
 function MyProfile() {
-  const { profile, loading: profileLoading, update, saving } = useUser();
+  // FIX 1: Added updatePassword to destructure
+  const { profile, loading: profileLoading, update, saving, updatePassword } = useUser();
   const { reports, loading: reportsLoading } = useReports({ mine: true });
 
   const [showConfirm, setShowConfirm]   = useState(false);
@@ -448,6 +449,7 @@ function MyProfile() {
   };
 
   /* ─── Change Password ─── */
+  // FIX 3: Replaced raw fetch with updatePassword from useUser hook
   const handleChangePassword = async () => {
     const errors = {};
     if (!pwData.current)
@@ -461,25 +463,13 @@ function MyProfile() {
     setPwErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
-    try {
-      const res = await fetch(`${BASE_URL}/change-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          current_password: pwData.current,
-          new_password:     pwData.newPw,
-        }),
-      });
-      if (!res.ok) throw new Error();
+    const success = await updatePassword(pwData.current, pwData.newPw);
+    if (success) {
       setPwData({ current: "", newPw: "", confirm: "" });
       setPwErrors({});
       showToast("Password changed successfully!", "success");
-    } catch {
-      showToast(
-        "Failed to change password. Check your current password.",
-        "error"
-      );
+    } else {
+      showToast("Failed to change password. Check your current password.", "error");
     }
   };
 
@@ -489,7 +479,7 @@ function MyProfile() {
     return url ? `${BASE_URL}${url}` : null;
   };
 
-  /* ─── Loading state (no layout wrappers) ─── */
+  /* ─── Loading state ─── */
   if (profileLoading)
     return (
       <div className="myprofile-container">
@@ -510,6 +500,7 @@ function MyProfile() {
           <img src={profilePicSrc} alt="Profile" className="profile-avatar" />
 
           <div className="profile-info">
+            {/* FIX 2: Changed profile?.public_id to profile?.full_name */}
             <h2>{profile?.full_name || "—"}</h2>
             <p className="profile-bio">
               <MdLocationOn className="bio-location-icon" />

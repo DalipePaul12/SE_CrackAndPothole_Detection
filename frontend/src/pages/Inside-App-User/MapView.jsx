@@ -102,11 +102,7 @@ const MALABON_BOUNDARY = [
 ];
 const CENTER = [14.6615, 120.966];
 
-/**
- * ═══════════════════════════════════════════════════════════════════════════════
- * TILE PROVIDERS — free, keyless endpoints
- * ═══════════════════════════════════════════════════════════════════════════════
- */
+// ─── Tile Providers ────────────────────────────────────────────────────────────
 const TILES = {
   street: {
     label: "Street", icon: <Map size={12} />,
@@ -150,8 +146,13 @@ function FlyTo({ target }) {
   return null;
 }
 
+/**
+ * MapBootstrap — invalidates Leaflet map size on mount and whenever
+ * panelOpen changes so the tile layer fills the available space correctly.
+ */
 function MapBootstrap({ panelOpen }) {
   const map = useMap();
+
   useEffect(() => {
     if (!map) return;
     const container = map.getContainer();
@@ -184,6 +185,7 @@ function MapBootstrap({ panelOpen }) {
     };
   }, [map]);
 
+  // Re-invalidate whenever the side-panel opens/closes
   useEffect(() => {
     if (!map) return;
     const timers = [
@@ -200,9 +202,7 @@ function TileErrorHandler() {
   const map = useMap();
   useEffect(() => {
     if (!map) return;
-    const onTileError = (e) => {
-      console.warn("[Snap2Fix] Tile failed:", e?.url);
-    };
+    const onTileError = (e) => console.warn("[Snap2Fix] Tile failed:", e?.url);
     map.on("tileerror", onTileError);
     return () => map.off("tileerror", onTileError);
   }, [map]);
@@ -217,7 +217,7 @@ function HeatmapLayer({ reports }) {
       .filter((r) => r.latitude && r.longitude)
       .map((r) => {
         const w =
-          normSev(r.ai_severity) === "critical"     ? 1.0
+          normSev(r.ai_severity) === "critical"       ? 1.0
           : normSev(r.ai_severity) === "non_critical" ? 0.5 : 0.3;
         return [parseFloat(r.latitude), parseFloat(r.longitude), w];
       });
@@ -310,7 +310,7 @@ export default function MapView() {
   const mapped = safe.filter((r) => r.latitude && r.longitude);
   const q      = search.toLowerCase();
 
-  // ═══ FILTER LOGIC ═══
+  // ─── Filter logic ────────────────────────────────────────────────────────────
   const filtered = mapped.filter((r) => {
     const dmg    = normDmg(r.ai_damage_type);
     const sev    = normSev(r.ai_severity);
@@ -329,7 +329,6 @@ export default function MapView() {
     return matchQ && matchDmg && matchSev && matchStatus && matchDate;
   });
 
-  // Active filter count for badge
   const activeFilters = [filterDmg, filterSev, filterStatus, filterDate].filter((f) => f !== "all").length;
 
   const counts = {
@@ -345,13 +344,18 @@ export default function MapView() {
     setFlyTarget([parseFloat(r.latitude), parseFloat(r.longitude)]);
   }, []);
 
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    // Delay clearing selected so close animation plays fully
+    setTimeout(() => setSelected(null), 300);
+  }, []);
+
   const tile    = TILES[tileKey];
   const tileUrl = isDark ? tile.dark : tile.light;
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <div data-theme={theme} className="mv-shell">
-
       <div className="mv-root">
 
         {/* ── Top bar ── */}
@@ -449,11 +453,11 @@ export default function MapView() {
                 className="mv-ctrl-btn"
                 onClick={() => refetch?.()}
                 title="Refresh"
+                aria-label="Refresh reports"
               >
                 <RefreshCw size={14} />
               </button>
 
-              {/* ═══ FILTERS DROPDOWN BUTTON ═══ */}
               <button
                 className={`mv-filter-toggle${filtersOpen ? " mv-filter-toggle--active" : ""}`}
                 onClick={() => setFiltersOpen((p) => !p)}
@@ -473,7 +477,7 @@ export default function MapView() {
             </div>
           </div>
 
-          {/* ═══ FILTER DRAWER (dropdown) ═══ */}
+          {/* ── Filter drawer ── */}
           <div
             id="mv-filter-drawer"
             className={`mv-filter-drawer${filtersOpen ? " mv-filter-drawer--open" : ""}`}
@@ -531,8 +535,16 @@ export default function MapView() {
           </div>
         </div>
 
-        {/* ── Body: map + panel ── */}
+        {/* ══════════════════════════════════════════════════════════════════════
+            BODY — map + right-side detail panel (side-by-side flex layout)
+            This is the KEY FIX: the map and panel are siblings in a flex row.
+            The panel slides in from the right using CSS transform, while the
+            map wrapper shrinks via margin-right transition — no modal, no
+            centered overlay, no empty green space.
+        ══════════════════════════════════════════════════════════════════════ */}
         <div className="mv-body">
+
+          {/* ── Map wrapper — shrinks when panel is open ── */}
           <div className={`mv-map-wrap${panelOpen ? " mv-map-wrap--panel" : ""}`}>
 
             {loading ? (
@@ -580,13 +592,14 @@ export default function MapView() {
                       icon={getIcon(r)}
                       eventHandlers={{ click: () => openPanel(r) }}
                     >
+                      {/* Minimal popup — just a quick-peek before the panel opens */}
                       <Popup className="mv-popup-wrap">
                         <div className="mv-popup">
                           <div className="mv-popup-head">
                             <span className="mv-popup-id">#{r.id}</span>
                             <span
                               className="mv-popup-sev"
-                              style={{ background: getSevColor(r.ai_severity), color: "#fff" }}
+                              style={{ background: getSevColor(r.ai_severity) }}
                             >
                               {normSev(r.ai_severity) === "critical"
                                 ? "Critical"
@@ -603,9 +616,7 @@ export default function MapView() {
                             </p>
 
                             <div className="mv-popup-meta">
-                              <span className="mv-popup-status">
-                                {getStatusLabel(r.status)}
-                              </span>
+                              <span className="mv-popup-status">{getStatusLabel(r.status)}</span>
                               <span className="mv-popup-barangay">
                                 <MapPin size={10} strokeWidth={2} />
                                 {r.barangay || "—"}
@@ -615,19 +626,13 @@ export default function MapView() {
                             {thumb && (
                               <div
                                 className="mv-popup-thumb"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setLightbox(thumb);
-                                }}
+                                onClick={(e) => { e.stopPropagation(); setLightbox(thumb); }}
                               >
                                 <img src={thumb} alt="Report evidence" />
                               </div>
                             )}
 
-                            <button
-                              className="mv-popup-btn"
-                              onClick={() => openPanel(r)}
-                            >
+                            <button className="mv-popup-btn" onClick={() => openPanel(r)}>
                               View Details
                             </button>
                           </div>
@@ -638,114 +643,127 @@ export default function MapView() {
                 })}
               </MapContainer>
             )}
-
-            {/* ── Detail side-panel (always rendered for CSS transition) ── */}
-            <aside className={`mv-panel ${panelOpen ? "mv-panel--open" : ""}`}>
-              {selected && (
-                <>
-                  <div className="mv-panel-header">
-                    <h2 className="mv-panel-title">Report #{selected.id}</h2>
-                    <button
-                      className="mv-panel-close"
-                      onClick={() => {
-                        setPanelOpen(false);
-                        setSelected(null);
-                      }}
-                      aria-label="Close panel"
-                    >
-                      <X size={18} strokeWidth={2.5} />
-                    </button>
-                  </div>
-
-                  <div className="mv-panel-body">
-                    <div className="mv-panel-badges">
-                      <span
-                        className="mv-badge mv-badge--sev"
-                        style={{
-                          backgroundColor: getSevColor(selected.ai_severity) + "20",
-                          color: getSevColor(selected.ai_severity),
-                          border: `1px solid ${getSevColor(selected.ai_severity)}40`,
-                        }}
-                      >
-                        {normSev(selected.ai_severity) === "critical"
-                          ? "Critical"
-                          : normSev(selected.ai_severity) === "non_critical"
-                          ? "Non-Critical"
-                          : "Unknown"}
-                      </span>
-                      <span className="mv-badge mv-badge--status">
-                        {getStatusLabel(selected.status)}
-                      </span>
-                    </div>
-
-                    {getThumb(selected) && (
-                      <div
-                        className="mv-panel-image"
-                        onClick={() => setLightbox(getThumb(selected))}
-                      >
-                        <img
-                          src={getThumb(selected)}
-                          alt="Report evidence"
-                          loading="lazy"
-                        />
-                        <div className="mv-panel-image-overlay">
-                          <Maximize2 size={20} color="#fff" />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="mv-panel-section">
-                      <h3>Description</h3>
-                      <p>
-                        {selected.description || "No description provided."}
-                      </p>
-                    </div>
-
-                    <div className="mv-panel-section">
-                      <h3>Location</h3>
-                      <p className="mv-panel-row">
-                        <Navigation size={14} />
-                        {selected.barangay || "—"}
-                      </p>
-                      <p className="mv-panel-coords">
-                        {parseFloat(selected.latitude).toFixed(6)}°,{" "}
-                        {parseFloat(selected.longitude).toFixed(6)}°
-                      </p>
-                    </div>
-
-                    <div className="mv-panel-section">
-                      <h3>Damage Type</h3>
-                      <p>
-                        {selected.ai_damage_type
-                          ? selected.ai_damage_type
-                              .replace(/_/g, " ")
-                              .replace(/\b\w/g, (l) => l.toUpperCase())
-                          : "—"}
-                      </p>
-                    </div>
-
-                    <div className="mv-panel-section">
-                      <h3>Date Reported</h3>
-                      <p className="mv-panel-row">
-                        <Clock size={14} />
-                        {new Date(
-                          selected.created_at ?? selected.date_reported ?? 0
-                        ).toLocaleString("en-PH", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                </>
-              )}
-            </aside>
           </div>
+
+          {/* ══════════════════════════════════════════════════════════════════
+              RIGHT-SIDE DETAIL PANEL
+              - Always rendered so CSS transitions work
+              - Slides in with transform: translateX(0) when panelOpen=true
+              - On tablet/mobile becomes a bottom sheet (translateY)
+              - z-index sits above the map but below lightbox
+          ══════════════════════════════════════════════════════════════════ */}
+          <aside
+            className={`mv-panel${panelOpen ? " mv-panel--open" : ""}`}
+            aria-label="Report details"
+            aria-hidden={!panelOpen}
+          >
+            {selected && (
+              <>
+                <div className="mv-panel-header">
+                  <h2 className="mv-panel-title">Report #{selected.id}</h2>
+                  <button
+                    className="mv-panel-close"
+                    onClick={closePanel}
+                    aria-label="Close details panel"
+                  >
+                    <X size={18} strokeWidth={2.5} />
+                  </button>
+                </div>
+
+                <div className="mv-panel-body">
+                  {/* ── Severity + status badges ── */}
+                  <div className="mv-panel-badges">
+                    <span
+                      className="mv-badge mv-badge--sev"
+                      style={{
+                        backgroundColor: getSevColor(selected.ai_severity) + "20",
+                        color: getSevColor(selected.ai_severity),
+                        border: `1px solid ${getSevColor(selected.ai_severity)}40`,
+                      }}
+                    >
+                      {normSev(selected.ai_severity) === "critical"
+                        ? "Critical"
+                        : normSev(selected.ai_severity) === "non_critical"
+                        ? "Non-Critical"
+                        : "Unknown"}
+                    </span>
+                    <span className="mv-badge mv-badge--status">
+                      {getStatusLabel(selected.status)}
+                    </span>
+                  </div>
+
+                  {/* ── Evidence photo ── */}
+                  {getThumb(selected) && (
+                    <div
+                      className="mv-panel-image"
+                      onClick={() => setLightbox(getThumb(selected))}
+                      role="button"
+                      tabIndex={0}
+                      aria-label="View full-size evidence photo"
+                      onKeyDown={(e) => e.key === "Enter" && setLightbox(getThumb(selected))}
+                    >
+                      <img
+                        src={getThumb(selected)}
+                        alt="Report evidence"
+                        loading="lazy"
+                      />
+                      <div className="mv-panel-image-overlay">
+                        <Maximize2 size={20} color="#fff" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Description ── */}
+                  <div className="mv-panel-section">
+                    <h3>Description</h3>
+                    <p>{selected.description || "No description provided."}</p>
+                  </div>
+
+                  {/* ── Location ── */}
+                  <div className="mv-panel-section">
+                    <h3>Location</h3>
+                    <p className="mv-panel-row">
+                      <Navigation size={14} />
+                      {selected.barangay || "—"}
+                    </p>
+                    <p className="mv-panel-coords">
+                      {parseFloat(selected.latitude).toFixed(6)}°,{" "}
+                      {parseFloat(selected.longitude).toFixed(6)}°
+                    </p>
+                  </div>
+
+                  {/* ── Damage type ── */}
+                  <div className="mv-panel-section">
+                    <h3>Damage Type</h3>
+                    <p>
+                      {selected.ai_damage_type
+                        ? selected.ai_damage_type
+                            .replace(/_/g, " ")
+                            .replace(/\b\w/g, (l) => l.toUpperCase())
+                        : "—"}
+                    </p>
+                  </div>
+
+                  {/* ── Date reported ── */}
+                  <div className="mv-panel-section">
+                    <h3>Date Reported</h3>
+                    <p className="mv-panel-row">
+                      <Clock size={14} />
+                      {new Date(
+                        selected.created_at ?? selected.date_reported ?? 0
+                      ).toLocaleString("en-PH", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+          </aside>
         </div>
 
-        {/* ═══════════════════════════════════════════════════════════════════
-            BOTTOM STRIP — restored carousel of reports
-           ═══════════════════════════════════════════════════════════════════ */}
+        {/* ── Bottom strip — report carousel ── */}
         <div className="mv-strip">
           <div className="mv-strip-label">Reports</div>
           <div className="mv-strip-scroll">
@@ -757,8 +775,12 @@ export default function MapView() {
                 return (
                   <div
                     key={r.id}
-                    className="mv-strip-card"
+                    className={`mv-strip-card${selected?.id === r.id ? " mv-strip-card--active" : ""}`}
                     onClick={() => openPanel(r)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View report #${r.id} — ${r.barangay || "unknown location"}`}
+                    onKeyDown={(e) => e.key === "Enter" && openPanel(r)}
                   >
                     {thumb ? (
                       <img
@@ -774,9 +796,7 @@ export default function MapView() {
                     )}
                     <div className="mv-strip-info">
                       <span className="mv-strip-id">#{r.id}</span>
-                      <span className="mv-strip-loc">
-                        {r.barangay || "—"}
-                      </span>
+                      <span className="mv-strip-loc">{r.barangay || "—"}</span>
                       <span
                         className="mv-strip-sev"
                         style={{
@@ -805,6 +825,7 @@ export default function MapView() {
 
       </div>
 
+      {/* Lightbox (full-screen image viewer) */}
       {lightbox && (
         <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
       )}

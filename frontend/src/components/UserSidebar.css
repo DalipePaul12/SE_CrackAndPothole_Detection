@@ -134,11 +134,38 @@ body.dark {
   box-shadow: none;
 }
 /* ========== BRAND / LOGO ========== */
+
+/* ========== LOGO IMAGE ========== */
+.user-sidebar-logo-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  flex-shrink: 0;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.user-sidebar-logo-img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+/* Collapsed sidebar logo */
+.user-sidebar.collapsed .user-sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+
+/* Legacy img selector - kept for compatibility */
 .user-sidebar-brand img {
   width: 52px;
   height: 52px;
-  border-radius: 30%;
-  border: 2px solid var(--user-text);
+  border-radius: 50%;
+  border: none;
   flex-shrink: 0;
   object-fit: cover;
   display: block;

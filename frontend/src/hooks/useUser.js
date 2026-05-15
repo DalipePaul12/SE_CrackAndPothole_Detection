@@ -39,7 +39,7 @@ export function useUser() {
         }
       } catch (err) {
         if (!abortRef.current) {
-          setError(err.message || "Failed to load profile");
+          console.log("profile fetch error:", err.message);
         }
       } finally {
         if (!abortRef.current) {

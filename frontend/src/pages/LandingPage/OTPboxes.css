@@ -1,8 +1,27 @@
+.otp-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.otp-email-text {
+  font-size: 0.95rem;
+  color: #444;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.otp-email-text strong {
+  color: #295638;
+  font-weight: 600;
+}
+
 .otp-box-container {
   display: flex;
   gap: 12px;
   justify-content: center;
-  margin: 1.5rem;
+  margin: 0.5rem 0 1.5rem;
 }
 
 .otp-box-container .otp-box {
@@ -20,9 +39,55 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #fff;
+  color: #295638;           /* ← fixed: dark green text for visibility */
 }
 
 .otp-box:focus {
   border-color: #414e41;
   box-shadow: 0 0 2px 3px rgba(104, 126, 104, 0.3);
+}
+
+.otp-box:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.otp-actions {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.otp-resend-btn {
+  padding: 0.6rem 1.4rem;
+  border-radius: 10px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.otp-resend-btn.disabled {
+  background-color: #e0e0e0;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.otp-resend-btn.active {
+  background-color: #295638;
+  color: #fff;
+  cursor: pointer;
+}
+
+.otp-resend-btn.active:hover {
+  background-color: #1e3f29;
+}
+
+.otp-loading {
+  margin-top: 0.8rem;
+  font-size: 0.9rem;
+  color: #295638;
+  font-weight: 500;
 }

@@ -1,105 +1,92 @@
 """
-Notifications router.
-GET    /notifications              — list my notifications
-PATCH  /notifications/{id}/read   — mark one as read
-PATCH  /notifications/read-all    — mark all as read
-DELETE /notifications/clear-all   — delete all notifications  ← added from legacy
-DELETE /notifications/{id}        — delete one notification
+Users router.
+GET    /users/me                — get own profile
+PATCH  /users/me                — update own profile
+POST   /users/me/password       — change password
+DELETE /users/me                — request account deletion (RA 10173)
+GET    /users/{public_id}       — get public profile (admin or self)
+PATCH  /users/{public_id}/role  — admin: change user role
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete as sql_delete, select, update
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.middleware.auth_middleware import get_current_user
-from app.models.notification import Notification
+from app.middleware.auth_middleware import get_current_user, require_admin
+from app.middleware.rate_limiter import limiter
+from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.notification import NotificationResponse
+from app.schemas.user import PasswordChangeRequest, UserPublic, UserResponse, UserUpdate
+from app.services import auth_service, user_service
 
-router = APIRouter(prefix="/notifications", tags=["Notifications"])
+router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.get("", response_model=list[NotificationResponse])
-async def list_notifications(
+@router.get("/me", response_model=UserResponse)
+async def get_my_profile(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_my_profile(
+    data: UserUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Notification)
-        .where(Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
-        .limit(50)
-    )
-    return result.scalars().all()
+    return await user_service.update_user(db, current_user, data)
 
 
-# NOTE: /read-all and /clear-all must come BEFORE /{notification_id}
-# to avoid FastAPI routing conflict (it would try to parse "read-all" as an int id)
-
-@router.patch("/read-all", status_code=status.HTTP_204_NO_CONTENT)
-async def mark_all_read(
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("3/minute")
+async def change_password(
+    request: Request,
+    data: PasswordChangeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from datetime import datetime, timezone
-    await db.execute(
-        update(Notification)
-        .where(
-            Notification.user_id == current_user.id,
-            Notification.is_read == False,
+    if not auth_service.verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
         )
-        .values(is_read=True, read_at=datetime.now(timezone.utc))
-    )
+    current_user.hashed_password = auth_service.hash_password(data.new_password)
     await db.commit()
 
 
-@router.delete("/clear-all", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_all_notifications(
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def request_account_deletion(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete ALL notifications for the logged-in user. Added from legacy router."""
-    await db.execute(
-        sql_delete(Notification).where(Notification.user_id == current_user.id)
-    )
-    await db.commit()
+    """RA 10173 — marks account for deletion. PII anonymised by background job."""
+    await user_service.request_deletion(db, current_user)
 
 
-@router.patch("/{notification_id}/read", status_code=status.HTTP_204_NO_CONTENT)
-async def mark_read(
-    notification_id: int,
+@router.get("/{public_id}", response_model=UserPublic)
+async def get_user_public_profile(
+    public_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from datetime import datetime, timezone
-    result = await db.execute(
-        select(Notification).where(
-            Notification.id == notification_id,
-            Notification.user_id == current_user.id,
-        )
-    )
-    notif = result.scalar_one_or_none()
-    if not notif:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found.")
-    notif.is_read = True
-    notif.read_at = datetime.now(timezone.utc)
-    await db.commit()
+    user = await user_service.get_by_public_id(db, public_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    return user
 
 
-@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_notification(
-    notification_id: int,
+@router.patch("/{public_id}/role", response_model=UserResponse)
+async def change_user_role(
+    public_id: UUID,
+    role: UserRole,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _admin: User = Depends(require_admin),
 ):
-    result = await db.execute(
-        select(Notification).where(
-            Notification.id == notification_id,
-            Notification.user_id == current_user.id,
-        )
-    )
-    notif = result.scalar_one_or_none()
-    if not notif:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found.")
-    await db.delete(notif)
+    """Admin only — change a user's role."""
+    user = await user_service.get_by_public_id(db, public_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    user.role = role
     await db.commit()
+    await db.refresh(user)
+    return user

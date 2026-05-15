@@ -113,6 +113,31 @@
   animation: floatEffect 3s ease-in-out infinite;
 }
 
+.otp-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #295638;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 0.8rem;
+  padding: 0;
+}
+
+.otp-back-btn:hover {
+  color: #1e3f29;
+}
+
+.otp-loading {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  color: #295638;
+  text-align: center;
+}
+
 @keyframes floatEffect {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-0.5rem); }
@@ -285,6 +310,37 @@
   text-align: center;
   font-size: clamp(0.8rem, 2vw, 0.95rem);
   color: var(--login-text-muted);
+}
+
+/* Forgot Password */
+.forgot-password-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.25rem;
+}
+
+.forgot-password-link {
+  font-size: 0.85rem;
+  color: var(--login-primary-mid);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--login-transition);
+}
+
+.forgot-password-link:hover {
+  text-decoration: underline;
+  color: var(--login-primary);
+}
+
+/* Password toggle eye inside password wrapper */
+.password-icon-wrapper .toggle-eye {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #6b8f6b;
+  font-size: 1rem;
 }
 
 .signup-link {

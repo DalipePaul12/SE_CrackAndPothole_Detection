@@ -1,5 +1,5 @@
 /* OVERLAY */
-.confirm-overlay {
+.ccm-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
@@ -7,11 +7,11 @@
   justify-content: center;
   align-items: center;
   z-index: 999999;
-  animation: fadeIn 0.2s ease-in-out;
+  animation: ccm-fadeIn 0.2s ease-in-out;
 }
 
 /* MODAL */
-.confirm-modal {
+.ccm-modal {
   background-color: rgb(250, 238, 228);
   width: 430px;
   padding: 30px;
@@ -19,15 +19,15 @@
   text-align: center;
   border: 1px solid #000;
   box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-  animation: scaleIn 0.2s ease-in-out;
+  animation: ccm-scaleIn 0.2s ease-in-out;
 }
 
-.confirm-modal h3 {
+.ccm-modal h3 {
   margin-bottom: 10px;
   color: #206220;
 }
 
-.confirm-modal p {
+.ccm-modal p {
   font-size: 0.9rem;
   color: #666;
   margin-bottom: 25px;
@@ -35,13 +35,13 @@
 }
 
 /* BUTTON ROW */
-.confirm-actions {
+.ccm-actions {
   display: flex;
   gap: 15px;
 }
 
 /* CANCEL */
-.confirm-cancel {
+.ccm-cancel {
   flex: 1;
   padding: 10px;
   border-radius: 12px;
@@ -51,12 +51,12 @@
   transition: 0.2s;
 }
 
-.confirm-cancel:hover {
+.ccm-cancel:hover {
   background: #aaa;
 }
 
 /* CONFIRM */
-.confirm-confirm {
+.ccm-confirm {
   flex: 1;
   padding: 10px;
   border-radius: 12px;
@@ -67,26 +67,26 @@
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
 }
 
-.confirm-confirm:hover {
+.ccm-confirm:hover {
   background: linear-gradient(360deg, #184918, #58c758);
 }
 
-/* DANGER VERSION (for password change if you want stronger visual) */
-.confirm-confirm.danger {
+/* DANGER VARIANT */
+.ccm-confirm.danger {
   background: linear-gradient(180deg, #740707, #c0392b);
 }
 
-.confirm-confirm.danger:hover {
-    background: linear-gradient(180deg, #640101, #fd402b);
+.ccm-confirm.danger:hover {
+  background: linear-gradient(180deg, #640101, #fd402b);
 }
 
 /* Animations */
-@keyframes fadeIn {
-  from { opacity: 0 }
-  to { opacity: 1 }
+@keyframes ccm-fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-@keyframes scaleIn {
-  from { transform: scale(0.95); opacity: 0 }
-  to { transform: scale(1); opacity: 1 }
+@keyframes ccm-scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
 }

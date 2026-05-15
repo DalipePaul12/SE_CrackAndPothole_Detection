@@ -5,12 +5,15 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ADMIN LAYOUT — EXACT mirror of UserLayout.css
+   ADMIN LAYOUT — Fixed for proper modal/rendering
 ══════════════════════════════════════════════════════════════ */
+
 .admin-layout {
   min-height: 100vh;
   position: relative;
-  padding-top: var(--header-height);  /* Same as user-layout */
+  /* Remove padding-top here — handle it in main content instead */
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Mobile Hamburger Button ── */
@@ -32,13 +35,16 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-/* ── Main Content Area — EXACT mirror of user-main-content ── */
+/* ── Main Content Area — properly offset for sidebar/header ── */
 .admin-main-content {
   margin-left: var(--admin-sidebar-width);
+  margin-top: var(--header-height);
   min-height: calc(100vh - var(--header-height));
   transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  /* NO padding — let child handle it */
   box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+  /* Let child pages handle their own padding */
 }
 
 /* ── Collapsed state ── */
@@ -61,18 +67,37 @@
   to { opacity: 1; }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   MODAL FIX — Allow modals to render above everything
+══════════════════════════════════════════════════════════════ */
+
+/* When a modal is open, ensure it can break out of layout constraints */
+.admin-layout:has(.modal-overlay) {
+  overflow: visible;
+}
+
+.admin-layout:has(.modal-overlay) .admin-main-content {
+  overflow: visible;
+}
+
 /* ── Responsive ── */
 @media (max-width: 1023px) {
   .mobile-menu-btn {
     display: flex;
   }
+
   .admin-main-content {
     margin-left: 0 !important;
+    margin-top: var(--header-height);
     padding: 16px;
-    padding-top: 16px;
+    min-height: calc(100vh - var(--header-height));
   }
-  .admin-layout {
-    padding-top: var(--header-height);
+}
+
+@media (max-width: 480px) {
+  .admin-main-content {
+    padding: 12px;
+    margin-top: var(--header-height);
   }
 }
 

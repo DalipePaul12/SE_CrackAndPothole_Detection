@@ -1,6 +1,8 @@
+// SignUpPage.jsx
 import { useState } from "react";
 import "./SignUpPage.css";
 import OTPboxes from "./OTPboxes.jsx";
+import { api } from "../../api/client";
 
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 
@@ -13,7 +15,7 @@ import { IoMdDoneAll } from "react-icons/io";
 import { BsFillEyeFill, BsFillEyeSlashFill } from "react-icons/bs";
 import { IoClose } from "react-icons/io5";
 
-import { register, verifyOtp } from "../../api/auth";
+import { register } from "../../api/auth";
 
 function extractErrorMessage(err) {
   if (err?.response?.status === 422) {
@@ -31,8 +33,11 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [otpKey, setOtpKey] = useState(0); // forces OTPboxes remount on error/resend
 
-  const [modal, setModal] = useState({ show: false, title: "", message: "", variant: "info", onConfirm: null });
+  const [modal, setModal] = useState({
+    show: false, title: "", message: "", variant: "info", onConfirm: null,
+  });
 
   const [formData, setFormData] = useState({
     full_name: "",
@@ -59,7 +64,12 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
-      showModal("Password Mismatch", "Passwords do not match. Please review and try again.", "warning", () => setModal({ ...modal, show: false }));
+      showModal(
+        "Password Mismatch",
+        "Passwords do not match. Please review and try again.",
+        "warning",
+        () => setModal((m) => ({ ...m, show: false }))
+      );
       return;
     }
 
@@ -78,11 +88,16 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
         throw res.error || new Error("Registration failed.");
       }
 
-      showModal("OTP Sent", `A verification code has been sent to ${formData.email}.`, "info", () => setModal({ ...modal, show: false }));
+      showModal(
+        "OTP Sent",
+        `A verification code has been sent to ${formData.email}.`,
+        "info",
+        () => setModal((m) => ({ ...m, show: false }))
+      );
       setStep(2);
     } catch (err) {
       const msg = extractErrorMessage(err) || "Registration failed. The email may already be in use.";
-      showModal("Sign Up Failed", msg, "warning", () => setModal({ ...modal, show: false }));
+      showModal("Sign Up Failed", msg, "warning", () => setModal((m) => ({ ...m, show: false })));
     } finally {
       setLoading(false);
     }
@@ -92,33 +107,45 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
     e.preventDefault();
 
     if (formData.otp.length !== 6) {
-      showModal("Invalid OTP", "Please enter the complete 6-digit code.", "warning", () => setModal({ ...modal, show: false }));
+      showModal(
+        "Invalid OTP",
+        "Please enter the complete 6-digit code.",
+        "warning",
+        () => setModal((m) => ({ ...m, show: false }))
+      );
       return;
     }
 
     setLoading(true);
     try {
-      const res = await verifyOtp(formData.email, formData.otp, "email_verify");
+      const res = await api.post("/auth/verify-email-otp", {
+        email: formData.email,
+        code: formData.otp,
+      });
 
-      if (!res.success) {
-        throw res.error || new Error("Verification failed.");
-      }
+      if (!res.success) throw new Error(res.error || "Verification failed.");
 
       showModal(
         "Account Created!",
-        "Your account has been successfully verified. You can now log in.",
+        "Your account has been verified. You can now log in.",
         "success",
         () => {
-          setModal({ ...modal, show: false });
+          setModal((m) => ({ ...m, show: false }));
           setStep(1);
-          setFormData({ full_name: "", email: "", password: "", confirmPassword: "", city: "", barangay: "", street: "", otp: "" });
+          setOtpKey(0);
+          setFormData({
+            full_name: "", email: "", password: "", confirmPassword: "",
+            city: "", barangay: "", street: "", otp: "",
+          });
           onClose();
           onSwitchToLogin();
         }
       );
     } catch (err) {
       const msg = extractErrorMessage(err) || "Invalid or expired OTP. Please try again.";
-      showModal("Verification Failed", msg, "warning", () => setModal({ ...modal, show: false }));
+      showModal("Verification Failed", msg, "warning", () => setModal((m) => ({ ...m, show: false })));
+      setFormData((prev) => ({ ...prev, otp: "" }));
+      setOtpKey((k) => k + 1); // remount OTPboxes — resets hasSubmitted and clears boxes
     } finally {
       setLoading(false);
     }
@@ -126,19 +153,32 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
 
   const handleResendOtp = async () => {
     try {
-      const { requestOtp } = await import("../../api/auth");
-      await requestOtp(formData.email, "email_verify");
-      showModal("OTP Resent", `A new code has been sent to ${formData.email}.`, "info", () => setModal({ ...modal, show: false }));
+      const res = await api.post("/auth/resend-email-otp", { email: formData.email });
+      if (!res.success) throw new Error(res.error || "Failed to resend.");
+      showModal(
+        "OTP Resent",
+        `A new code has been sent to ${formData.email}.`,
+        "info",
+        () => setModal((m) => ({ ...m, show: false }))
+      );
       setFormData((prev) => ({ ...prev, otp: "" }));
+      setOtpKey((k) => k + 1); // remount to restart timer and clear boxes
     } catch {
-      showModal("Error", "Failed to resend OTP. Please wait a moment and try again.", "warning", () => setModal({ ...modal, show: false }));
+      showModal(
+        "Error",
+        "Failed to resend OTP. Please wait a moment and try again.",
+        "warning",
+        () => setModal((m) => ({ ...m, show: false }))
+      );
     }
   };
 
   return (
     <div className="sign-up-overlay" onClick={onClose}>
-      <div className={`sign-up-content ${step === 2 ? "signup-small" : ""}`} onClick={(e) => e.stopPropagation()}>
-        
+      <div
+        className={`sign-up-content ${step === 2 ? "signup-small" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <button className="signup-close-btn" onClick={onClose} aria-label="Close sign up modal">
           <IoClose />
         </button>
@@ -152,14 +192,14 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
         </div>
 
         <div className="sign-up-right">
-
           {step === 1 && (
             <>
               <h2>Join Us!</h2>
-              <p className="sign-up-instruction">Create an account to start reporting road damages.</p>
+              <p className="sign-up-instruction">
+                Create an account to start reporting road damages.
+              </p>
 
               <form onSubmit={handleSignUpSubmit}>
-
                 <div className="sign-up-label-form">
                   <label>Full Name</label>
                   <div className="icon-input-signup">
@@ -219,7 +259,9 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                 </div>
 
                 <div className="sign-up-label-form">
-                  <label>Street Address <span className="label-optional">(optional)</span></label>
+                  <label>
+                    Street Address <span className="label-optional">(optional)</span>
+                  </label>
                   <div className="icon-input-signup">
                     <input
                       type="text"
@@ -243,13 +285,9 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       value={formData.password}
                       onChange={handleChange}
                     />
-                    <span 
-                      className="toggle-eye" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setShowPassword((p) => !p);
-                      }}
+                    <span
+                      className="toggle-eye"
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowPassword((p) => !p); }}
                       role="button"
                       tabIndex={0}
                       aria-label={showPassword ? "Hide password" : "Show password"}
@@ -271,13 +309,9 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       value={formData.confirmPassword}
                       onChange={handleChange}
                     />
-                    <span 
-                      className="toggle-eye" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setShowConfirmPassword((p) => !p);
-                      }}
+                    <span
+                      className="toggle-eye"
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowConfirmPassword((p) => !p); }}
                       role="button"
                       tabIndex={0}
                       aria-label={showConfirmPassword ? "Hide password" : "Show password"}
@@ -316,29 +350,33 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                 <div className="label-form-otp">
                   <label>One-Time-Password Code</label>
                   <OTPboxes
+                    key={otpKey}
                     length={6}
-                    onChange={(otp) => setFormData((prev) => ({ ...prev, otp }))}
+                    email={formData.email}
+                    onComplete={(otp) => setFormData((prev) => ({ ...prev, otp }))}
+                    onResend={handleResendOtp}
+                    disabled={loading}
+                    cooldownSeconds={60}
                   />
                 </div>
 
-                <button className="button-submit-otp" type="submit" disabled={loading || formData.otp.length !== 6}>
+                <button
+                  className="button-submit-otp"
+                  type="submit"
+                  disabled={loading || formData.otp.length !== 6}
+                >
                   {loading ? "Verifying..." : "Verify and Finish"}
                 </button>
 
-                <button className="button-back-signup" type="button" onClick={() => setStep(1)}>
+                <button
+                  className="button-back-signup"
+                  type="button"
+                  onClick={() => setStep(1)}
+                >
                   <IoIosArrowRoundBack className="back-icon-otp" />
                   Back To Sign Up
                 </button>
               </form>
-
-              <div className="otp-footer-signup">
-                <p>
-                  Didn't receive the code?{" "}
-                  <span className="resend-link" onClick={handleResendOtp}>
-                    Resend
-                  </span>
-                </p>
-              </div>
             </>
           )}
         </div>

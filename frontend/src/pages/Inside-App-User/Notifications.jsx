@@ -116,13 +116,13 @@ function Toast({ toasts, onRemove }) {
         const Icon = cfg.icon;
         return (
           <div key={toast.id} className={`notif-toast ${cfg.cls}`}>
-            <div className="notif-toast-icon-wrap"><Icon size={18} /></div>
+            <div className="notif-toast-icon-wrap"><Icon size={16} /></div>
             <div className="notif-toast-body">
               <p className="notif-toast-title">{toast.title}</p>
               <p className="notif-toast-message">{toast.message}</p>
             </div>
             <button className="notif-toast-close" onClick={() => onRemove(toast.id)}>
-              <X size={15} />
+              <X size={14} />
             </button>
           </div>
         );
@@ -141,22 +141,55 @@ function NotifCard({ notif, onView, onMarkRead, onDelete }) {
       className={`notif-card ${cfg.cls} ${notif.is_read ? "is-read" : "is-unread"}`}
       onClick={() => { onView(notif); if (!notif.is_read) onMarkRead(notif.id); }}
     >
+      {/* Left accent bar */}
       <div className="notif-accent-bar" />
-      <div className="notif-card-icon-wrap"><Icon size={18} /></div>
+
+      {/* Type icon */}
+      <div className="notif-card-icon-wrap">
+        <Icon size={16} />
+      </div>
+
+      {/* Main content */}
       <div className="notif-card-body">
         <div className="notif-card-top">
           <span className="notif-card-title">{notif.title}</span>
           <span className="notif-type-chip">{cfg.label}</span>
         </div>
         <p className="notif-card-message">{notif.message}</p>
-        <div className="notif-card-time"><Clock size={11} /><span>{formatTime(notif.created_at)}</span></div>
+        <div className="notif-card-time">
+          <Clock size={10} />
+          <span>{formatTime(notif.created_at)}</span>
+        </div>
       </div>
-      <div className="notif-card-actions">
-        <button className="notif-action-btn btn-view"   onClick={e => { e.stopPropagation(); onView(notif); }}><Eye size={12} /></button>
+
+      {/* Unread indicator dot */}
+      {!notif.is_read && <div className="notif-unread-dot" />}
+
+      {/* Action buttons */}
+      <div className="notif-card-actions" onClick={e => e.stopPropagation()}>
+        <button
+          className="notif-action-btn btn-view"
+          title="View"
+          onClick={e => { e.stopPropagation(); onView(notif); }}
+        >
+          <Eye size={13} />
+        </button>
         {!notif.is_read && (
-          <button className="notif-action-btn btn-mark" onClick={e => { e.stopPropagation(); onMarkRead(notif.id); }}><CheckCheck size={12} /></button>
+          <button
+            className="notif-action-btn btn-mark"
+            title="Mark as read"
+            onClick={e => { e.stopPropagation(); onMarkRead(notif.id); }}
+          >
+            <CheckCheck size={13} />
+          </button>
         )}
-        <button className="notif-action-btn btn-delete" onClick={e => { e.stopPropagation(); onDelete(notif.id); }}><Trash2 size={12} /></button>
+        <button
+          className="notif-action-btn btn-delete"
+          title="Delete"
+          onClick={e => { e.stopPropagation(); onDelete(notif.id); }}
+        >
+          <Trash2 size={13} />
+        </button>
       </div>
     </div>
   );
@@ -165,7 +198,7 @@ function NotifCard({ notif, onView, onMarkRead, onDelete }) {
 function EmptyState({ activeFilter }) {
   return (
     <div className="notif-empty-state">
-      <div className="notif-empty-icon"><Bell size={32} /></div>
+      <div className="notif-empty-icon"><Bell size={28} /></div>
       <h3>{activeFilter === "all" ? "No Notifications Yet" : `No ${activeFilter} notifications`}</h3>
       <p>When your reports get updates, they will appear here.</p>
     </div>
@@ -178,7 +211,7 @@ function ReportDetailModal({ report, loading, onClose }) {
   return (
     <div className="notif-modal-overlay" onClick={onClose}>
       <div className="notif-modal" onClick={e => e.stopPropagation()}>
-        <button className="notif-modal-close" onClick={onClose}><X size={20} /></button>
+        <button className="notif-modal-close" onClick={onClose}><X size={18} /></button>
 
         {loading ? (
           <div className="notif-modal-loading">Loading report…</div>
@@ -200,7 +233,7 @@ function ReportDetailModal({ report, loading, onClose }) {
                   <React.Fragment key={s}>
                     <div className={`notif-tl-step ${done ? "done" : ""} ${active ? "active" : ""}`}>
                       <div className="notif-tl-dot">
-                        {done ? <CircleCheck size={12} /> : i + 1}
+                        {done ? <CircleCheck size={11} /> : i + 1}
                       </div>
                       <span className="notif-tl-label">
                         {s === "IN_PROGRESS"
@@ -337,9 +370,9 @@ export default function Notifications() {
     if (error) {
       return (
         <div className="notif-status-msg is-error">
-          <AlertTriangle size={16} />
+          <AlertTriangle size={15} style={{ marginRight: 6, verticalAlign: "middle" }} />
           {error}
-          <button onClick={refetch}>Retry</button>
+          <button onClick={refetch} style={{ marginLeft: 8 }}>Retry</button>
         </div>
       );
     }
@@ -364,16 +397,17 @@ export default function Notifications() {
       <div className="notifications-page">
         <div className="notifications-inner">
 
+          {/* ── Header ── */}
           <div className="notif-page-header">
             <div className="notif-page-title-group">
-              <div className="notif-page-icon-wrap"><Bell size={22} /></div>
+              <div className="notif-page-icon-wrap"><Bell size={20} /></div>
               <div>
                 <h1 className="notif-page-title">Notifications</h1>
                 <p className="notif-page-subtitle">Stay updated on your reports</p>
               </div>
               {unreadCount > 0 && (
                 <span className="notif-count-pill">
-                  <Bell size={11} /> {unreadCount} unread
+                  <Bell size={10} /> {unreadCount} unread
                 </span>
               )}
             </div>
@@ -387,18 +421,19 @@ export default function Notifications() {
                     addToast("All Caught Up", "All notifications marked as read.", "system");
                   }}
                 >
-                  <CheckCheck size={15} /><span>Mark all read</span>
+                  <CheckCheck size={14} /><span>Mark all read</span>
                 </button>
               )}
               <button
                 className={`notif-settings-btn ${showSettings ? "active" : ""}`}
                 onClick={() => setShowSettings(v => !v)}
               >
-                <Settings size={18} />
+                <Settings size={16} />
               </button>
             </div>
           </div>
 
+          {/* ── Filter tabs ── */}
           <div className="notif-filter-bar">
             {FILTER_TABS.map(tab => (
               <button
@@ -414,6 +449,7 @@ export default function Notifications() {
             ))}
           </div>
 
+          {/* ── Notification list ── */}
           <div className="notif-list">
             {renderContent()}
           </div>

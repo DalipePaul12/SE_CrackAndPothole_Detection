@@ -1,4 +1,4 @@
-import api from "./client";
+import { api } from "./client";
 
 export const getMyProfile = async () => {
   const res = await api.get("/users/me");
@@ -11,7 +11,7 @@ export const getMyProfile = async () => {
 };
 
 export const updateMyProfile = async (payload) => {
-  const res = await api.put("/users/me", payload);
+  const res = await api.patch("/users/me", payload);
 
   return {
     success: res?.success ?? false,
@@ -21,11 +21,11 @@ export const updateMyProfile = async (payload) => {
 };
 
 export const changePassword = async (current_password, new_password) => {
-  const res = await api.post("/users/change-password", {
+  api.post("/users/me/password", {
     current_password,
     new_password,
   });
-
+  
   return {
     success: res?.success ?? false,
     data: res?.data ?? null,

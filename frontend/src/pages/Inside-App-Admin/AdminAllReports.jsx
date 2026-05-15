@@ -9,6 +9,7 @@ import {
   AlertTriangle, Calendar, FileText, Wrench, Image, Camera, Paperclip,
   Mail, MailOpen, Send, CheckCircle, ClipboardList, ArrowDown, ArrowUp,
   ArrowUpDown, Circle, StickyNote, Ban, UserCog, RotateCcw, ChevronUp, ChevronDown,
+  FileText as FileIcon, ImageIcon, MessageSquare, Shield, Activity,
 } from "lucide-react";
 
 const BASE_URL    = import.meta.env.VITE_API_URL || "";
@@ -41,7 +42,7 @@ const NOTIF_TEMPLATES = {
 
 const toClass  = (s = "") => s.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 const fmtDate  = (iso) => iso ? new Date(iso).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "—";
-const padId    = (id) => `RPT-${String(id).padStart(4, "0")}`;
+const padId    = (id) => `RPT-${String(id).padStart(5, "0")}`;
 const mediaUrl = (att) => att?.file_url ? `${BASE_URL}${att.file_url}` : null;
 
 const damageType = (r) => r.ai_damage_type ?? r.damage_type ?? "—";
@@ -61,7 +62,7 @@ const confColor = (v) => {
   return "#2e7d32";
 };
 const sevWeight = (r) => {
-  const map = { critical: 0, "non-critical": 1};
+  const map = { critical: 0, "non-critical": 1 };
   return map[severity(r).toLowerCase()] ?? 99;
 };
 
@@ -95,22 +96,22 @@ function exportCSV(rows) {
 export default function AdminAllReports() {
   const navigate = useNavigate();
 
-  const [search,      setSearch]      = useState("");
-  const [dSearch,     setDSearch]     = useState("");
-  const [filters,     setFilters]     = useState({
+  const [search,       setSearch]       = useState("");
+  const [dSearch,      setDSearch]      = useState("");
+  const [filters,      setFilters]      = useState({
     type: "All", severity: "All", status: "All", barangay: "All",
     dateFrom: "", dateTo: "", confMin: 0, confMax: 100,
   });
-  const [sort,        setSort]        = useState({ field: "created_at", dir: "desc" });
-  const [criticalOnly,setCriticalOnly]= useState(false);
-  const [page,        setPage]        = useState(1);
+  const [sort,         setSort]         = useState({ field: "created_at", dir: "desc" });
+  const [criticalOnly, setCriticalOnly] = useState(false);
+  const [page,         setPage]         = useState(1);
 
-  const [rawReports, setRawReports] = useState([]);
-  const [reports,   setReports]   = useState([]);
-  const [total,     setTotal]     = useState(0);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(null);
-  const [barangays, setBarangays] = useState(["All"]);
+  const [rawReports,  setRawReports]  = useState([]);
+  const [reports,     setReports]     = useState([]);
+  const [total,       setTotal]       = useState(0);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
+  const [barangays,   setBarangays]   = useState(["All"]);
 
   const [selectedIds,    setSelectedIds]    = useState(new Set());
   const [bulkLoading,    setBulkLoading]    = useState(false);
@@ -293,10 +294,10 @@ export default function AdminAllReports() {
   const allSelected = reports.length > 0 && selectedIds.size === reports.length;
 
   const visiblePages = (() => {
-    const half  = 2;
-    let start   = Math.max(1, page - half);
-    const end   = Math.min(pageCount, start + 4);
-    start       = Math.max(1, end - 4);
+    const half = 2;
+    let start  = Math.max(1, page - half);
+    const end  = Math.min(pageCount, start + 4);
+    start      = Math.max(1, end - 4);
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   })();
 
@@ -627,15 +628,15 @@ export default function AdminAllReports() {
             Showing <strong>{total ? pageStart : 0}–{pageEnd}</strong> of <strong>{total.toLocaleString()}</strong> reports
           </span>
           <div className="page-controls">
-            <button className="page-btn" disabled={page === 1}         onClick={() => setPage(1)}              title="First"><ChevronFirst size={16} /></button>
-            <button className="page-btn" disabled={page === 1}         onClick={() => setPage((p) => p - 1)}   title="Previous"><ChevronLeft size={16} /></button>
+            <button className="page-btn" disabled={page === 1}        onClick={() => setPage(1)}            title="First"><ChevronFirst size={16} /></button>
+            <button className="page-btn" disabled={page === 1}        onClick={() => setPage((p) => p - 1)} title="Previous"><ChevronLeft size={16} /></button>
             {visiblePages.map((p) => (
               <button key={p} className={`page-btn ${page === p ? "page-active" : ""}`} onClick={() => setPage(p)}>
                 {p}
               </button>
             ))}
-            <button className="page-btn" disabled={page >= pageCount}  onClick={() => setPage((p) => p + 1)}   title="Next"><ChevronRight size={16} /></button>
-            <button className="page-btn" disabled={page >= pageCount}  onClick={() => setPage(pageCount)}      title="Last"><ChevronLast size={16} /></button>
+            <button className="page-btn" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)} title="Next"><ChevronRight size={16} /></button>
+            <button className="page-btn" disabled={page >= pageCount} onClick={() => setPage(pageCount)}    title="Last"><ChevronLast size={16} /></button>
           </div>
           <span className="page-size-info">Page {page} of {pageCount}</span>
         </div>
@@ -654,31 +655,38 @@ export default function AdminAllReports() {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────
+   REPORT MODAL — Professional Redesign (Image 2 Reference)
+   ───────────────────────────────────────────────────────────── */
 function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navigate }) {
-  const [r,             setR]             = useState(initial);
-  const [activeTab,     setTab]           = useState("details");
-  const [comments,      setComments]      = useState([]);
-  const [newNote,       setNewNote]       = useState("");
-  const [assignedTo,    setAssigned]      = useState(initial.assigned_to ?? "Unassigned");
-  const [declineReason, setDeclineReason] = useState("");
-  const [submitting,    setSubmitting]    = useState(false);
-  const [imgErrors,     setImgErrors]     = useState({});
-  const [noteLoading,   setNoteLoading]   = useState(false);
-  const [updates,       setUpdates]       = useState([]);
-  const [updatesLoading, setUpdatesLoading] = useState(false);
-  const [updateSent,    setUpdateSent]    = useState(false);
-  const [customMsg,     setCustomMsg]     = useState("");
+  const [r,              setR]             = useState(initial);
+  const [activeTab,      setTab]           = useState("details");
+  const [comments,       setComments]      = useState([]);
+  const [newNote,        setNewNote]       = useState("");
+  const [assignedTo,     setAssigned]      = useState(initial.assigned_to ?? "Unassigned");
+  const [declineReason,  setDeclineReason] = useState("");
+  const [submitting,     setSubmitting]    = useState(false);
+  const [imgErrors,      setImgErrors]     = useState({});
+  const [noteLoading,    setNoteLoading]   = useState(false);
+  const [updates,        setUpdates]       = useState([]);
+  const [updatesLoading, setUpdatesLoading]= useState(false);
+  const [updateSent,     setUpdateSent]    = useState(false);
+  const [customMsg,      setCustomMsg]     = useState("");
 
   const transitions = STATUS_TRANSITIONS[r.status] ?? [];
   const attachments = r.media_attachments ?? [];
   const conf        = confVal(r);
+  const sev         = severity(r);
+  const sevClass    = toClass(sev);
 
+  /* Close on Escape */
   useEffect(() => {
     const fn = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", fn);
     return () => document.removeEventListener("keydown", fn);
   }, [onClose]);
 
+  /* Load comments */
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     fetch(`${BASE_URL}/api/v1/reports/${r.id}/comments`, {
@@ -759,13 +767,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const doSendUpdate = async (title, message, type = "info") => {
     if (!r.owner?.id) return;
     setUpdatesLoading(true);
-    await sendNotification({
-      user_id:   r.owner.id,
-      report_id: r.id,
-      title,
-      message,
-      type,
-    });
+    await sendNotification({ user_id: r.owner.id, report_id: r.id, title, message, type });
     setCustomMsg("");
     setUpdateSent(true);
     setTimeout(() => setUpdateSent(false), 3000);
@@ -775,97 +777,161 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
 
   const flowIndex = STATUS_FLOW_ORDER.indexOf(r.status);
 
+  /* Tab definitions — with icons matching Image 2 */
   const TABS = [
-    { id: "details", label: "Details",  badge: null              },
-    { id: "media",   label: "Media",    badge: attachments.length },
-    { id: "notes",   label: "Notes",    badge: comments.length    },
-    { id: "actions", label: "Actions",  badge: transitions.length },
-    { id: "message", label: "Updates",  badge: updates.length > 0 ? updates.length : null },
+    { id: "details", label: "Details", icon: <FileIcon size={15} />,        badge: null              },
+    { id: "media",   label: "Media",   icon: <ImageIcon size={15} />,       badge: attachments.length },
+    { id: "notes",   label: "Notes",   icon: <MessageSquare size={15} />,   badge: comments.length    },
+    { id: "actions", label: "Actions", icon: <Shield size={15} />,          badge: transitions.length },
+    { id: "message", label: "Updates", icon: <Activity size={15} />,        badge: updates.length > 0 ? updates.length : null },
   ];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+
+        {/* ── Header: left-aligned, ID + status + AI badge, X top-right ── */}
         <div className="modal-hdr">
           <div className="modal-hdr-left">
             <span className="modal-id">{padId(r.id)}</span>
             <span className={`status-pill ${toClass(r.status ?? "")}`}>
-              {STATUS_LABELS[r.status] ?? r.status}
+              {(STATUS_LABELS[r.status] ?? r.status ?? "").toUpperCase()}
             </span>
             {conf !== null && (
-              <span className="conf-badge-modal" style={{ borderColor: confColor(conf), color: confColor(conf) }}>
+              <span
+                className="conf-badge-modal"
+                style={{ borderColor: confColor(conf), color: confColor(conf) }}
+              >
                 AI {conf}%
               </span>
             )}
           </div>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Close"><X size={20} /></button>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
+            <X size={18} />
+          </button>
         </div>
 
+        {/* ── Tabs: icons + labels, full-width bottom border ── */}
         <div className="modal-tabs">
-          {TABS.map(({ id, label, badge }) => (
+          {TABS.map(({ id, label, icon, badge }) => (
             <button
               key={id}
               className={`tab-btn ${activeTab === id ? "active" : ""}`}
               onClick={() => setTab(id)}
             >
+              {icon}
               {label}
               {badge > 0 && <span className="tab-badge">{badge}</span>}
             </button>
           ))}
         </div>
 
+        {/* ── Scrollable content ── */}
         <div className="modal-content-area">
+
+          {/* DETAILS TAB */}
           {activeTab === "details" && (
-            <div className="tab-pane">
+            <div className="tab-pane details-pane">
               <div className="detail-grid">
+
+                {/* Reporter */}
                 <div className="detail-card">
-                  <h5 className="detail-card-title"><User size={16} /> Reporter</h5>
-                  <div className="detail-row"><span>Name</span>   <strong>{r.owner?.full_name ?? "Anonymous"}</strong></div>
-                  <div className="detail-row"><span>Contact</span><strong>{r.owner?.phone ?? "—"}</strong></div>
-                  <div className="detail-row"><span>Email</span>  <strong>{r.owner?.email ?? "—"}</strong></div>
-                </div>
-                <div className="detail-card">
-                  <h5 className="detail-card-title"><AlertTriangle size={16} /> Damage Info</h5>
-                  <div className="detail-row"><span>Type</span>   <strong>{damageType(r)}</strong></div>
-                  <div className="detail-row">
-                    <span>Severity</span>
-                    <span className={`sev-pill ${toClass(severity(r))}`}>{severity(r)}</span>
-                  </div>
-                  {conf !== null && (
+                  <h5 className="detail-card-title"><User size={14} /> Reporter</h5>
+                  <div className="detail-body">
                     <div className="detail-row">
-                      <span>AI Confidence</span>
-                      <span style={{ color: confColor(conf), fontWeight: 700 }}>{conf}%</span>
+                      <span>Name</span>
+                      <strong>{r.owner?.full_name ?? "Anonymous"}</strong>
                     </div>
-                  )}
+                    <div className="detail-row">
+                      <span>Contact</span>
+                      <strong>{r.owner?.phone ?? "—"}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>Email</span>
+                      <strong>{r.owner?.email ?? "—"}</strong>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Damage Info */}
                 <div className="detail-card">
-                  <h5 className="detail-card-title"><MapPin size={16} /> Location</h5>
-                  <div className="detail-row"><span>Address</span> <strong>{r.location_address ?? "—"}</strong></div>
-                  <div className="detail-row"><span>Street</span>  <strong>{r.street_name ?? "—"}</strong></div>
-                  <div className="detail-row"><span>Barangay</span><strong>{r.barangay ?? "—"}</strong></div>
+                  <h5 className="detail-card-title"><AlertTriangle size={14} /> Damage Info</h5>
+                  <div className="detail-body">
+                    <div className="detail-row">
+                      <span>Type</span>
+                      <strong>{damageType(r)}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>Severity</span>
+                      <span className={`sev-text ${sevClass}`}>
+                        {sev.toUpperCase()}
+                      </span>
+                    </div>
+                    {conf !== null && (
+                      <div className="detail-row">
+                        <span>AI Confidence</span>
+                        <span className="conf-text" style={{ color: confColor(conf) }}>
+                          {conf}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Location */}
                 <div className="detail-card">
-                  <h5 className="detail-card-title"><Calendar size={16} /> Timeline</h5>
-                  <div className="detail-row"><span>Submitted</span><strong>{fmtDate(r.created_at)}</strong></div>
-                  <div className="detail-row"><span>Updated</span>  <strong>{fmtDate(r.updated_at)}</strong></div>
+                  <h5 className="detail-card-title"><MapPin size={14} /> Location</h5>
+                  <div className="detail-body">
+                    <div className="detail-row">
+                      <span>Address</span>
+                      <strong>{r.location_address ?? "—"}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>Street</span>
+                      <strong>{r.street_name ?? "—"}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>Barangay</span>
+                      <strong>{r.barangay ?? "—"}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timeline */}
+                <div className="detail-card">
+                  <h5 className="detail-card-title"><Calendar size={14} /> Timeline</h5>
+                  <div className="detail-body">
+                    <div className="detail-row">
+                      <span>Submitted</span>
+                      <strong>{fmtDate(r.created_at)}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>Updated</span>
+                      <strong>{fmtDate(r.updated_at)}</strong>
+                    </div>
+                  </div>
                 </div>
               </div>
 
+              {/* Description */}
               {r.description && (
                 <div className="detail-desc-card">
-                  <h5 className="detail-card-title"><FileText size={16} /> Description</h5>
+                  <h5 className="detail-card-title"><FileText size={14} /> Description</h5>
                   <p>{r.description}</p>
                 </div>
               )}
 
+              {/* Decline notice */}
               {r.status === "DECLINED" && r.decline_reason && (
                 <div className="decline-notice">
-                  <strong><Ban size={16} /> Decline Reason:</strong> {r.decline_reason}
+                  <Ban size={16} />
+                  <strong>Decline Reason:</strong> {r.decline_reason}
                 </div>
               )}
 
+              {/* Assignment */}
               <div className="detail-card assign-card">
-                <h5 className="detail-card-title"><UserCog size={16} /> Assignment</h5>
+                <h5 className="detail-card-title"><UserCog size={14} /> Assignment</h5>
                 <div className="assign-row">
                   <select value={assignedTo} onChange={(e) => setAssigned(e.target.value)}>
                     {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -876,19 +942,26 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                 </div>
               </div>
 
+              {/* View on Map */}
               <div className="modal-map-link">
                 <button
                   className="btn-view-map"
                   onClick={() => navigate("/admin/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } })}
-                ><MapPin size={16} /> View on Map</button>
+                >
+                  <MapPin size={16} /> View on Map
+                </button>
               </div>
             </div>
           )}
 
+          {/* MEDIA TAB */}
           {activeTab === "media" && (
             <div className="tab-pane media-pane">
               {attachments.length === 0 ? (
-                <div className="no-media-state"><span><Image size={32} /></span><p>No media attachments for this report</p></div>
+                <div className="no-media-state">
+                  <span><Image size={32} /></span>
+                  <p>No media attachments for this report</p>
+                </div>
               ) : (
                 <div className="media-grid">
                   {attachments.map((att, i) => {
@@ -902,7 +975,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                         {url ? (
                           att.media_type === "video"
                             ? <video src={url} controls className="media-display" />
-                            : <img src={url} alt={label} className="media-display"
+                            : <img src={url} alt={`Attachment ${i + 1}`} className="media-display"
                                 onError={() => setImgErrors((p) => ({ ...p, [i]: true }))} />
                         ) : (
                           <div className="media-unavail">Media unavailable</div>
@@ -915,11 +988,15 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
+          {/* NOTES TAB */}
           {activeTab === "notes" && (
             <div className="tab-pane notes-pane">
               <div className="notes-timeline">
                 {comments.length === 0 ? (
-                  <div className="no-notes"><span><StickyNote size={32} /></span><p>No admin notes yet. Be the first to add one.</p></div>
+                  <div className="no-notes">
+                    <span><StickyNote size={32} /></span>
+                    <p>No admin notes yet. Be the first to add one.</p>
+                  </div>
                 ) : (
                   comments.map((c, i) => (
                     <div key={c.id ?? i} className="note-entry">
@@ -954,6 +1031,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
+          {/* ACTIONS TAB */}
           {activeTab === "actions" && (
             <div className="tab-pane actions-pane">
               <div className="workflow-section">
@@ -1019,6 +1097,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
+          {/* UPDATES / MESSAGE TAB */}
           {activeTab === "message" && (
             <div className="tab-pane message-pane">
               {!r.owner?.id ? (
@@ -1030,20 +1109,22 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                 <>
                   <div className="msg-reporter-info">
                     <strong>Sending to:</strong> {r.owner?.full_name ?? "Reporter"}
-                    {r.owner?.email && <span style={{ color: "var(--subtext)", marginLeft: 6 }}>{r.owner.email}</span>}
+                    {r.owner?.email && (
+                      <span style={{ color: "var(--subtext)", marginLeft: 6 }}>{r.owner.email}</span>
+                    )}
                   </div>
 
                   <p className="msg-label" style={{ marginBottom: 8 }}>Quick updates</p>
                   <div className="msg-quick-replies">
                     {[
-                      { label: <><CheckCircle size={14} /> Under Review</>,          title: "Your report is under review",             text: "Your report is currently being reviewed by our team. We will update you shortly.", type: "info"    },
-                      { label: <><Camera size={14} /> Need Clearer Photo</>,    title: "Additional information needed",            text: "Thank you for your report. Could you please provide a clearer photo of the damage?", type: "warning" },
-                      { label: <><Wrench size={14} /> Scheduled for Repair</>,  title: "Repair has been scheduled",               text: "Your report has been reviewed and a repair has been scheduled. Thank you!", type: "info"    },
-                      { label: <><CheckCircle size={14} /> Repair Complete</>,        title: "Road damage has been repaired",           text: "The damage you reported has been fully repaired. Thank you for helping keep our roads safe!", type: "success" },
-                      { label: <><ClipboardList size={14} /> Duplicate Report</>,      title: "Your report is a duplicate",              text: "This damage has already been reported and is being addressed. Thank you for your vigilance!", type: "warning" },
-                    ].map((tpl) => (
+                      { label: <><CheckCircle size={14} /> Under Review</>,       title: "Your report is under review",   text: "Your report is currently being reviewed by our team. We will update you shortly.", type: "info"    },
+                      { label: <><Camera size={14} /> Need Clearer Photo</>,      title: "Additional information needed", text: "Thank you for your report. Could you please provide a clearer photo of the damage?", type: "warning" },
+                      { label: <><Wrench size={14} /> Scheduled for Repair</>,   title: "Repair has been scheduled",     text: "Your report has been reviewed and a repair has been scheduled. Thank you!", type: "info"    },
+                      { label: <><CheckCircle size={14} /> Repair Complete</>,    title: "Road damage has been repaired", text: "The damage you reported has been fully repaired. Thank you for helping keep our roads safe!", type: "success" },
+                      { label: <><ClipboardList size={14} /> Duplicate Report</>, title: "Your report is a duplicate",   text: "This damage has already been reported and is being addressed. Thank you for your vigilance!", type: "warning" },
+                    ].map((tpl, idx) => (
                       <button
-                        key={tpl.label}
+                        key={idx}
                         className="msg-quick-btn"
                         disabled={updatesLoading}
                         onClick={() => doSendUpdate(tpl.title, tpl.text, tpl.type)}
@@ -1110,6 +1191,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
               )}
             </div>
           )}
+
         </div>
       </div>
     </div>

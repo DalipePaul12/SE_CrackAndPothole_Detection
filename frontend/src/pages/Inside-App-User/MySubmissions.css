@@ -1,3 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+/* ============================================
+   ROOT & BASE
+   ============================================ */
 .submissions-page {
   padding: 0 2rem 3rem;
   background: var(--bg);
@@ -7,12 +12,97 @@
   transition: background var(--transition-med), color var(--transition-med);
 }
 
+/* ============================================
+   INNER CONTAINER — KEY FOR SIDEBAR ANIMATION
+   ============================================ */
 .submissions-inner {
   max-width: 1100px;
   margin: 0 auto;
   padding-top: 1.5rem;
+  /* Smooth width transition when sidebar changes */
+  transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), 
+              margin 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
 }
 
+/* ============================================
+   SIDEBAR STATES — ADD THESE TO YOUR LAYOUT CSS
+   (Put these in your main layout/Sidebar CSS file)
+   ============================================ */
+
+/* When sidebar is EXPANDED (default state) */
+.sidebar-expanded .submissions-inner {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* When sidebar is COLLAPSED (minimized) */
+.sidebar-collapsed .submissions-inner {
+  max-width: 1400px;        /* Wider when sidebar is small */
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ============================================
+   TABLE WRAPPER — THE ANIMATING ELEMENT
+   ============================================ */
+.sub-table-wrapper {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  /* CRITICAL: smooth transition for width changes */
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+}
+
+@media (max-width: 768px) { 
+  .sub-table-wrapper { 
+    display: none; 
+  } 
+}
+
+/* ============================================
+   TABLE — FLEXIBLE WIDTH WITH TRANSITION
+   ============================================ */
+.sub-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+  /* Smooth column width transitions */
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sub-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 6px 14px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  transition: padding 0.35s ease;
+}
+
+.sub-table td {
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.87rem;
+  color: var(--subtext);
+  vertical-align: middle;
+  transition: padding 0.35s ease;
+}
+
+/* ============================================
+   HEADER CARD — ALSO ANIMATES
+   ============================================ */
 .submissions-header-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -20,8 +110,79 @@
   padding: 1.5rem;
   margin-bottom: 1.25rem;
   box-shadow: var(--shadow-sm);
+  /* Smooth width transition */
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
 }
 
+/* ============================================
+   MOBILE CARDS — ANIMATE TOO
+   ============================================ */
+.sub-mobile-cards {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 768px) { 
+  .sub-mobile-cards { 
+    display: flex; 
+  } 
+}
+
+/* ============================================
+   MINI STATS
+   ============================================ */
+.sub-mini-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 1.25rem;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sub-mini-stat {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 10px;
+  text-align: center;
+  transition: border-color var(--transition-fast), transform var(--transition-fast), all 0.35s ease;
+}
+
+.sub-mini-stat:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.sub-mini-stat-count {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 5px;
+  transition: font-size 0.35s ease;
+}
+
+.sub-mini-stat-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--subtext);
+}
+
+.sub-mini-stat.stat-pending   .sub-mini-stat-count { color: var(--status-pending); }
+.sub-mini-stat.stat-verified  .sub-mini-stat-count { color: var(--status-verified); }
+.sub-mini-stat.stat-progress  .sub-mini-stat-count { color: var(--status-progress); }
+.sub-mini-stat.stat-resolved  .sub-mini-stat-count { color: var(--status-resolved); }
+.sub-mini-stat.stat-total     .sub-mini-stat-count { color: var(--primary); }
+.sub-mini-stat.stat-score     .sub-mini-stat-count { color: var(--success); }
+
+/* ============================================
+   HEADER
+   ============================================ */
 .sub-header-top {
   display: flex;
   align-items: flex-start;
@@ -105,52 +266,9 @@
   background: var(--primary-subtle);
 }
 
-/* ===== MINI STATS ===== */
-.sub-mini-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 1.25rem;
-}
-
-.sub-mini-stat {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 12px 10px;
-  text-align: center;
-  transition: border-color var(--transition-fast), transform var(--transition-fast);
-}
-
-.sub-mini-stat:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-}
-
-.sub-mini-stat-count {
-  display: block;
-  font-size: 1.5rem;
-  font-weight: 800;
-  line-height: 1;
-  margin-bottom: 5px;
-}
-
-.sub-mini-stat-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--subtext);
-}
-
-.sub-mini-stat.stat-pending   .sub-mini-stat-count { color: var(--status-pending); }
-.sub-mini-stat.stat-verified  .sub-mini-stat-count { color: var(--status-verified); }
-.sub-mini-stat.stat-progress  .sub-mini-stat-count { color: var(--status-progress); }
-.sub-mini-stat.stat-resolved  .sub-mini-stat-count { color: var(--status-resolved); }
-.sub-mini-stat.stat-total     .sub-mini-stat-count { color: var(--primary); }
-.sub-mini-stat.stat-score     .sub-mini-stat-count { color: var(--success); }
-
-/* ===== SEARCH & SORT ROW ===== */
+/* ============================================
+   SEARCH & SORT ROW
+   ============================================ */
 .sub-search-sort-row {
   display: flex;
   gap: 12px;
@@ -243,7 +361,9 @@
 .sub-sort-select:focus,
 .sub-sort-select:hover { border-color: var(--primary); }
 
-/* ===== FILTER DRAWER ===== */
+/* ============================================
+   FILTER DRAWER
+   ============================================ */
 .sub-filter-drawer-wrap {
   position: relative;
   display: inline-block;
@@ -437,45 +557,9 @@
 
 .sub-filter-drawer-reset:hover { background: var(--danger-bg); border-color: var(--danger); }
 
-/* ===== TABLE ===== */
-.sub-table-wrapper {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-2xl);
-  padding: 1rem;
-  margin-bottom: 1rem;
-  box-shadow: var(--shadow-sm);
-  overflow-x: auto;
-}
-
-@media (max-width: 768px) { .sub-table-wrapper { display: none; } }
-
-.sub-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 640px;
-}
-
-.sub-table th {
-  text-align: left;
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  padding: 6px 14px 14px;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-.sub-table td {
-  padding: 14px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.87rem;
-  color: var(--subtext);
-  vertical-align: middle;
-}
-
+/* ============================================
+   TABLE ROWS
+   ============================================ */
 .sub-table-row {
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -517,8 +601,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: max-width 0.35s ease;
 }
 
+/* ============================================
+   NO DATA
+   ============================================ */
 .sub-no-data {
   text-align: center;
   padding: 30px;
@@ -526,15 +614,9 @@
   font-size: 0.9rem;
 }
 
-/* ===== MOBILE CARDS ===== */
-.sub-mobile-cards {
-  display: none;
-  flex-direction: column;
-  gap: 10px;
-}
-
-@media (max-width: 768px) { .sub-mobile-cards { display: flex; } }
-
+/* ============================================
+   MOBILE CARDS
+   ============================================ */
 .sub-report-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -621,7 +703,9 @@
 .sub-card-date { font-size: 0.73rem; color: var(--text-muted); }
 .sub-card-upvotes { font-size: 0.73rem; color: var(--primary); font-weight: 600; display: flex; align-items: center; gap: 4px; }
 
-/* ===== STATUS PROGRESS ===== */
+/* ============================================
+   STATUS PROGRESS
+   ============================================ */
 .sub-status-progress {
   display: flex;
   align-items: center;
@@ -697,7 +781,9 @@
 
 .sub-progress-line.line-active { background: var(--primary); }
 
-/* ===== EMPTY STATE ===== */
+/* ============================================
+   EMPTY STATE
+   ============================================ */
 .sub-empty-state {
   display: flex;
   flex-direction: column;
@@ -759,7 +845,9 @@
 
 .sub-empty-action:hover { background: var(--primary-hover); color: #fff; }
 
-/* ===== MAP PLACEHOLDER ===== */
+/* ============================================
+   MAP PLACEHOLDER
+   ============================================ */
 .sub-map-placeholder {
   background: var(--card);
   border: 1.5px dashed var(--border-strong);
@@ -780,7 +868,9 @@
   margin: 0;
 }
 
-/* ===== MODAL ===== */
+/* ============================================
+   MODAL
+   ============================================ */
 .sub-modal-content {
   background: var(--card);
   border: 1px solid var(--border);
@@ -1229,11 +1319,149 @@
 .sub-delete-btn:hover:not(:disabled) { opacity: 0.88; }
 .sub-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ===== RESPONSIVE ===== */
+/* ============================================
+   PAGINATION
+   ============================================ */
+.s2f-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 0 4px;
+  flex-wrap: wrap;
+  transition: all 0.35s ease;
+}
+
+.s2f-page-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--subtext);
+  font-weight: 600;
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.s2f-page-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.s2f-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.s2f-page-info {
+  font-size: 0.88rem;
+  color: var(--subtext);
+}
+
+/* ============================================
+   ERROR BANNER
+   ============================================ */
+.s2f-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(229, 115, 115, 0.1);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  gap: 12px;
+}
+
+.s2f-retry-btn {
+  padding: 6px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+
+.s2f-retry-btn:hover {
+  background: rgba(229, 115, 115, 0.2);
+}
+
+/* ============================================
+   SKELETON
+   ============================================ */
+.skeleton-row {
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ============================================
+   BADGES & CHIPS
+   ============================================ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.badge-pending     { background: var(--status-pending-bg);   color: var(--status-pending); }
+.badge-in-progress { background: var(--status-progress-bg);  color: var(--status-progress); }
+.badge-verified    { background: var(--status-verified-bg);  color: var(--status-verified); }
+.badge-resolved    { background: var(--status-resolved-bg);  color: var(--status-resolved); }
+.badge-declined    { background: var(--status-declined-bg);  color: var(--status-declined); }
+
+.sev-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sev-non-critical { background: var(--severity-low-bg);    color: var(--severity-low); }
+.sev-critical     { background: var(--severity-high-bg);   color: var(--severity-high); }
+.sev-moderate     { background: var(--severity-moderate-bg); color: var(--severity-moderate); }
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
 @media (max-width: 1024px) {
   .submissions-page { padding: 0 1.25rem 3rem; }
   .sub-mini-stats { grid-template-columns: repeat(2, 1fr); }
   .sub-detail-grid { grid-template-columns: 1fr 1fr; }
+  
+  /* Disable sidebar animation on tablet */
+  .sidebar-expanded .submissions-inner,
+  .sidebar-collapsed .submissions-inner {
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 768px) {

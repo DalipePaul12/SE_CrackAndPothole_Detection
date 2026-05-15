@@ -212,10 +212,10 @@ function ContributionPanel({ total, resolved, loading }) {
   }, [total, resolved]);
 
   const badge =
-    score >= 80 ? "🏆 Top Reporter"
-    : score >= 50 ? "⭐ Active Reporter"
-    : score >= 20 ? "🌱 Rising Reporter"
-    : "📋 New Reporter";
+    score >= 80 ? " Top Reporter"
+    : score >= 50 ? " Active Reporter"
+    : score >= 20 ? " Rising Reporter"
+    : " New Reporter";
 
   if (loading) {
     return (

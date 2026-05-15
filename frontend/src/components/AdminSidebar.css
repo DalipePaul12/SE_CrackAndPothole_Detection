@@ -112,14 +112,39 @@ body.dark {
   pointer-events: none;
 }
 
+/* Legacy img selector - kept for compatibility */
 .admin-sidebar-brand img {
   width: 52px;
   height: 52px;
-  border-radius: 30%;
-  border: 2px solid var(--admin-text);
+  border-radius: 50%;
+  border: none;
   flex-shrink: 0;
   object-fit: cover;
   display: block;
+}
+
+/* ========== LOGO IMAGE ========== */
+.admin-sidebar-logo-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  flex-shrink: 0;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.admin-sidebar-logo-img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+/* Collapsed sidebar logo */
+.admin-sidebar.collapsed .admin-sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
 }
 
 .admin-brand-text {

@@ -8,21 +8,37 @@ import {
   Sun, Moon, ChevronLeft, ChevronRight, LogOut, Settings
 } from "lucide-react";
 
-/* ── Inline logo (no external file needed) ── */
+/* ── Logo using /snap.jpg with SVG fallback ── */
 function SnapLogo() {
+  const [imgError, setImgError] = useState(false);
+
+  if (imgError) {
+    // Fallback SVG when /snap.jpg fails to load - green circle with subtle dark green strokes
+    return (
+      <div className="admin-logo-fallback">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="24" cy="24" r="24" fill="url(#lg)" />
+          <circle cx="24" cy="24" r="12" stroke="#2e7d32" strokeWidth="2" fill="none" opacity="0.5" />
+          <path d="M24 12v6M24 30v6M12 24h6M30 24h6" stroke="#2e7d32" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+          <defs>
+            <linearGradient id="lg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#4caf50" />
+              <stop offset="1" stopColor="#2e7d32" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-logo-fallback">
-      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="48" height="48" rx="14" fill="url(#lg)" />
-        <circle cx="24" cy="24" r="12" stroke="#fff" strokeWidth="3" fill="none" />
-        <path d="M24 12v6M24 30v6M12 24h6M30 24h6" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
-        <defs>
-          <linearGradient id="lg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#4caf50" />
-            <stop offset="1" stopColor="#2e7d32" />
-          </linearGradient>
-        </defs>
-      </svg>
+      <img
+        src="/snap.jpg"
+        alt="Snap2Fix"
+        className="admin-sidebar-logo-img"
+        onError={() => setImgError(true)}
+      />
     </div>
   );
 }
@@ -44,11 +60,9 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   }, [location.pathname]);
 
   const handleLogout = () => {
-    // Clear auth tokens / session storage
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     sessionStorage.clear();
-    // Navigate to landing page
     navigate("/", { replace: true });
   };
 
