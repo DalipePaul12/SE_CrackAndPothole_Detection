@@ -44,6 +44,7 @@ def analyze_image(image_path: str):
 
             if response.status_code == 200:
                 fake_analysis = response.json()
+                print(f"HF RAW RESPONSE: {fake_analysis}")
                 print(f"HF AI Check Success: {fake_analysis}")
                 artificial_score = 0.0
                 

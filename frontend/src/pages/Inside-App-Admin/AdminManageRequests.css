@@ -12,9 +12,16 @@
 .admin-manage-container {
   padding: 2rem;
   background: var(--bg);
-  min-height: 100vh;
+  /* FIX: Removed min-height: 100vh which forced the container to exceed
+     its parent and caused double scrollbars / overflow behind the header. */
+  min-height: 0;
   color: var(--text);
   transition: background 0.3s ease, color 0.3s ease;
+  /* ADDED: Flex column so this fills the scrollable main-content area. */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
 }
 
 /* ═══════════════════════════════════════════════
@@ -43,12 +50,17 @@
   flex-direction: column;
   border: 1px solid var(--border);
   transition: background 0.3s ease, border-color 0.3s ease;
+  /* Prevent filters from shrinking when the table grows */
+  flex-shrink: 0;
 }
 
 .admin-filters-row {
   display: flex;
-  gap: 150px;
+  /* FIX: Reduced from 150px to 24px and added flex-wrap to prevent
+     horizontal overflow on smaller screens and laptops. */
+  gap: 24px;
   align-items: flex-end;
+  flex-wrap: wrap;
 }
 
 .admin-filter-group {
@@ -68,6 +80,8 @@
 .admin-filter-buttons {
   display: flex;
   gap: 25px;
+  /* ADDED: Allow buttons to wrap on very small widths */
+  flex-wrap: wrap;
 }
 
 .admin-filter-buttons button {
@@ -100,6 +114,7 @@
 .admin-custom-select {
   position: relative;
   width: 230px;
+  max-width: 100%;
 }
 
 .admin-custom-select select {
@@ -149,15 +164,26 @@
   border-radius: 30px;
   padding: 20px;
   box-shadow: var(--shadow-md);
-  max-height: 480px;
+  /* FIX: Replaced fixed max-height with flex-based layout so the table
+     container dynamically fills the remaining viewport height. */
+  flex: 1;
+  min-height: 0;
   border: 1px solid var(--border);
   overflow: hidden;
   transition: background 0.3s ease, border-color 0.3s ease;
+  /* ADDED: Flex column so the table can grow inside it. */
+  display: flex;
+  flex-direction: column;
 }
 
 .submissions-table {
   width: 100%;
   border-collapse: collapse;
+  /* ADDED: Allow table to fill the flex container vertically. */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .submissions-table th {
@@ -175,6 +201,8 @@
   letter-spacing: 0.05em;
   font-weight: 700;
   transition: background 0.3s ease, color 0.3s ease;
+  /* Prevent header from shrinking */
+  flex-shrink: 0;
 }
 
 .submissions-table td {
@@ -189,7 +217,11 @@
 .submissions-table tbody {
   display: block;
   overflow-y: auto;
-  max-height: 380px;
+  /* FIX: Removed fixed max-height: 380px. Now uses flex: 1 to fill the
+     remaining space inside .submissions-table, creating a robust
+     scrollable table body that adapts to any screen size. */
+  flex: 1;
+  min-height: 0;
 }
 
 .submissions-table thead,
@@ -267,7 +299,8 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  flex-wrap: nowrap;
+  /* FIX: Allow buttons to wrap instead of forcing cell overflow */
+  flex-wrap: wrap;
   width: auto;
 }
 
@@ -422,13 +455,17 @@
   z-index: 9999;
   animation: amr-fade-in 0.2s ease;
   backdrop-filter: blur(4px);
+  /* ADDED: Ensure overlay always covers everything including sidebar */
+  padding: 16px;
 }
 
 .modal-content {
   background: var(--card);
   color: var(--text);
-  width: 82%;
-  max-width: 920px;
+  /* FIX: Changed from width: 82% to width: 92% with a responsive max-width
+     that accounts for the sidebar so the modal never renders behind it. */
+  width: 92%;
+  max-width: min(920px, calc(100vw - var(--admin-sidebar-width) - 40px));
   border-radius: 20px;
   padding: 28px;
   position: relative;
@@ -438,6 +475,8 @@
   border: 1px solid var(--border);
   animation: amr-slide-up 0.25s ease;
   transition: background 0.3s ease, border-color 0.3s ease;
+  /* Prevent content from busting out on tiny screens */
+  box-sizing: border-box;
 }
 
 .modal-close-btn {
@@ -606,6 +645,7 @@
   z-index: 10000;
   animation: amr-fade-in 0.18s ease;
   backdrop-filter: blur(4px);
+  padding: 16px;
 }
 
 .amr-dialog {
@@ -624,6 +664,7 @@
   animation: amr-slide-up 0.22s ease;
   text-align: center;
   transition: background 0.3s ease, border-color 0.3s ease;
+  box-sizing: border-box;
 }
 
 .amr-dialog--wide { max-width: 540px; }
@@ -727,6 +768,7 @@
   width: 100%;
   justify-content: flex-end;
   margin-top: 6px;
+  flex-wrap: wrap;
 }
 
 .amr-dialog-cancel {
@@ -833,6 +875,9 @@
   box-shadow: var(--shadow-lg);
   animation: amr-toast-in 0.3s ease, amr-toast-out 0.4s ease 3.1s forwards;
   white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .amr-toast--success {
@@ -897,21 +942,44 @@
   .admin-manage-container {
     padding: 1rem;
   }
-  .admin-filters-row { gap: 40px; }
+  .admin-filters-row {
+    gap: 16px;
+  }
+  .admin-filter-buttons {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .admin-filter-buttons button {
+    padding: 8px 20px;
+  }
+  .modal-body {
+    gap: 20px;
+  }
 }
 
 @media (max-width: 768px) {
-  .admin-filters-row { flex-direction: column; gap: 20px; }
-  .admin-filter-buttons { flex-wrap: wrap; gap: 10px; }
-  .modal-body { flex-direction: column; }
-  .amr-dialog-actions { flex-direction: column; }
+  .admin-filters-row {
+    flex-direction: column;
+    gap: 20px;
+  }
+  .admin-filter-buttons {
+    gap: 10px;
+  }
+  .modal-body {
+    flex-direction: column;
+  }
+  .amr-dialog-actions {
+    flex-direction: column;
+  }
 }
 
 /* ═══════════════════════════════════════════════
    DETAIL MODAL (new tabbed version)
 ═══════════════════════════════════════════════ */
 .amr-detail-modal {
-  max-width: 720px;
+  /* FIX: Responsive max-width that respects sidebar width on desktop
+     and fills viewport safely on mobile. */
+  max-width: min(720px, calc(100vw - var(--admin-sidebar-width) - 40px));
   padding: 0;
   overflow: hidden;
 }
@@ -968,6 +1036,13 @@
   padding: 0 28px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
+  /* ADDED: Allow horizontal scroll if tabs don't fit */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.amr-modal-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .amr-tab {
@@ -984,6 +1059,7 @@
   border-bottom: 2.5px solid transparent;
   transition: all 0.2s;
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .amr-tab:hover {
@@ -1009,8 +1085,12 @@
 /* ── Modal Body ─────────────────────────────────────────────── */
 .amr-modal-body {
   padding: 24px 28px 28px;
-  max-height: 60vh;
+  /* FIX: Precise height calculation instead of 60vh to ensure the modal
+     always fits within the viewport minus the fixed header. */
+  max-height: calc(100vh - var(--header-height) - 80px);
   overflow-y: auto;
+  /* Prevent horizontal scroll inside modal */
+  overflow-x: hidden;
 }
 
 /* ── Detail Grid ────────────────────────────────────────────── */
@@ -1060,16 +1140,20 @@
   justify-content: space-between;
   align-items: center;
   font-size: 0.9rem;
+  gap: 12px;
 }
 
 .amr-info-label {
   color: var(--text-muted);
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .amr-info-value {
   color: var(--text);
   font-weight: 600;
+  text-align: right;
+  word-break: break-word;
 }
 
 .amr-info-value.severity.critical {
@@ -1273,6 +1357,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 18px 20px;
+  gap: 12px;
 }
 
 .amr-action-header {
@@ -1392,6 +1477,16 @@
 }
 
 /* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  .modal-content {
+    max-width: calc(100vw - 32px);
+    padding: 20px;
+  }
+  .amr-detail-modal {
+    max-width: calc(100vw - 32px);
+  }
+}
+
 @media (max-width: 640px) {
   .amr-detail-grid {
     grid-template-columns: 1fr;
@@ -1406,6 +1501,8 @@
   }
   .amr-modal-body {
     padding: 16px;
+    /* Slightly reduced offset for very small screens */
+    max-height: calc(100vh - var(--header-height) - 60px);
   }
   .amr-action-card {
     flex-direction: column;
@@ -1415,5 +1512,32 @@
   .amr-assign-body {
     flex-direction: column;
     align-items: stretch;
+  }
+  /* ADDED: Mobile table density improvements */
+  .admin-manage-container {
+    padding: 1rem;
+  }
+  .submissions-table th,
+  .submissions-table td {
+    padding-left: 8px;
+    font-size: 0.82rem;
+  }
+  .report-thumb {
+    width: 36px;
+    height: 36px;
+  }
+  .admin-confirm-btn,
+  .admin-decline-btn {
+    width: 72px !important;
+    font-size: 0.75rem;
+    min-height: 28px;
+  }
+  .amr-view-btn {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+  .modal-content {
+    width: 96%;
+    padding: 16px;
   }
 }

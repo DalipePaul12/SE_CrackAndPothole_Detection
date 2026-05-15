@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import asyncio
@@ -30,29 +29,30 @@ except ImportError:
             return dets if len(dets) > 0 else np.empty((0, 5))
 
 from app.core.config import settings
+from app.services.ai_image_detector import detect_ai_generated  # ← HYBRID DETECTOR
 
 logger = logging.getLogger(__name__)
 
 _pothole_model = None
 _crack_model = None
 
-# ── Constants ───────────────────────────────────────────────────────────────
+# ── Constants ────────────────────────────────────────────────────────────────
 
-_HF_MODEL = "dima806/deepfake_vs_real_image_detection"
+_HF_MODEL = "umm-maybe/AI-image-detector"
 _HF_TIMEOUT = 12
 
 REALTIME_CONF_THRESHOLD = 0.60
 
 _BASE_THRESHOLDS: dict[str, float] = {
     "pothole": 0.40,
-    "crack": 0.28,
+    "crack": 0.15,
 }
 
 BLUR_SKIP_THRESHOLD = 15.0
 BLUR_PENALTY_THRESHOLD = 100.0
 
 
-# ── Model loading ───────────────────────────────────────────────────────────
+# ── Model loading ────────────────────────────────────────────────────────────
 
 def load_models() -> None:
     """Load both YOLO models into module-level globals. Idempotent."""
@@ -122,28 +122,22 @@ def _blur_conf_weight(blur: float) -> float:
     return 0.5 + 0.5 * ratio
 
 
-# ── Severity classification (BINARY: critical / non_critical) ───────────────
+# ── Severity classification (BINARY: critical / non_critical) ────────────────
 
 def _compute_severity(boxes: list[dict], image_w: int, image_h: int) -> str:
-    """
-    Binary severity: critical if any box covers ≥ 10% of image area.
-    Otherwise non_critical.
-    """
     if not boxes or image_w * image_h == 0:
-        return "non_critical"
-
+        return "non-critical"
     max_ratio = max(
         (b.get("width", 0) * b.get("height", 0)) / (image_w * image_h) for b in boxes
     )
-    return "critical" if max_ratio >= 0.10 else "non_critical"
+    return "critical" if max_ratio >= 0.15 else "non-critical"
 
 
-def _severity_from_bbox_norm(bbox: list[float]) -> str:
-    """Binary severity from normalized bounding-box area."""
+def _severity_from_bbox_norm(bbox: list[float], confidence: float = 0.5) -> str:
+    """Confidence-only severity: >= 70% = critical, below = non-critical."""
     if not bbox or len(bbox) < 4:
-        return "non_critical"
-    area = max(0.0, (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]))
-    return "critical" if area >= 0.10 else "non_critical"
+        return "non-critical"
+    return "critical" if confidence >= 0.70 else "non-critical"
 
 
 # ── Distance feedback (calibrated for ~1.5 m) ────────────────────────────────
@@ -151,7 +145,7 @@ def _severity_from_bbox_norm(bbox: list[float]) -> str:
 def _distance_feedback(bbox_norm: list[float] | None) -> dict[str, Any]:
     """
     Capture-distance guidance calibrated for ~1.5 m phone-to-subject distance.
-    Reference: area ≈ 0.12 at 1.5 m.
+    Reference: area ~= 0.12 at 1.5 m.
     """
     if not bbox_norm or len(bbox_norm) < 4:
         return {"ok": False, "text": "No object in frame"}
@@ -220,7 +214,7 @@ def _annotate_frame(frame_bgr: np.ndarray, boxes: list[dict], label: str) -> str
     return base64.b64encode(jpeg.tobytes()).decode("utf-8")
 
 
-# ── Core YOLO inference ──────────────────────────────────────────────────────
+# ── Core YOLO inference — LEGACY (video / realtime) ─────────────────────────
 
 def _infer_frame(
     model,
@@ -229,6 +223,7 @@ def _infer_frame(
     imgsz: int = 640,
     conf_threshold: float | None = None,
 ) -> list[dict]:
+    """Returns boxes in legacy format for video/realtime tracking."""
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     h, w = img_bgr.shape[:2]
     results = model(img_rgb, imgsz=imgsz, verbose=False)
@@ -260,59 +255,163 @@ def _infer_frame(
     return boxes
 
 
-# ── Single-image YOLO wrapper ────────────────────────────────────────────────
+# ── Core YOLO inference — MULTI-DETECTION + SEGMENTATION (images) ──────────
 
-def _run_yolo_sync(
+def _infer_frame_all(
+    model,
+    img_bgr: np.ndarray,
+    label: str,
+    imgsz: int = 640,
+    conf_threshold: float | None = None,
+) -> list[dict]:
+    """
+    Run YOLO inference and return ALL detections above threshold.
+    Each detection includes full box + segmentation data.
+    """
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    h, w = img_bgr.shape[:2]
+    results = model(img_rgb, imgsz=imgsz, verbose=False)
+
+    if not results or not results[0].boxes:
+        return []
+
+    threshold = conf_threshold if conf_threshold is not None else _BASE_THRESHOLDS.get(label, 0.35)
+    detections: list[dict] = []
+
+    result = results[0]
+    has_segments = hasattr(result, 'masks') and result.masks is not None
+
+    for i, box in enumerate(result.boxes):
+        conf = float(box.conf[0])
+        if conf < threshold:
+            continue
+
+        x1, y1, x2, y2 = box.xyxy[0].tolist()
+
+        det = {
+            "class": label,
+            "label": label,
+            "confidence": round(conf, 4),
+            "severity": _severity_from_bbox_norm(
+                [round(x1 / w, 4), round(y1 / h, 4),
+                 round(x2 / w, 4), round(y2 / h, 4)],
+                confidence=conf
+            ),
+            "box": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+            "norm_bbox": [
+                round(x1 / w, 4), round(y1 / h, 4),
+                round(x2 / w, 4), round(y2 / h, 4)
+            ],
+            "x_norm": round(x1 / w, 4),
+            "y_norm": round(y1 / h, 4),
+            "w_norm": round((x2 - x1) / w, 4),
+            "h_norm": round((y2 - y1) / h, 4),
+        }
+
+        # Add segmentation polygon if available (YOLOv8/v11-seg)
+        # Add segmentation polygon if available (YOLOv8/v11-seg)
+        if has_segments and i < len(result.masks.xy):
+            segments = result.masks.xy[i]  # numpy array of [x, y] points
+            if len(segments) >= 3:
+                det["segments"] = [[(float(x), float(y)) for x, y in segments]]
+                det["segments_norm"] = [
+                    [round(float(x) / w, 4), round(float(y) / h, 4)]
+                    for x, y in segments
+                ]
+
+        # ── FALLBACK: detection model → synthetic 4-point box polygon ──
+        if not det.get("segments"):
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            det["segments"] = [
+                [round(x1, 2), round(y1, 2)],
+                [round(x2, 2), round(y1, 2)],
+                [round(x2, 2), round(y2, 2)],
+                [round(x1, 2), round(y2, 2)],
+            ]
+            det["segments_norm"] = [
+                [round(x1 / w, 4), round(y1 / h, 4)],
+                [round(x2 / w, 4), round(y1 / h, 4)],
+                [round(x2 / w, 4), round(y2 / h, 4)],
+                [round(x1 / w, 4), round(y2 / h, 4)],
+            ]
+
+        detections.append(det)
+
+    return detections
+
+
+# ── Single-image YOLO wrapper — MULTI-DETECTION ───────────────────────────────
+
+def _run_yolo_all_sync(
     model,
     image_bytes: bytes,
     label: str,
     imgsz: int = 640,
     conf_threshold: float | None = None,
-) -> dict[str, Any] | None:
+) -> list[dict]:
+    """
+    Run YOLO on image bytes and return ALL detections above threshold.
+    Handles thumbnail resizing and scales coordinates back to original size.
+    """
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        orig_w, orig_h = img.size  # save BEFORE any thumbnail resize
 
+        # Resize for inference if needed (keeps aspect ratio)
         if max(img.size) > 1280:
             img.thumbnail((1280, 1280), Image.LANCZOS)
 
-        img_w, img_h = img.size
+        inf_w, inf_h = img.size
         img_bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
         blur = _blur_score(img_bgr)
         img_enh = _preprocess_frame(img_bgr)
-        threshold = _adaptive_threshold(label, blur, is_video=False)
-        effective_threshold = conf_threshold if conf_threshold is not None else threshold
 
-        t0 = time.perf_counter()
-        boxes = _infer_frame(model, img_enh, label, imgsz=imgsz, conf_threshold=effective_threshold)
-        elapsed = (time.perf_counter() - t0) * 1000
+        effective_threshold = (
+            conf_threshold
+            if conf_threshold is not None
+            else _adaptive_threshold(label, blur, is_video=False)
+        )
 
-        if not boxes:
-            return None
+        detections = _infer_frame_all(
+            model, img_enh, label,
+            imgsz=imgsz,
+            conf_threshold=effective_threshold,
+        )
 
-        best_conf = max(b["confidence"] for b in boxes)
-        best_box = max(boxes, key=lambda b: b["confidence"])
-        norm_bbox = [
-            best_box["x_norm"],
-            best_box["y_norm"],
-            best_box["x_norm"] + best_box["w_norm"],
-            best_box["y_norm"] + best_box["h_norm"],
-        ]
+        # Scale absolute coords back to original image dimensions if resized
+        if orig_w != inf_w or orig_h != inf_h:
+            scale_x = orig_w / inf_w
+            scale_y = orig_h / inf_h
+            for det in detections:
+                if det.get("box"):
+                    det["box"] = [
+                        round(det["box"][0] * scale_x, 2),
+                        round(det["box"][1] * scale_y, 2),
+                        round(det["box"][2] * scale_x, 2),
+                        round(det["box"][3] * scale_y, 2),
+                    ]
+                if det.get("segments"):
+                    det["segments"] = [
+                        [round(x * scale_x, 2), round(y * scale_y, 2)]
+                        for x, y in det["segments"]
+                    ]
+                # norm_bbox and segments_norm are already correct
+                # (computed from inference-size image, which maps 1:1 to norm)
+                det["image_width"]  = orig_w
+                det["image_height"] = orig_h
+        else:
+            for det in detections:
+                det["image_width"]  = orig_w
+                det["image_height"] = orig_h
 
-        return {
-            "label": label,
-            "confidence": round(best_conf, 4),
-            "severity": _compute_severity(boxes, img_w, img_h),
-            "boxes": boxes,
-            "norm_bbox": norm_bbox,
-            "distance": _distance_feedback(norm_bbox),
-            "inference_time_ms": round(elapsed, 2),
-            "blur_score": round(blur, 2),
-        }
+        return detections
 
     except Exception:
-        logger.exception("_run_yolo_sync failed for label=%s", label)
-        return None
+        logger.exception(
+            "_run_yolo_all_sync failed for label=%s imgsz=%d", label, imgsz
+        )
+        return []
 
 
 # ── Temporal detection tracker ───────────────────────────────────────────────
@@ -558,6 +657,28 @@ def _process_video_sync(file_path: str) -> dict[str, Any]:
                 sum(best["conf_history"]) / len(best["conf_history"]), 4
             )
 
+    # Build all_detections from confirmed tracks for multi-mask support
+    all_detections: list[dict] = []
+    for c in tracker._confirmed:
+        raw = c.get("raw_box", {})
+        bbox = c.get("norm_bbox", [])
+        det = {
+            "class": c.get("label", "damage"),
+            "label": c.get("label", "damage"),
+            "confidence": c.get("avg_confidence", 0),
+            "severity": _severity_from_bbox_norm(bbox, confidence=c.get("avg_confidence", 0)) if bbox else "non-critical",
+            "box": [
+                raw.get("x", 0),
+                raw.get("y", 0),
+                raw.get("x", 0) + raw.get("width", 0),
+                raw.get("y", 0) + raw.get("height", 0),
+            ] if raw else None,
+            "norm_bbox": bbox,
+            "frames_seen": c.get("frames_seen", 0),
+        }
+        all_detections.append(det)
+    all_detections.sort(key=lambda d: d.get("confidence", 0), reverse=True)
+
     if best is None:
         return {
             **_no_detection_result(
@@ -568,6 +689,7 @@ def _process_video_sync(file_path: str) -> dict[str, Any]:
                 detection_snapshots=detection_snapshots,
             ),
             "ai_validation": _video_ai_validation(),
+            "all_detections": all_detections,
         }
 
     raw = best["raw_box"]
@@ -578,13 +700,14 @@ def _process_video_sync(file_path: str) -> dict[str, Any]:
         "prediction": {
             "label": best["label"],
             "confidence": best["avg_confidence"],
-            "severity": _severity_from_bbox_norm(bbox),
+            "severity": _severity_from_bbox_norm(bbox, confidence=best["avg_confidence"]) if bbox else "non-critical",
             "frames_seen": best["frames_seen"],
             "boxes": [raw],
             "norm_bbox": bbox,
             "distance": _distance_feedback(bbox),
             "inference_time_ms": round(elapsed_s * 1000, 1),
         },
+        "all_detections": all_detections,
         "analytics": {
             "frames_processed": processed,
             "frames_skipped_blur": skipped_blur,
@@ -629,97 +752,23 @@ async def process_video_pipeline(file_path: str) -> dict[str, Any]:
     return await loop.run_in_executor(None, _process_video_sync, file_path)
 
 
-# ── HuggingFace AI-generated detection ───────────────────────────────────────
+# ── AI-generated detection (delegated to hybrid detector) ───────────────────
 
 async def _check_ai_generated(image_bytes: bytes) -> dict[str, Any]:
     """
-    Detect AI-generated images via HuggingFace Inference API.
-
-    Fail-fast: any error or timeout returns status="skipped" so YOLO
-    results are never held hostage by HF availability.
+    Delegates to the hybrid detector in ai_image_detector.py.
+    HF first → 8-signal hardcoded fallback → never silently passes.
     """
-    _SKIPPED = {
-        "is_ai_generated": False,
-        "confidence": 0.0,
-        "status": "skipped",
-        "model": _HF_MODEL,
-        "raw_scores": {},
-    }
-
-    if not settings.AI_FAKE_DETECTION_ENABLED:
-        return _SKIPPED
-
-    token = (settings.HF_API_TOKEN or "").strip()
-    if not token or len(token) < 20:
-        logger.warning("HF_API_TOKEN missing or too short — skipping AI detection.")
-        return _SKIPPED
-
-    url = f"https://router.huggingface.co/hf-inference/models/{_HF_MODEL}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/octet-stream",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=_HF_TIMEOUT) as client:
-            resp = await client.post(url, headers=headers, content=image_bytes)
-
-            if resp.status_code == 503:
-                logger.warning("HF model loading (503) — retrying once after 5s.")
-                await asyncio.sleep(5)
-                resp = await client.post(url, headers=headers, content=image_bytes)
-
-            if resp.status_code != 200:
-                logger.warning("HF returned %s — skipping AI check.", resp.status_code)
-                return _SKIPPED
-
-        data = resp.json()
-        if not isinstance(data, list) or not data:
-            return _SKIPPED
-
-        scores: dict[str, float] = {
-            item["label"].lower(): item["score"] for item in data
-        }
-        artificial_score = (
-            scores.get("artificial", 0.0)
-            or scores.get("ai-generated", 0.0)
-            or scores.get("fake", 0.0)
-            or scores.get("label_0", 0.0)
-        )
-        real_score = (
-            scores.get("real", 0.0)
-            or scores.get("human", 0.0)
-            or scores.get("label_1", 0.0)
-        )
-
-        THRESHOLD = 0.40
-        is_ai = artificial_score >= THRESHOLD
-        confidence = artificial_score if is_ai else real_score
-
-        return {
-            "is_ai_generated": is_ai,
-            "confidence": round(confidence, 4),
-            "status": "rejected" if is_ai else "approved_for_classification",
-            "model": _HF_MODEL,
-            "raw_scores": scores,
-        }
-
-    except httpx.TimeoutException:
-        logger.warning("HF timed out after %ss — skipping.", _HF_TIMEOUT)
-        return _SKIPPED
-
-    except Exception as exc:
-        logger.error("HF request failed: %s — skipping.", exc)
-        return _SKIPPED
+    return detect_ai_generated(image_bytes)
 
 
-# ── Full pipeline — images ───────────────────────────────────────────────────
+# ── Full pipeline — images (MULTI-DETECTION) ─────────────────────────────────
 
 async def process_media_pipeline(image_bytes: bytes) -> dict[str, Any]:
     """
-    Two-stage pipeline: HF AI-check + dual YOLO.
+    Two-stage pipeline: HF AI-check + dual YOLO (multi-detection).
 
-    All three tasks run concurrently. Total wall-clock time ≈ max(HF, YOLO).
+    All three tasks run concurrently. Returns ALL detections from both models.
     """
     if not settings.AI_ENABLED:
         raise RuntimeError("AI_ENABLED=False in settings")
@@ -729,39 +778,58 @@ async def process_media_pipeline(image_bytes: bytes) -> dict[str, Any]:
 
     loop = asyncio.get_event_loop()
 
-    ai_task = _check_ai_generated(image_bytes)
+    ai_task      = _check_ai_generated(image_bytes)
     pothole_task = loop.run_in_executor(
-        None, _run_yolo_sync, _pothole_model, image_bytes, "pothole", 640
+        None, _run_yolo_all_sync, _pothole_model, image_bytes, "pothole", 640
     )
-    crack_task = loop.run_in_executor(
-        None, _run_yolo_sync, _crack_model, image_bytes, "crack", 640
+    crack_task   = loop.run_in_executor(
+        None, _run_yolo_all_sync, _crack_model, image_bytes, "crack", 640
     )
 
-    ai_validation, pothole_result, crack_result = await asyncio.gather(
+    ai_validation, pothole_dets, crack_dets = await asyncio.gather(
         ai_task, pothole_task, crack_task
     )
 
-    # YOLO always runs regardless of HF result.
-    # ai_validation carries the flag for frontend warning + admin review,
-    # but damage classification still runs so admins see type and severity.
-    candidates = [r for r in (pothole_result, crack_result) if r is not None]
-    prediction = (
-        max(candidates, key=lambda r: r["confidence"])
-        if candidates
-        else {
-            "label": "none",
-            "confidence": 0.0,
-            "severity": None,
-            "boxes": [],
-            "distance": None,
+    # Combine ALL detections from both models
+    all_detections = (pothole_dets or []) + (crack_dets or [])
+    all_detections.sort(key=lambda d: d.get("confidence", 0), reverse=True)
+
+    # Pick best for backward-compatible "prediction" field
+    prediction = None
+    if all_detections:
+        best = all_detections[0]
+
+        crit_dets = [d for d in all_detections if d.get("severity") == "critical"]
+        logger.info(f"[DEBUG ML] all_detections severities: {[d.get('severity') for d in all_detections]}")
+        logger.info(f"[DEBUG ML] crit_dets count: {len(crit_dets)}, confidences: {[d.get('confidence') for d in crit_dets]}")
+                
+        if any(d.get("confidence", 0) >= 0.85 for d in crit_dets):
+            overall_sev = "critical"
+        elif len(crit_dets) >= 2:
+            overall_sev = "critical"
+        elif len(crit_dets) == 1 and crit_dets[0].get("confidence", 0) >= 0.70:
+            overall_sev = "critical"
+        else:
+            overall_sev = "non-critical"
+            
+        prediction = {
+            "label": best["class"],
+            "confidence": best["confidence"],
+            "severity": overall_sev,
+            "boxes": [best] if "box" in best else [],
+            "norm_bbox": best.get("norm_bbox"),
+            "distance": _distance_feedback(best.get("norm_bbox")),
             "inference_time_ms": 0.0,
         }
-    )
 
-    return {"ai_validation": ai_validation, "prediction": prediction}
+    return {
+        "ai_validation": ai_validation,
+        "prediction": prediction,
+        "all_detections": all_detections,
+    }
 
 
-# ── Realtime lightweight inference ─────────────────────────────────────────────
+# ── Realtime lightweight inference — MULTI-DETECTION ────────────────────────────
 
 async def run_realtime_frame(image_bytes: bytes) -> dict[str, Any]:
     if _pothole_model is None or _crack_model is None:
@@ -769,36 +837,49 @@ async def run_realtime_frame(image_bytes: bytes) -> dict[str, Any]:
 
     loop = asyncio.get_event_loop()
 
-    pothole_result, crack_result = await asyncio.gather(
+    pothole_dets, crack_dets = await asyncio.gather(
         loop.run_in_executor(
-            None, _run_yolo_sync, _pothole_model, image_bytes, "pothole", 320,
+            None, _run_yolo_all_sync, _pothole_model, image_bytes, "pothole", 320,
             REALTIME_CONF_THRESHOLD,
         ),
         loop.run_in_executor(
-            None, _run_yolo_sync, _crack_model, image_bytes, "crack", 320,
+            None, _run_yolo_all_sync, _crack_model, image_bytes, "crack", 320,
             REALTIME_CONF_THRESHOLD,
         ),
     )
 
-    candidates = [r for r in (pothole_result, crack_result) if r is not None]
+    all_detections = (pothole_dets or []) + (crack_dets or [])
+    all_detections.sort(key=lambda d: d.get("confidence", 0), reverse=True)
 
-    if not candidates:
-        return {
-            "detected": False,
-            "prediction": {
-                "label": "none",
-                "confidence": 0.0,
-                "severity": None,
-                "boxes": [],
-                "distance": None,
-            },
+    best = None
+    if all_detections:
+        crit_dets = [d for d in all_detections if d.get("severity") == "critical"]
+        if any(d.get("confidence", 0) >= 0.85 for d in crit_dets):
+            overall_sev = "critical"
+        elif len(crit_dets) >= 2:
+            overall_sev = "critical"
+        elif len(crit_dets) == 1 and crit_dets[0].get("confidence", 0) >= 0.70:
+            overall_sev = "critical"
+        else:
+            overall_sev = "non-critical"
+            
+        best = {
+            "label": all_detections[0]["class"],
+            "confidence": all_detections[0]["confidence"],
+            "severity": overall_sev,
+            "boxes": all_detections,
+            "norm_bbox": all_detections[0].get("norm_bbox"),
+            "distance": _distance_feedback(all_detections[0].get("norm_bbox")),
         }
 
-    best = max(candidates, key=lambda r: r["confidence"])
-    return {"detected": True, "prediction": best}
+    return {
+        "detected": len(all_detections) > 0,
+        "prediction": best,
+        "all_detections": all_detections,
+    }
 
 
-# ── Sync wrapper for background task workers ───────────────────────────────────
+# ── Sync wrapper for background task workers ──────────────────────────────────
 
 def run_yolo(file_path: str) -> dict[str, Any] | None:
     path = Path(file_path)
@@ -812,6 +893,7 @@ def run_yolo(file_path: str) -> dict[str, Any] | None:
             return None
         pred = result["prediction"]
         pred["analytics"] = result.get("analytics")
+        pred["all_detections"] = result.get("all_detections", [])
         return pred
 
     try:
@@ -824,10 +906,34 @@ def run_yolo(file_path: str) -> dict[str, Any] | None:
     if _pothole_model is None or _crack_model is None:
         load_models()
 
-    pothole = _run_yolo_sync(_pothole_model, image_bytes, "pothole", 640)
-    crack = _run_yolo_sync(_crack_model, image_bytes, "crack", 640)
-    candidates = [r for r in (pothole, crack) if r is not None]
-    return max(candidates, key=lambda r: r["confidence"]) if candidates else None
+    pothole_dets = _run_yolo_all_sync(_pothole_model, image_bytes, "pothole", 640)
+    crack_dets   = _run_yolo_all_sync(_crack_model, image_bytes, "crack", 640)
+    all_detections = (pothole_dets or []) + (crack_dets or [])
+    all_detections.sort(key=lambda d: d.get("confidence", 0), reverse=True)
+
+    if not all_detections:
+        return None
+
+    best = all_detections[0]
+    crit_dets = [d for d in all_detections if d.get("severity") == "critical"]
+    if any(d.get("confidence", 0) >= 0.85 for d in crit_dets):
+        overall_sev = "critical"
+    elif len(crit_dets) >= 2:
+        overall_sev = "critical"
+    elif len(crit_dets) == 1 and crit_dets[0].get("confidence", 0) >= 0.70:
+        overall_sev = "critical"
+    else:
+        overall_sev = "non-critical"
+    
+    return {
+        "label": best["class"],
+        "confidence": best["confidence"],
+        "severity": overall_sev,
+        "boxes": all_detections,
+        "norm_bbox": best.get("norm_bbox"),
+        "distance": _distance_feedback(best.get("norm_bbox")),
+        "all_detections": all_detections,
+    }
 
 
 # ── MLRealtimeService — singleton-guarded ────────────────────────────────────
@@ -853,14 +959,14 @@ class MLRealtimeService:
             load_models()
 
         frame = cv2.imdecode(np.frombuffer(frame_bytes, np.uint8), cv2.IMREAD_COLOR)
-        enh = _preprocess_video_frame(frame)
+        enh   = _preprocess_video_frame(frame)
 
-        loop = asyncio.get_event_loop()
+        loop         = asyncio.get_event_loop()
         pothole_task = loop.run_in_executor(
             None, _infer_frame, _pothole_model, enh, "pothole", 320,
             REALTIME_CONF_THRESHOLD,
         )
-        crack_task = loop.run_in_executor(
+        crack_task   = loop.run_in_executor(
             None, _infer_frame, _crack_model, enh, "crack", 320,
             REALTIME_CONF_THRESHOLD,
         )
@@ -877,7 +983,7 @@ class MLRealtimeService:
                         b["confidence"],
                     ])
 
-        dets = np.array(dets) if dets else np.empty((0, 5))
+        dets    = np.array(dets) if dets else np.empty((0, 5))
         tracked = self.tracker.update(dets)
         return self._draw_overlay(frame, tracked)
 
@@ -897,7 +1003,7 @@ class MLRealtimeService:
     async def stream_video_overlay(self, video_path: str) -> AsyncIterator[bytes]:
         cap = cv2.VideoCapture(video_path)
         try:
-            fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
+            fps          = int(cap.get(cv2.CAP_PROP_FPS)) or 30
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
             for i in range(0, total_frames, max(1, fps // 8)):
@@ -910,7 +1016,7 @@ class MLRealtimeService:
                     ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
                 )[1].tobytes()
                 annotated = await self.process_frame_overlay(frame_bytes)
-                _, jpeg = cv2.imencode(
+                _, jpeg   = cv2.imencode(
                     ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 85]
                 )
                 yield jpeg.tobytes()

@@ -1,36 +1,49 @@
+"""
+backend/app/models/enums.py
+
+CRITICAL: ReportStatus values must be lowercase strings.
+Every consumer normalises to lowercase before lookup:
+  - _normalize_status() calls ReportStatus(status_str.lower())
+  - Frontend patchStatus() always sends lowercase
+  - notif_map keys in reports.py are uppercase only for .value.upper() display
+  - PostgreSQL stores whatever value Python writes; mixed case = broken queries
+"""
+from __future__ import annotations
 import enum
 
 
 class UserRole(str, enum.Enum):
-    citizen = "citizen"
-    admin = "admin"
+    citizen    = "citizen"
+    admin      = "admin"
     superadmin = "superadmin"
     contractor = "contractor"
 
 
 class ReportStatus(str, enum.Enum):
-    PENDING     = "PENDING"
-    VERIFIED    = "VERIFIED"
-    DECLINED    = "DECLINED"
-    ASSIGNED    = "ASSIGNED"
-    IN_PROGRESS = "IN_PROGRESS"
-    COMPLETED   = "COMPLETED"
-    REJECTED    = "REJECTED"
-    RESOLVED    = "RESOLVED"
+    # ✅ All values are lowercase — matches _normalize_status() and frontend
+    PENDING     = "pending"
+    VERIFIED    = "verified"
+    DECLINED    = "declined"
+    ASSIGNED    = "assigned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED   = "completed"
+    REJECTED    = "rejected"
+    RESOLVED    = "resolved"
+    CANCELLED   = "cancelled"   # used by frontend cancel action
 
 
 class ProjectStatus(str, enum.Enum):
-    SCHEDULED   = "SCHEDULED"
-    IN_PROGRESS = "IN_PROGRESS"
-    ON_HOLD     = "ON_HOLD"
-    COMPLETED   = "COMPLETED"
-    CANCELLED   = "CANCELLED"
+    SCHEDULED   = "scheduled"
+    IN_PROGRESS = "in_progress"
+    ON_HOLD     = "on_hold"
+    COMPLETED   = "completed"
+    CANCELLED   = "cancelled"
 
 
 class PriorityLevel(str, enum.Enum):
-    LOW      = "LOW"
-    HIGH     = "HIGH"
-    CRITICAL = "CRITICAL"
+    LOW      = "low"
+    HIGH     = "high"
+    CRITICAL = "critical"
 
 
 class DamageType(str, enum.Enum):
@@ -41,8 +54,8 @@ class DamageType(str, enum.Enum):
 
 
 class SeverityLevel(str, enum.Enum):
-    low      = "low"
-    critical = "critical"
+    non_critical = "non_critical"   # ✅ added
+    critical     = "critical"
 
 
 class OTPPurpose(str, enum.Enum):

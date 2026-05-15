@@ -161,7 +161,7 @@ export default function AdminManageRequests() {
                   onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
                 >
                   <option value="All">All Severity</option>
-                  <option value="non-critical">Non-Critical</option>
+                  <option value="non_critical">Non-Critical</option>
                   <option value="critical">Critical</option>
                 </select>
               </div>

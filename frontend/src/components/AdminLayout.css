@@ -10,10 +10,10 @@
 
 .admin-layout {
   min-height: 100vh;
-  position: relative;
-  /* Remove padding-top here — handle it in main content instead */
   display: flex;
   flex-direction: column;
+  /* Prevent any horizontal scroll at the root */
+  overflow-x: hidden;
 }
 
 /* ── Mobile Hamburger Button ── */
@@ -39,12 +39,18 @@
 .admin-main-content {
   margin-left: var(--admin-sidebar-width);
   margin-top: var(--header-height);
-  min-height: calc(100vh - var(--header-height));
+  /* Bounded height creates an independent, scrollable region */
+  height: calc(100vh - var(--header-height));
   transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
-  position: relative;
-  z-index: 1;
-  /* Let child pages handle their own padding */
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Flex column so Outlet children can flex to fill */
+  display: flex;
+  flex-direction: column;
+  /* REMOVED: position: relative and z-index: 1 
+     These created a stacking context that could clip fixed modals 
+     and cause them to render behind the sidebar. */
 }
 
 /* ── Collapsed state ── */
@@ -67,18 +73,8 @@
   to { opacity: 1; }
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   MODAL FIX — Allow modals to render above everything
-══════════════════════════════════════════════════════════════ */
-
-/* When a modal is open, ensure it can break out of layout constraints */
-.admin-layout:has(.modal-overlay) {
-  overflow: visible;
-}
-
-.admin-layout:has(.modal-overlay) .admin-main-content {
-  overflow: visible;
-}
+/* REMOVED: All :has() rules. They are unnecessary now that the main 
+   content stacking context is gone, and :has() has poor browser support. */
 
 /* ── Responsive ── */
 @media (max-width: 1023px) {
@@ -90,7 +86,9 @@
     margin-left: 0 !important;
     margin-top: var(--header-height);
     padding: 16px;
-    min-height: calc(100vh - var(--header-height));
+    height: calc(100vh - var(--header-height));
+    display: flex;
+    flex-direction: column;
   }
 }
 

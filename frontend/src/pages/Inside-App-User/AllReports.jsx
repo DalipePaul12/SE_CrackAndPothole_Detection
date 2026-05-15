@@ -190,21 +190,24 @@ function ReportModal({ report, onClose }) {
 }
 
 function AllReports() {
-  const [filters, setFilters] = useState({ type: "All", severity: "All", status: "All" });
+  const [filters, setFilters]           = useState({ type: "All", severity: "All", status: "All" });
   const [activeFilters, setActiveFilters] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen]     = useState(false);
 
-  const { reports, loading, error, page, setPage, total, refetch } =
-    useReports({
-      mine: false,
-      status: activeFilters.status ?? null,
-      barangay: activeFilters.barangay ?? null,
-    });
+  const { reports, loading, error, page, setPage, total, refetch } = useReports({
+    mine:     false,
+    status:   activeFilters.status ?? null,
+    barangay: activeFilters.barangay ?? null,
+  });
 
   const applyFilters = useCallback(() => {
     setPage(1);
-    setActiveFilters({ status: filters.status !== "All" ? filters.status : null });
+    setActiveFilters({
+      status:   filters.status   !== "All" ? filters.status.toLowerCase()   : null,
+      type:     filters.type     !== "All" ? filters.type.toLowerCase()     : null,
+      severity: filters.severity !== "All" ? filters.severity.toLowerCase() : null,
+    });
     setDrawerOpen(false);
   }, [filters, setPage]);
 
@@ -216,16 +219,16 @@ function AllReports() {
   }, [setPage]);
 
   const filteredReports = reports.filter((r) => {
-    const type = r.ai_damage_type ?? "";
-    const severity = r.ai_severity ?? "";
+    const type     = (r.ai_damage_type ?? "").toLowerCase();
+    const severity = (r.ai_severity    ?? "").toLowerCase();
     return (
-      (filters.type === "All" || type.toLowerCase() === filters.type.toLowerCase()) &&
-      (filters.severity === "All" || severity.toLowerCase() === filters.severity.toLowerCase())
+      (!activeFilters.type     || type     === activeFilters.type) &&
+      (!activeFilters.severity || severity === activeFilters.severity)
     );
   });
 
   const handleRowClick = useCallback((report) => setSelectedReport(report), []);
-  const closeModal = useCallback(() => setSelectedReport(null), []);
+  const closeModal     = useCallback(() => setSelectedReport(null), []);
 
   return (
     <div className="allreports-container">
@@ -269,7 +272,7 @@ function AllReports() {
                   onChange={(e) => setFilters((f) => ({ ...f, severity: e.target.value }))}
                 >
                   <option value="All">All Severity</option>
-                  <option value="non-critical">Non-Critical</option>
+                  <option value="non_critical">Non-Critical</option>
                   <option value="critical">Critical</option>
                 </select>
                 <ChevronDown size={15} className="select-icon" />
@@ -300,6 +303,7 @@ function AllReports() {
           </div>
         </div>
       </div>
+
       {error && (
         <div className="reports-error-banner" role="alert">
           <span className="flex-center">
@@ -309,6 +313,7 @@ function AllReports() {
           <button onClick={refetch} className="retry-btn-small">Retry</button>
         </div>
       )}
+
       <div className="allreports-table-container">
         {loading ? (
           <div className="table-skeleton">
@@ -392,9 +397,11 @@ function AllReports() {
           </table>
         )}
       </div>
+
       {!loading && (
         <Pagination page={page} setPage={setPage} total={total} pageSize={10} />
       )}
+
       {selectedReport && (
         <ReportModal report={selectedReport} onClose={closeModal} />
       )}

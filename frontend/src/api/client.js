@@ -77,7 +77,7 @@ async function request(endpoint, options = {}, _isRetry = false) {
 
   try {
     const token = tokenStorage.getAccess();
-
+console.log(">>> FETCH", `${BASE_URL}${API_PREFIX}${endpoint}`, "token:", token ? "present" : "MISSING");
     const response = await fetch(`${BASE_URL}${API_PREFIX}${endpoint}`, {
       credentials: "include",
       ...options,
@@ -104,6 +104,8 @@ async function request(endpoint, options = {}, _isRetry = false) {
     }
 
     if (!response.ok) {
+      // 🔍 DEBUG: always log the full error body so 422 details are visible
+console.error(`[API Error ${response.status}] ${endpoint}:`, JSON.stringify(data, null, 2));
       return {
         success: false,
         data:    null,
@@ -215,6 +217,7 @@ export const api = {
       }
 
       if (!response.ok) {
+        console.error(`[API Error ${response.status}] ${url}:`, data);
         return { success: false, data: null, error: data?.error || data?.detail || `Upload failed (${response.status})` };
       }
 

@@ -396,7 +396,7 @@ export default function AdminAllReports() {
               <select value={filters.severity} onChange={(e) => setFilter("severity", e.target.value)}>
                 <option value="All">All Severity</option>
                 <option value="critical">Critical</option>
-                <option value="non-critical">Non-Critical</option>
+                <option value="non_critical">Non-Critical</option>
               </select>
             </div>
 

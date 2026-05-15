@@ -101,6 +101,7 @@ export async function analyzeMedia(file) {
               inference_time_ms: payload.prediction.inference_time_ms ?? null,
             }
           : null,
+        all_detections: payload.all_detections ?? [],
       },
     };
 
@@ -193,6 +194,7 @@ export async function analyzeVideo(file, onProgress = null) {
               inference_time_ms: pred.inference_time_ms ?? null,
             }
           : null,
+        all_detections: payload.all_detections ?? [],
         analytics: {
           frames_processed:    payload.analytics?.frames_processed    ?? 0,
           frames_skipped_blur: payload.analytics?.frames_skipped_blur ?? 0,
@@ -262,6 +264,7 @@ export async function analyzeRealtimeFrame(frame) {
               inference_time_ms: payload.prediction.inference_time_ms ?? null,
             }
           : null,
+        all_detections: payload.all_detections ?? [],
       },
     };
 

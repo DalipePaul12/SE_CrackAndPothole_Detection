@@ -1,20 +1,3 @@
-/**
- * DetectionOverlay.jsx — Production canvas overlay for road damage detection
- * 
- * Renders stable bounding boxes + labels + severity badges on:
- *   - Static images (upload preview)
- *   - Live camera feed (realtime mode)
- *   - Video processing stream (progress + per-frame updates)
- * 
- * Features:
- *   - SORT-like temporal smoothing (no flicker)
- *   - Severity color-coding (critical=red, low=green)
- *   - Corner targeting ticks
- *   - Confidence % labels
- *   - Live FPS counter (realtime)
- *   - Video progress bar
- *   - Zero React rerenders during live streaming
- */
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import "./DetectionOverlay.css";  // See CSS below
@@ -43,30 +26,28 @@ class BoxTracker {
     this.state = new Map();  // label → smoothed box
   }
 
-  update(detections) {
-    const next = new Map();
+// FIXED
+update(detections) {
+  const next = new Map();
+  for (const det of detections) {
+    const key = det.class ?? det.label;
+    const prev = this.state.get(key);   // ← add this line
 
-    for (const det of detections) {
-      const key = det.label;
-      const prev = this.state.get(key);
-
-      if (prev) {
-        next.set(key, {
-          ...det,
-          x_norm: prev.x_norm + this.alpha * (det.x_norm - prev.x_norm),
-          y_norm: prev.y_norm + this.alpha * (det.y_norm - prev.y_norm),
-          w_norm: prev.w_norm + this.alpha * (det.w_norm - prev.w_norm),
-          h_norm: prev.h_norm + this.alpha * (det.h_norm - prev.h_norm),
-        });
-      } else {
-        next.set(key, det);
-      }
+    if (prev) {
+      next.set(key, {
+        ...det,
+        x_norm: prev.x_norm + this.alpha * (det.x_norm - prev.x_norm),
+        y_norm: prev.y_norm + this.alpha * (det.y_norm - prev.y_norm),
+        w_norm: prev.w_norm + this.alpha * (det.w_norm - prev.w_norm),
+        h_norm: prev.h_norm + this.alpha * (det.h_norm - prev.h_norm),
+      });
+    } else {
+      next.set(key, det);
     }
-
-    this.state = next;
-    return Array.from(next.values());
   }
-
+  this.state = next;
+  return Array.from(next.values());
+}
   clear() {
     this.state.clear();
   }
@@ -77,13 +58,31 @@ function drawDetections(ctx, detections, canvasW, canvasH) {
   ctx.clearRect(0, 0, canvasW, canvasH);
 
   for (const det of detections) {
-    const { label, confidence, severity, x_norm, y_norm, w_norm, h_norm } = det;
+    const label = det.class ?? det.label ?? "damage";
+    const { confidence, severity } = det;
+    
+    let x_norm, y_norm, w_norm, h_norm;
+    
+    if (det.x_norm !== undefined && det.w_norm !== undefined) {
+      x_norm = det.x_norm;
+      y_norm = det.y_norm;
+      w_norm = det.w_norm;
+      h_norm = det.h_norm;
+    } else if (det.norm_bbox && det.norm_bbox.length === 4) {
+      [x_norm, y_norm, w_norm, h_norm] = [
+        det.norm_bbox[0],
+        det.norm_bbox[1],
+        det.norm_bbox[2] - det.norm_bbox[0],
+        det.norm_bbox[3] - det.norm_bbox[1],
+      ];
+    } else {
+      continue;
+    }
     
     const x = x_norm * canvasW;
     const y = y_norm * canvasH;
     const w = w_norm * canvasW;
     const h = h_norm * canvasH;
-
     // Clamp bounds
     const cx = Math.max(0, Math.min(x, canvasW));
     const cy = Math.max(0, Math.min(y, canvasH));
@@ -131,8 +130,8 @@ function drawDetections(ctx, detections, canvasW, canvasH) {
     ctx.restore();
 
     // Confidence label pill
-    const displayLabel = label === "pothole" ? "POTHOLE" : 
-                        label === "crack" ? "CRACK" : label.toUpperCase();
+    const displayLabel = label === "pothole" || label === "POTHOLE" ? "POTHOLE" : 
+                        label === "crack" || label === "CRACK" ? "CRACK" : label.toUpperCase();
     const confText = `${Math.round(confidence * 100)}%`;
     const fullText = `${displayLabel} ${confText}`;
     

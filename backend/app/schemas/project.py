@@ -1,71 +1,195 @@
+
+
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.enums import PriorityLevel, ProjectStatus
+from app.models.enums import DamageType, ReportStatus, ReportType, SeverityLevel
 from app.schemas.base import AppBaseModel
+from app.schemas.media_attachment import MediaAttachmentResponse
 from app.schemas.user import UserPublic
 
 
-class ProjectCreate(AppBaseModel):
-    report_id: int
-    assigned_admin_id: Optional[int] = None
-    contractor_id: Optional[int] = None
-    priority_level: PriorityLevel = PriorityLevel.LOW
-    estimated_cost: Optional[float] = Field(None, ge=0)
-    budget_approved: bool = False
-    start_date: Optional[datetime] = None
-    estimated_completion_date: Optional[datetime] = None
-    notes: Optional[str] = Field(None, max_length=1000)
+# ─────────────────────────────────────────────────────────────────────────────
+# CREATE
+# ─────────────────────────────────────────────────────────────────────────────
 
-    @field_validator("estimated_completion_date")
+class ReportCreate(AppBaseModel):
+    # ── Location ──────────────────────────────────────────────────────────────
+    latitude:    float = Field(..., ge=-90.0,   le=90.0)
+    longitude:   float = Field(..., ge=-180.0,  le=180.0)
+    barangay:    Optional[str] = Field(None, max_length=100)
+    street_name: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+
+    # ── ML results ────────────────────────────────────────────────────────────
+    ai_damage_type: Optional[DamageType]    = None
+    ai_severity:    Optional[SeverityLevel] = None
+    ai_confidence:  Optional[float]         = Field(None, ge=0.0, le=1.0)
+
+    # ── Legacy AI fake detection ──────────────────────────────────────────────
+    is_flagged_fake: bool          = False
+    fake_confidence: Optional[float] = Field(0.0, ge=0.0, le=1.0)
+
+    # ── Structured AI validation audit ────────────────────────────────────────
+    ai_validation_status:     Optional[str]   = Field(None, max_length=50)
+    ai_validation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    ai_validation_model:      Optional[str]   = Field(None, max_length=100)
+
+    # ── Capture metadata (angle, distance, device info) ───────────────────────
+    capture_metadata: Optional[dict] = None
+
+    # ── Admin review flags ────────────────────────────────────────────────────
+    requires_admin_review: bool          = False
+    review_reason:         Optional[str] = Field(None, max_length=500)
+
+    # ── Legal disclaimer ──────────────────────────────────────────────────────
+    disclaimer_accepted: bool = False
+
+    # ── Video / hybrid ────────────────────────────────────────────────────────
+    report_type:      ReportType           = ReportType.image
+    video_path:       Optional[str]        = None
+    is_hybrid:        bool                 = False
+    secondary_damage: Optional[DamageType] = None
+    detection_note:   Optional[str]        = Field(None, max_length=500)
+
+    # ── Philippine coordinate validation ──────────────────────────────────────
+    @field_validator("latitude")
     @classmethod
-    def completion_after_start(cls, v, info) -> Optional[datetime]:
-        start = info.data.get("start_date")
-        if v and start and v <= start:
-            raise ValueError("Estimated completion date must be after start date.")
+    def valid_ph_latitude(cls, v: float) -> float:
+        if not (4.5 <= v <= 21.5):
+            raise ValueError(
+                "Latitude must be within the Philippines (4.5 – 21.5)."
+            )
+        return v
+
+    @field_validator("longitude")
+    @classmethod
+    def valid_ph_longitude(cls, v: float) -> float:
+        if not (116.0 <= v <= 127.0):
+            raise ValueError(
+                "Longitude must be within the Philippines (116.0 – 127.0)."
+            )
+        return v
+
+    # FIX: enforce disclaimer acceptance at the schema level so it can never
+    #      be bypassed by a raw API call even if the frontend checkbox is skipped.
+    @field_validator("disclaimer_accepted")
+    @classmethod
+    def must_accept_disclaimer(cls, v: bool) -> bool:
+        if not v:
+            raise ValueError(
+                "You must accept the legal disclaimer to submit a report."
+            )
         return v
 
 
-class ProjectUpdate(AppBaseModel):
-    status: Optional[ProjectStatus] = None
-    priority_level: Optional[PriorityLevel] = None
-    contractor_id: Optional[int] = None
-    estimated_cost: Optional[float] = Field(None, ge=0)
-    actual_cost: Optional[float] = Field(None, ge=0)
-    budget_approved: Optional[bool] = None
-    completion_percentage: Optional[float] = Field(None, ge=0, le=100)
-    actual_completion_date: Optional[datetime] = None
-    notes: Optional[str] = Field(None, max_length=1000)
-    update_note: Optional[str] = Field(None, max_length=500)  # logged to ProjectUpdate
+# ─────────────────────────────────────────────────────────────────────────────
+# UPDATE  (admin / contractor)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ReportUpdate(AppBaseModel):
+    status:           Optional[ReportStatus] = None
+    decline_reason:   Optional[str]          = Field(None, max_length=500)
+    rejection_reason: Optional[str]          = Field(None, max_length=500)
+    barangay:         Optional[str]          = Field(None, max_length=100)
+    street_name:      Optional[str]          = Field(None, max_length=200)
+    assigned_to:      Optional[str]          = Field(None, max_length=200)
+
+    # Admin review controls
+    requires_admin_review: Optional[bool] = None
+    review_reason:         Optional[str]  = Field(None, max_length=500)
 
 
-class ProjectUpdateLogResponse(AppBaseModel):
-    id: int
-    old_status: Optional[ProjectStatus] = None
-    new_status: Optional[ProjectStatus] = None
-    completion_percentage: Optional[float] = None
-    note: Optional[str] = None
-    changed_by: Optional[UserPublic] = None
-    created_at: datetime
+# FIX: replaced Form(...) in the decline endpoint with a proper JSON body model
+#      so all mutation endpoints are consistently application/json.
+class DeclineRequest(AppBaseModel):
+    """Body for PUT /{report_id}/decline"""
+    reason: str = Field(..., min_length=5, max_length=500)
 
 
-class ProjectResponse(AppBaseModel):
-    id: int
-    report_id: int
-    admin: Optional[UserPublic] = None
-    contractor: Optional[UserPublic] = None
-    priority_level: PriorityLevel
-    status: ProjectStatus
-    estimated_cost: Optional[float] = None
-    actual_cost: Optional[float] = None
-    budget_approved: bool
-    start_date: Optional[datetime] = None
-    estimated_completion_date: Optional[datetime] = None
-    actual_completion_date: Optional[datetime] = None
-    completion_percentage: float
-    notes: Optional[str] = None
+# ─────────────────────────────────────────────────────────────────────────────
+# RESPONSE
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ReportResponse(AppBaseModel):
+    """
+    Returned by every report endpoint.
+
+    All fields must have a corresponding column or @hybrid_property on the
+    Report ORM model, otherwise model_validate() raises AttributeError → 500.
+    """
+
+    id:    int
+    owner: Optional[UserPublic] = None
+
+    # ── Location ──────────────────────────────────────────────────────────────
+    latitude:    float
+    longitude:   float
+    barangay:    Optional[str] = None
+    street_name: Optional[str] = None
+    description: Optional[str] = None
+
+    # FIX: image_url is now backed by a @hybrid_property on Report so
+    #      model_validate no longer throws AttributeError.
+    image_url: Optional[str] = None
+
+    # ── ML results ────────────────────────────────────────────────────────────
+    ai_damage_type: Optional[DamageType]    = None
+    ai_severity:    Optional[SeverityLevel] = None
+    ai_confidence:  Optional[float]         = None
+
+    # ── AI fake detection ─────────────────────────────────────────────────────
+    is_flagged_fake:          bool           = False
+    fake_confidence:          Optional[float] = None
+    is_potential_duplicate:   bool           = False
+
+    # ── Structured AI validation audit ────────────────────────────────────────
+    ai_validation_status:     Optional[str]   = None
+    ai_validation_confidence: Optional[float] = None
+    ai_validation_model:      Optional[str]   = None
+
+    # ── Capture metadata ──────────────────────────────────────────────────────
+    capture_metadata: Optional[dict] = None
+
+    # ── Admin review flags ────────────────────────────────────────────────────
+    requires_admin_review: bool          = False
+    review_reason:         Optional[str] = None
+
+    # ── Disclaimer ────────────────────────────────────────────────────────────
+    disclaimer_accepted: bool = False
+
+    # ── Video / hybrid ────────────────────────────────────────────────────────
+    report_type:      ReportType           = ReportType.image
+    video_path:       Optional[str]        = None
+    is_hybrid:        bool                 = False
+    secondary_damage: Optional[DamageType] = None
+    detection_note:   Optional[str]        = None
+
+    # ── Status ────────────────────────────────────────────────────────────────
+    status:         ReportStatus
+    decline_reason: Optional[str] = None
+
+    # [CRITICAL FIX] Added assigned_to so frontend can display who the report
+    # is assigned to after PATCH update. Must exist as column on Report ORM model.
+    assigned_to: Optional[str] = None
+
+    upvote_count: int = 0
+    view_count:   int
+
     created_at: datetime
     updated_at: datetime
-    updates: List[ProjectUpdateLogResponse] = []
+
+    media_attachments: List[MediaAttachmentResponse] = []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LIST RESPONSE  (paginated)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ReportListResponse(AppBaseModel):
+    total:     int
+    page:      int
+    page_size: int
+    results:   List[ReportResponse]

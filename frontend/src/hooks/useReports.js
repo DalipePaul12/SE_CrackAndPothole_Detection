@@ -1,12 +1,11 @@
+// src/hooks/useReports.js
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getReports, getMyReports } from "../api/reports";
 import { tokenStorage } from "../api/client";
 
+const PAGE_SIZE    = 15;
+const CACHE_TTL_MS = 2 * 60 * 1000;
 
-const PAGE_SIZE    = 10;
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
-
-// Module-level cache — shared across all hook instances, cleared on hard reload
 const _cache = new Map();
 
 function makeCacheKey(mine, status, barangay, page) {
@@ -16,13 +15,20 @@ function makeCacheKey(mine, status, barangay, page) {
 function cacheGet(key) {
   const entry = _cache.get(key);
   if (entry && Date.now() - entry.ts < CACHE_TTL_MS) return entry.value;
-  _cache.delete(key); // expired — clean up
+  _cache.delete(key);
   return null;
 }
 
 function cacheSet(key, value) {
   _cache.set(key, { ts: Date.now(), value });
 }
+
+const normalizeReport = (report) => ({
+  ...report,
+  status:         report.status?.toUpperCase(),
+  ai_severity:    report.ai_severity?.toLowerCase(),
+  ai_damage_type: report.ai_damage_type?.toLowerCase(),
+});
 
 export function invalidateReportsCache() {
   _cache.clear();
@@ -35,13 +41,12 @@ export function useReports({ mine = false, status = null, barangay = null } = {}
   const [page,    setPage]    = useState(1);
   const [total,   setTotal]   = useState(0);
 
-  // Tracks whether the effect is still mounted (prevents setState after unmount)
   const mountedRef = useRef(true);
 
   const fetchReports = useCallback(async ({ force = false } = {}) => {
     const token = tokenStorage.getAccess();
     if (!token) {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
       return;
     }
 
@@ -81,15 +86,17 @@ export function useReports({ mine = false, status = null, barangay = null } = {}
         return;
       }
 
-      const body    = res.data;
-      const items   = Array.isArray(body?.results) ? body.results
-                    : Array.isArray(body)           ? body       // fallback if no pagination wrapper
-                    : [];
-      const count   = typeof body?.total === "number" ? body.total : items.length;
+      const body  = res.data;
+      const items = Array.isArray(body?.results) ? body.results
+                  : Array.isArray(body)           ? body
+                  : [];
+      const count = typeof body?.total === "number" ? body.total : items.length;
 
-      setReports(items);
+      const normalized = items.map(normalizeReport);
+
+      setReports(normalized);
       setTotal(count);
-      cacheSet(key, { reports: items, total: count });
+      cacheSet(key, { reports: normalized, total: count });
 
     } catch (err) {
       if (mountedRef.current) {
@@ -100,17 +107,12 @@ export function useReports({ mine = false, status = null, barangay = null } = {}
     }
   }, [mine, page, status, barangay]);
 
-useEffect(() => {
-  mountedRef.current = true;
-  const controller = new AbortController();
-  fetchReports({ signal: controller.signal });
-  return () => {
-    mountedRef.current = false;
-    controller.abort();   
-  };
-}, [fetchReports]);
+  useEffect(() => {
+    mountedRef.current = true;
+    fetchReports();
+    return () => { mountedRef.current = false; };
+  }, [fetchReports]);
 
-  // refetch() forces a fresh API call and busts the cache
   const refetch = useCallback(() => fetchReports({ force: true }), [fetchReports]);
 
   return { reports, loading, error, page, setPage, total, refetch };

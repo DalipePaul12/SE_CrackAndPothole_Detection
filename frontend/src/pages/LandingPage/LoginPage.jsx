@@ -20,7 +20,6 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   const navigate = useNavigate();
   const { saveLogin } = useAuthContext();
 
-  // steps: "credentials" | "otp" | "forgot" | "reset_otp" | "new_password"
   const [step, setStep] = useState("credentials");
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [maskedEmail, setMaskedEmail] = useState("");
@@ -29,7 +28,6 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Forgot password state
   const [forgotEmail, setForgotEmail] = useState("");
   const [resetOtp, setResetOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -69,7 +67,6 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
     }
   };
 
-  // ── LOGIN ──────────────────────────────────────────
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -124,7 +121,6 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
     }
   };
 
-  // ── FORGOT PASSWORD ────────────────────────────────
   const handleForgotSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -185,9 +181,6 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
         new_password: newPassword,
       });
       if (!res.success) throw new Error(res.error || "Failed to reset password.");
-      setErrorMsg("");
-      setShowErrorModal(false);
-      // Show success then go back to login
       setStep("credentials");
       setForgotEmail("");
       setResetOtp("");
@@ -201,259 +194,246 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
     }
   };
 
+  const errorVariant =
+    errorMsg.includes("successfully") ? "success" :
+    errorMsg.includes("Too many")     ? "warning" : "danger";
+
+  const errorTitle =
+    step === "otp"                        ? "Verification Failed" :
+    errorMsg.includes("successfully")    ? "Success!"            : "Error";
+
   return (
-    <div className="login-overlay" onClick={onClose}>
-      <div className="login-content" onClick={(e) => e.stopPropagation()}>
-        <button className="login-close-btn" onClick={onClose} aria-label="Close login modal">
-          <IoClose />
-        </button>
+    <>
+      <div className="login-overlay" onClick={onClose}>
+        <div className="login-content" onClick={(e) => e.stopPropagation()}>
+          <button className="login-close-btn" onClick={onClose} aria-label="Close login modal">
+            <IoClose />
+          </button>
 
-        <div className="login-left">
-          <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />
-          <h1 className="login-title">Snap2Fix</h1>
-          <p className="login-slogan">
-            Report road damage. Improve safety. Build better streets.
-          </p>
-        </div>
+          <div className="login-left">
+            <img src="/snap.jpg" alt="Snap2Fix Logo" className="login-logo" />
+            <h1 className="login-title">Snap2Fix</h1>
+            <p className="login-slogan">
+              Report road damage. Improve safety. Build better streets.
+            </p>
+          </div>
 
-        <div className="login-right">
+          <div className="login-right">
 
-          {/* ── CREDENTIALS STEP ── */}
-          {step === "credentials" && (
-            <>
-              <h2>Welcome Back!</h2>
-              <p className="login-instruction">Log in to continue reporting road damages!</p>
-              <form onSubmit={handleLoginSubmit}>
-                <div className="label-form">
-                  <label>Email Address</label>
-                  <div className="email-icon-wrapper">
-                    <MdEmail className="email-icon" />
-                    <input
-                      type="email"
-                      name="email"
-                      placeholder="name@gmail.com"
-                      required
-                      value={formData.email}
-                      onChange={handleChange}
-                      autoComplete="email"
-                    />
+            {step === "credentials" && (
+              <>
+                <h2>Welcome Back!</h2>
+                <p className="login-instruction">Log in to continue reporting road damages!</p>
+                <form onSubmit={handleLoginSubmit}>
+                  <div className="label-form">
+                    <label>Email Address</label>
+                    <div className="email-icon-wrapper">
+                      <MdEmail className="email-icon" />
+                      <input
+                        type="email"
+                        name="email"
+                        placeholder="name@gmail.com"
+                        required
+                        value={formData.email}
+                        onChange={handleChange}
+                        autoComplete="email"
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="label-form">
-                  <label>Password</label>
-                  <div className="password-icon-wrapper">
-                    <RiLockPasswordFill className="password-icon" />
-                    <input
-                      type="password"
-                      name="password"
-                      placeholder="Password"
-                      required
-                      value={formData.password}
-                      onChange={handleChange}
-                      autoComplete="current-password"
-                    />
+                  <div className="label-form">
+                    <label>Password</label>
+                    <div className="password-icon-wrapper">
+                      <RiLockPasswordFill className="password-icon" />
+                      <input
+                        type="password"
+                        name="password"
+                        placeholder="Password"
+                        required
+                        value={formData.password}
+                        onChange={handleChange}
+                        autoComplete="current-password"
+                      />
+                    </div>
                   </div>
+                  <div className="forgot-password-row">
+                    <span
+                      className="forgot-password-link"
+                      onClick={() => { setForgotEmail(formData.email); setStep("forgot"); }}
+                    >
+                      Forgot Password?
+                    </span>
+                  </div>
+                  <button type="submit" disabled={loading}>
+                    {loading ? "Sending OTP..." : "Log in"}
+                    {!loading && <GrFormNextLink className="next-icon" />}
+                  </button>
+                </form>
+                <div className="login-footer">
+                  <p>
+                    Don't have an account?{" "}
+                    <span className="signup-link" onClick={onSwitchToSignUp}>Sign Up</span>
+                  </p>
                 </div>
+              </>
+            )}
 
-                {/* Forgot Password Link */}
-                <div className="forgot-password-row">
-                  <span
-                    className="forgot-password-link"
-                    onClick={() => {
-                      setForgotEmail(formData.email);
-                      setStep("forgot");
-                    }}
-                  >
-                    Forgot Password?
-                  </span>
-                </div>
-
-                <button type="submit" disabled={loading}>
-                  {loading ? "Sending OTP..." : "Log in"}
-                  {!loading && <GrFormNextLink className="next-icon" />}
+            {step === "otp" && (
+              <>
+                <button className="otp-back-btn" onClick={handleBack} type="button">
+                  <FaArrowLeft /> Back
                 </button>
-              </form>
-              <div className="login-footer">
-                <p>
-                  Don't have an account?{" "}
-                  <span className="signup-link" onClick={onSwitchToSignUp}>Sign Up</span>
-                </p>
-              </div>
-            </>
-          )}
-
-          {/* ── LOGIN OTP STEP ── */}
-          {step === "otp" && (
-            <>
-              <button className="otp-back-btn" onClick={handleBack} type="button">
-                <FaArrowLeft /> Back
-              </button>
-              <h2>Two-Factor Authentication</h2>
-              <p className="login-instruction">Verify your identity to continue.</p>
-              <OTPboxes
-                key={resendKey}
-                email={maskedEmail}
-                onComplete={handleOTPComplete}
-                onResend={handleResendOTP}
-                disabled={loading}
-                cooldownSeconds={60}
-              />
-              {loading && <p className="otp-loading">Verifying...</p>}
-            </>
-          )}
-
-          {/* ── FORGOT PASSWORD — ENTER EMAIL ── */}
-          {step === "forgot" && (
-            <>
-              <button className="otp-back-btn" onClick={handleBack} type="button">
-                <FaArrowLeft /> Back
-              </button>
-              <h2>Forgot Password</h2>
-              <p className="login-instruction">
-                Enter your email and we'll send you a reset code.
-              </p>
-              <form onSubmit={handleForgotSubmit}>
-                <div className="label-form">
-                  <label>Email Address</label>
-                  <div className="email-icon-wrapper">
-                    <MdEmail className="email-icon" />
-                    <input
-                      type="email"
-                      placeholder="name@gmail.com"
-                      required
-                      value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      autoComplete="email"
-                    />
-                  </div>
-                </div>
-                <button type="submit" disabled={loading}>
-                  {loading ? "Sending..." : "Send Reset Code"}
-                  {!loading && <GrFormNextLink className="next-icon" />}
-                </button>
-              </form>
-            </>
-          )}
-
-          {/* ── FORGOT PASSWORD — ENTER OTP ── */}
-          {step === "reset_otp" && (
-            <>
-              <button
-                className="otp-back-btn"
-                onClick={() => setStep("forgot")}
-                type="button"
-              >
-                <FaArrowLeft /> Back
-              </button>
-              <h2>Enter Reset Code</h2>
-              <p className="login-instruction">
-                We sent a 6-digit code to <strong>{forgotEmail}</strong>.
-              </p>
-              <form onSubmit={handleProceedToNewPassword}>
+                <h2>Two-Factor Authentication</h2>
+                <p className="login-instruction">Verify your identity to continue.</p>
                 <OTPboxes
-                  key={resetOtpKey}
-                  email={forgotEmail}
-                  onComplete={handleResetOtpComplete}
-                  onResend={handleResendResetOtp}
+                  key={resendKey}
+                  email={maskedEmail}
+                  onComplete={handleOTPComplete}
+                  onResend={handleResendOTP}
                   disabled={loading}
                   cooldownSeconds={60}
                 />
-                <button
-                  type="submit"
-                  disabled={loading || resetOtp.length !== 6}
-                  style={{ marginTop: "1rem" }}
-                >
-                  {loading ? "Verifying..." : "Continue"}
-                  {!loading && <GrFormNextLink className="next-icon" />}
-                </button>
-              </form>
-            </>
-          )}
+                {loading && <p className="otp-loading">Verifying...</p>}
+              </>
+            )}
 
-          {/* ── FORGOT PASSWORD — SET NEW PASSWORD ── */}
-          {step === "new_password" && (
-            <>
-              <button
-                className="otp-back-btn"
-                onClick={() => setStep("reset_otp")}
-                type="button"
-              >
-                <FaArrowLeft /> Back
-              </button>
-              <h2>New Password</h2>
-              <p className="login-instruction">
-                Choose a strong new password for your account.
-              </p>
-              <form onSubmit={handleResetPassword}>
-                <div className="label-form">
-                  <label>New Password</label>
-                  <div className="password-icon-wrapper">
-                    <RiLockPasswordFill className="password-icon" />
-                    <input
-                      type={showNewPassword ? "text" : "password"}
-                      placeholder="Min. 8 chars, 1 uppercase, 1 number, 1 symbol"
-                      required
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                    />
-                    <span
-                      className="toggle-eye"
-                      onClick={() => setShowNewPassword((p) => !p)}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={showNewPassword ? "Hide password" : "Show password"}
-                    >
-                      {showNewPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
-                    </span>
-                  </div>
-                </div>
-                <div className="label-form">
-                  <label>Confirm Password</label>
-                  <div className="password-icon-wrapper">
-                    <RiLockPasswordFill className="password-icon" />
-                    <input
-                      type={showConfirmNewPassword ? "text" : "password"}
-                      placeholder="Re-enter new password"
-                      required
-                      value={confirmNewPassword}
-                      onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    />
-                    <span
-                      className="toggle-eye"
-                      onClick={() => setShowConfirmNewPassword((p) => !p)}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={showConfirmNewPassword ? "Hide password" : "Show password"}
-                    >
-                      {showConfirmNewPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
-                    </span>
-                  </div>
-                </div>
-                <button type="submit" disabled={loading}>
-                  {loading ? "Resetting..." : "Reset Password"}
-                  {!loading && <GrFormNextLink className="next-icon" />}
+            {step === "forgot" && (
+              <>
+                <button className="otp-back-btn" onClick={handleBack} type="button">
+                  <FaArrowLeft /> Back
                 </button>
-              </form>
-            </>
-          )}
+                <h2>Forgot Password</h2>
+                <p className="login-instruction">
+                  Enter your email and we'll send you a reset code.
+                </p>
+                <form onSubmit={handleForgotSubmit}>
+                  <div className="label-form">
+                    <label>Email Address</label>
+                    <div className="email-icon-wrapper">
+                      <MdEmail className="email-icon" />
+                      <input
+                        type="email"
+                        placeholder="name@gmail.com"
+                        required
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        autoComplete="email"
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading}>
+                    {loading ? "Sending..." : "Send Reset Code"}
+                    {!loading && <GrFormNextLink className="next-icon" />}
+                  </button>
+                </form>
+              </>
+            )}
+
+            {step === "reset_otp" && (
+              <>
+                <button className="otp-back-btn" onClick={() => setStep("forgot")} type="button">
+                  <FaArrowLeft /> Back
+                </button>
+                <h2>Enter Reset Code</h2>
+                <p className="login-instruction">
+                  We sent a 6-digit code to <strong>{forgotEmail}</strong>.
+                </p>
+                <form onSubmit={handleProceedToNewPassword}>
+                  <OTPboxes
+                    key={resetOtpKey}
+                    email={forgotEmail}
+                    onComplete={handleResetOtpComplete}
+                    onResend={handleResendResetOtp}
+                    disabled={loading}
+                    cooldownSeconds={60}
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading || resetOtp.length !== 6}
+                    style={{ marginTop: "1rem" }}
+                  >
+                    {loading ? "Verifying..." : "Continue"}
+                    {!loading && <GrFormNextLink className="next-icon" />}
+                  </button>
+                </form>
+              </>
+            )}
+
+            {step === "new_password" && (
+              <>
+                <button className="otp-back-btn" onClick={() => setStep("reset_otp")} type="button">
+                  <FaArrowLeft /> Back
+                </button>
+                <h2>New Password</h2>
+                <p className="login-instruction">
+                  Choose a strong new password for your account.
+                </p>
+                <form onSubmit={handleResetPassword}>
+                  <div className="label-form">
+                    <label>New Password</label>
+                    <div className="password-icon-wrapper">
+                      <RiLockPasswordFill className="password-icon" />
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder="Min. 8 chars, 1 uppercase, 1 number, 1 symbol"
+                        required
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                      <span
+                        className="toggle-eye"
+                        onClick={() => setShowNewPassword((p) => !p)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={showNewPassword ? "Hide password" : "Show password"}
+                      >
+                        {showNewPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="label-form">
+                    <label>Confirm Password</label>
+                    <div className="password-icon-wrapper">
+                      <RiLockPasswordFill className="password-icon" />
+                      <input
+                        type={showConfirmNewPassword ? "text" : "password"}
+                        placeholder="Re-enter new password"
+                        required
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      />
+                      <span
+                        className="toggle-eye"
+                        onClick={() => setShowConfirmNewPassword((p) => !p)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={showConfirmNewPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmNewPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
+                      </span>
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading}>
+                    {loading ? "Resetting..." : "Reset Password"}
+                    {!loading && <GrFormNextLink className="next-icon" />}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
         </div>
-
-        {showErrorModal && (
-          <ConfirmChangesModal
-            title={
-              step === "otp" ? "Verification Failed" :
-              step === "credentials" && errorMsg.includes("successfully") ? "Success!" :
-              "Error"
-            }
-            message={errorMsg}
-            confirmText="OK"
-            variant={errorMsg.includes("successfully") ? "success" : "warning"}
-            hideCancel={true}
-            onConfirm={() => setShowErrorModal(false)}
-          />
-        )}
       </div>
-    </div>
+
+      {showErrorModal && (
+        <ConfirmChangesModal
+          title={errorTitle}
+          message={errorMsg}
+          confirmText="OK"
+          variant={errorVariant}
+          hideCancel={true}
+          onConfirm={() => setShowErrorModal(false)}
+        />
+      )}
+    </>
   );
 }
 

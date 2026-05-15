@@ -13,9 +13,9 @@ import time
 from collections import defaultdict
 
 import requests
-from ultralytics import YOLO
-
 from app.core.config import settings
+from app.services.ml_service import _severity_from_bbox_norm
+from ultralytics import YOLO
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +41,18 @@ HF_API_URL = (
 )
 
 
-# ── Image analysis (photo pipeline) ──────────────────────────────────────────
+# ── Image analysis (photo pipeline — MULTI-DETECTION) ─────────────────────────
 
 def analyze_image(image_path: str) -> dict:
     """
     Full analysis pipeline for a single image:
       1. HuggingFace AI-generated detection (if enabled)
-      2. YOLO damage classification (pothole + crack)
+      2. YOLO damage classification (pothole + crack) — ALL detections
 
     Returns a dict with keys:
       valid, is_ai_generated, ai_generated_confidence,
-      damage_type, severity, confidence, reason
+      damage_type, severity, confidence, reason,
+      all_detections
     """
 
     result = {
@@ -62,6 +63,7 @@ def analyze_image(image_path: str) -> dict:
         "severity":               "Unknown",
         "confidence":             0.0,
         "reason":                 "",
+        "all_detections":         [],
     }
 
     # ── Step 1: HuggingFace fake detection ────────────────────────────────────
@@ -109,44 +111,146 @@ def analyze_image(image_path: str) -> dict:
         except Exception as e:
             logger.exception("HuggingFace request failed: %s", e)
 
-    # ── Step 2: YOLO damage classification ────────────────────────────────────
+    # ── Step 2: YOLO damage classification — MULTI-DETECTION ───────────────
     if result["valid"]:
         try:
-            highest_conf   = 0.0
-            damage_detected = None
-            detected_types  = []
+            all_detections = []
 
             if pothole_model:
                 p_results = pothole_model(image_path)
-                for box in p_results[0].boxes:
-                    conf = float(box.conf[0])
-                    detected_types.append("pothole")
-                    if conf > highest_conf:
-                        highest_conf    = conf
-                        damage_detected = "pothole"
+                if p_results and p_results[0].boxes:
+                    h, w = p_results[0].orig_shape[:2]
+                    has_segments = hasattr(p_results[0], 'masks') and p_results[0].masks is not None
+                    for i, box in enumerate(p_results[0].boxes):
+                        conf = float(box.conf[0])
+                        if conf < 0.35:
+                            continue
+                        x1, y1, x2, y2 = box.xyxy[0].tolist()
+                        det = {
+                            "class": "pothole",
+                            "label": "pothole",
+                            "confidence": round(conf, 4),
+                            "severity": _severity_from_bbox_norm(
+                                [round(x1/w,4), round(y1/h,4), round(x2/w,4), round(y2/h,4)],
+                                confidence=conf
+                            ),
+                            "box": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+                            "norm_bbox": [
+                                round(x1 / w, 4), round(y1 / h, 4),
+                                round(x2 / w, 4), round(y2 / h, 4)
+                            ],
+                            "x_norm": round(x1 / w, 4),
+                            "y_norm": round(y1 / h, 4),
+                            "w_norm": round((x2 - x1) / w, 4),
+                            "h_norm": round((y2 - y1) / h, 4),
+                        }
+                        if has_segments and i < len(p_results[0].masks.xy):
+                            seg = p_results[0].masks.xy[i]
+                            if len(seg) >= 3:
+                                det["segments"] = [[(float(x), float(y)) for x, y in seg]]
+                                det["segments_norm"] = [
+                                    [round(float(x) / w, 4), round(float(y) / h, 4)]
+                                    for x, y in seg
+                                ]
+
+                        # ── FALLBACK: detection model → synthetic box polygon ──
+                        if not det.get("segments"):
+                            det["segments"] = [
+                                [round(x1, 2), round(y1, 2)],
+                                [round(x2, 2), round(y1, 2)],
+                                [round(x2, 2), round(y2, 2)],
+                                [round(x1, 2), round(y2, 2)],
+                            ]
+                            det["segments_norm"] = [
+                                [round(x1 / w, 4), round(y1 / h, 4)],
+                                [round(x2 / w, 4), round(y1 / h, 4)],
+                                [round(x2 / w, 4), round(y2 / h, 4)],
+                                [round(x1 / w, 4), round(y2 / h, 4)],
+                            ]
+
+                        all_detections.append(det)
 
             if crack_model:
                 c_results = crack_model(image_path)
-                for box in c_results[0].boxes:
-                    conf = float(box.conf[0])
-                    detected_types.append("crack")
-                    if conf > highest_conf:
-                        highest_conf    = conf
-                        damage_detected = "crack"
+                if c_results and c_results[0].boxes:
+                    h, w = c_results[0].orig_shape[:2]
+                    has_segments = hasattr(c_results[0], 'masks') and c_results[0].masks is not None
+                    for i, box in enumerate(c_results[0].boxes):
+                        conf = float(box.conf[0])
+                        if conf < 0.28:
+                            continue
+                        x1, y1, x2, y2 = box.xyxy[0].tolist()
+                        det = {
+                            "class": "crack",
+                            "label": "crack",
+                            "confidence": round(conf, 4),
+                            "severity": _severity_from_bbox_norm(
+                                [round(x1/w,4), round(y1/h,4), round(x2/w,4), round(y2/h,4)],
+                                confidence=conf
+                            ),
+                            "box": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+                            "norm_bbox": [
+                                round(x1 / w, 4), round(y1 / h, 4),
+                                round(x2 / w, 4), round(y2 / h, 4)
+                            ],
+                            "x_norm": round(x1 / w, 4),
+                            "y_norm": round(y1 / h, 4),
+                            "w_norm": round((x2 - x1) / w, 4),
+                            "h_norm": round((y2 - y1) / h, 4),
+                        }
+                        if has_segments and i < len(c_results[0].masks.xy):
+                            seg = c_results[0].masks.xy[i]
+                            if len(seg) >= 3:
+                                det["segments"] = [[(float(x), float(y)) for x, y in seg]]
+                                det["segments_norm"] = [
+                                    [round(float(x) / w, 4), round(float(y) / h, 4)]
+                                    for x, y in seg
+                                ]
 
-            if damage_detected:
-                result["damage_type"] = damage_detected
-                result["confidence"]  = round(highest_conf, 2)
+                        # ── FALLBACK: detection model → synthetic box polygon ──
+                        if not det.get("segments"):
+                            det["segments"] = [
+                                [round(x1, 2), round(y1, 2)],
+                                [round(x2, 2), round(y1, 2)],
+                                [round(x2, 2), round(y2, 2)],
+                                [round(x1, 2), round(y2, 2)],
+                            ]
+                            det["segments_norm"] = [
+                                [round(x1 / w, 4), round(y1 / h, 4)],
+                                [round(x2 / w, 4), round(y1 / h, 4)],
+                                [round(x2 / w, 4), round(y2 / h, 4)],
+                                [round(x1 / w, 4), round(y2 / h, 4)],
+                            ]
 
-                result["severity"] = "critical" if highest_conf > 0.80 else "non-critical"
+                        all_detections.append(det)
 
-                unique_types   = list(set(detected_types))
+            if all_detections:
+                all_detections.sort(key=lambda d: d["confidence"], reverse=True)
+                best = all_detections[0]
+                result["damage_type"] = best["class"]
+                result["confidence"]  = best["confidence"]
+                
+                # Production-grade tiered severity
+                crit_dets = [d for d in all_detections if d.get("severity") == "critical"]
+                logger.info(f"[DEBUG] all_detections severities: {[d.get('severity') for d in all_detections]}")
+                logger.info(f"[DEBUG] crit_dets count: {len(crit_dets)}, confidences: {[d.get('confidence') for d in crit_dets]}")
+                if any(d.get("confidence", 0) >= 0.85 for d in crit_dets):
+                    result["severity"] = "critical"
+                elif len(crit_dets) >= 2:
+                    result["severity"] = "critical"
+                elif len(crit_dets) == 1 and crit_dets[0].get("confidence", 0) >= 0.70:
+                    result["severity"] = "critical"
+                else:
+                    result["severity"] = "non-critical"
+                unique_types = list(set(d["class"] for d in all_detections))
                 result["reason"] = f"Detected: {', '.join(unique_types)}"
-                logger.info("YOLO result — type: %s  conf: %.2f  severity: %s",
-                            damage_detected, highest_conf, result["severity"])
+                logger.info("YOLO result — types: %s  best_conf: %.2f  total_dets: %d",
+                            unique_types, best["confidence"], len(all_detections))
             else:
                 result["reason"] = "No road damage detected."
                 logger.info("YOLO found no damage in: %s", image_path)
+
+            result["all_detections"] = all_detections
 
         except Exception as e:
             logger.exception("YOLO processing failed: %s", e)
@@ -154,27 +258,7 @@ def analyze_image(image_path: str) -> dict:
     return result
 
 
-# ── Hybrid resolver (video pipeline) ─────────────────────────────────────────
-
 def resolve_hybrid(frame_results: list[dict]) -> dict:
-    """
-    Aggregates per-frame YOLO detections from a video into a single report result.
-
-    Each item in frame_results must have:
-      { "damage_type": "pothole"|"crack", "confidence": float, ... }
-
-    Returns:
-      {
-        "damage_type":      str | None,   — dominant type
-        "secondary_damage": str | None,   — only on hybrid reports
-        "is_hybrid":        bool,
-        "severity":         str | None,   — "critical" | "low"
-        "total_detections": int,
-        "crack_frames":     list[dict],
-        "pothole_frames":   list[dict],
-      }
-    """
-
     if not frame_results:
         return {
             "damage_type":      None,
@@ -205,7 +289,6 @@ def resolve_hybrid(frame_results: list[dict]) -> dict:
             "pothole_frames":   [],
         }
 
-    # Weighted score = frame count × average confidence
     weighted = {
         dtype: len(confs) * (sum(confs) / len(confs))
         for dtype, confs in scores.items()
@@ -218,13 +301,14 @@ def resolve_hybrid(frame_results: list[dict]) -> dict:
         if is_hybrid else None
     )
 
-    # Severity — only "critical" | "non-critical" to match SeverityLevel enum
     total_detections = sum(len(c) for c in scores.values())
     all_confs        = [c for confs in scores.values() for c in confs]
     avg_conf         = sum(all_confs) / len(all_confs)
 
-    severity = "critical" if (avg_conf >= 0.80 or total_detections >= 10) else "non-critical"
-
+    # Majority-based severity: critical only if most detections are critical
+    crit_count = sum(1 for r in frame_results if r.get("severity") == "critical")
+    severity = "critical" if crit_count > len(frame_results) / 2 else "non-critical"
+    
     crack_frames   = [r for r in frame_results if r.get("damage_type") == "crack"]
     pothole_frames = [r for r in frame_results if r.get("damage_type") == "pothole"]
 

@@ -279,7 +279,11 @@ body.dark .reset-filter-btn:hover {
   box-shadow: var(--shadow-sm);
   transition: background 0.3s ease, border-color 0.3s ease;
 }
-
+.allreports-table-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+  border-radius: 12px;
+}
 .allreports-table {
   width: 100%;
   border-collapse: collapse;
@@ -294,7 +298,7 @@ body.dark .reset-filter-btn:hover {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--subtext);
-  padding: 6px 14px 14px;
+  padding: 12px 14px;
   position: sticky;
   top: 0;
   background: var(--card);
@@ -304,25 +308,11 @@ body.dark .reset-filter-btn:hover {
   transition: background 0.3s ease;
 }
 
-.allreports-table th:nth-child(1) {
-  width: 35%;
-}
-
-.allreports-table th:nth-child(2) {
-  width: 15%;
-}
-
-.allreports-table th:nth-child(3) {
-  width: 15%;
-}
-
-.allreports-table th:nth-child(4) {
-  width: 15%;
-}
-
-.allreports-table th:nth-child(5) {
-  width: 20%;
-}
+.allreports-table th:nth-child(1) { width: 25%; }
+.allreports-table th:nth-child(2) { width: 15%; }
+.allreports-table th:nth-child(3) { width: 20%; }
+.allreports-table th:nth-child(4) { width: 20%; }
+.allreports-table th:nth-child(5) { width: 20%; }
 
 .allreports-table td {
   padding: 14px;
@@ -334,17 +324,9 @@ body.dark .reset-filter-btn:hover {
 }
 
 .allreports-table tbody {
-  display: block;
-  overflow-y: auto;
-  max-height: 380px;
+  display: table-row-group;
 }
 
-.allreports-table thead,
-.allreports-table tbody tr {
-  display: table;
-  width: 100%;
-  table-layout: fixed;
-}
 
 .report-location-allreports {
   font-size: 0.76rem;

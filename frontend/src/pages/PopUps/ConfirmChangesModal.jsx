@@ -1,40 +1,44 @@
+import { createPortal } from "react-dom";
+import { AlertTriangle, CheckCircle, Info, AlertCircle } from "lucide-react";
 import "./ConfirmChangesModal.css";
 
 function ConfirmChangesModal({
-  title = "Confirm Changes",
-  message = "Are you sure you want to apply these changes?",
+  title = "Confirm",
+  message = "Are you sure?",
   confirmText = "Confirm",
   onConfirm,
   onCancel,
-  variant = "default", // "default" | "danger"
-  hideCancel = false
+  variant = "default",
+  hideCancel = false,
 }) {
-  return (
-    <div className="confirm-overlay">
-      <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+  const icon =
+    variant === "danger"  ? <AlertTriangle  size={28} className="ccm-icon danger"  /> :
+    variant === "warning" ? <AlertCircle    size={28} className="ccm-icon warning" /> :
+    variant === "success" ? <CheckCircle    size={28} className="ccm-icon success" /> :
+                            <Info           size={28} className="ccm-icon default" />;
 
+  return createPortal(
+    <div className="ccm-overlay" onClick={hideCancel ? onConfirm : onCancel}>
+      <div className="ccm-modal" onClick={(e) => e.stopPropagation()}>
+        {icon}
         <h3>{title}</h3>
         <p>{message}</p>
-
-        <div className="confirm-actions">
-        {!hideCancel && (
-          <button className="confirm-cancel" onClick={onCancel}>
-            Cancel
-          </button>
-        )}
-
+        <div className="ccm-actions">
+          {!hideCancel && (
+            <button className="ccm-cancel" onClick={onCancel}>
+              Cancel
+            </button>
+          )}
           <button
-            className={`confirm-confirm ${
-              variant === "danger" ? "danger" : ""
-            }`}
+            className={`ccm-confirm ${variant !== "default" ? variant : ""}`}
             onClick={onConfirm}
           >
             {confirmText}
           </button>
         </div>
-
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

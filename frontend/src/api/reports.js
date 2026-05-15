@@ -1,3 +1,4 @@
+// src/api/reports.js
 import { api } from '../api/client.js';
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -37,8 +38,6 @@ function parseApiError(err) {
   }
 }
 
-// client.js returns { success, data, error } — not axios { data: ... }
-// So we extract the data field from the response directly.
 function handleError(err) {
   console.error("[API Error]", err?.response?.data ?? err?.message ?? err);
   return { success: false, data: null, error: parseApiError(err) };
@@ -50,7 +49,6 @@ function buildQS(params = {}) {
   return qs ? `?${qs}` : "";
 }
 
-// client.js api.get/post returns { success, data, error } directly (not wrapped in .data)
 function unwrap(res) {
   if (res?.success === false) {
     return { success: false, data: null, error: res.error ?? "Request failed." };
@@ -66,7 +64,7 @@ export async function createReport(data) {
   return unwrap(res);
 }
 
-// Alias for backwards compatibility with CreateReport.jsx
+// Alias for backwards compatibility
 export const submitReport = createReport;
 
 
@@ -108,8 +106,32 @@ export async function getReport(reportId) {
 export const fetchReport = getReport;
 
 
+/**
+ * Update report status.
+ * CRITICAL: Status must be lowercase to match backend enum values.
+ * Valid values: pending, verified, assigned, in_progress, resolved, declined
+ */
 export async function updateReport(reportId, data) {
   const payload = cleanParams(data);
+
+  // ── Status: always lowercase string ─────────────────────────────────
+  if (payload.status != null) {
+    payload.status = String(payload.status?.value ?? payload.status)
+      .toLowerCase()
+      .trim();
+  }
+
+  // ── assigned_to: preserve numbers, stringify everything else ────
+  // If the backend schema expects int (user-id), we must NOT wrap it in String().
+  if (payload.assigned_to != null) {
+    const raw = payload.assigned_to?.value ?? payload.assigned_to;
+    payload.assigned_to =
+      typeof raw === "number" ? raw : String(raw).trim();
+  }
+
+  // Log the exact JSON payload so 422s are easy to debug
+  console.log(`[API] PATCH /reports/${reportId}`, JSON.stringify(payload, null, 2));
+
   const res = await api.patch(`/reports/${reportId}`, payload);
   return unwrap(res);
 }
@@ -122,16 +144,11 @@ export async function deleteReport(reportId) {
 
 
 // ── Media upload ──────────────────────────────────────────────────────────────
-// FIX: Use api.upload() (multipart/form-data) NOT api.post() (JSON)
-// api.post() calls JSON.stringify() and sets Content-Type: application/json
-// which corrupts FormData — files never reach the server.
 
 export async function uploadMedia(reportId, file, onProgress) {
   const formData = new FormData();
   formData.append("file", file);
 
-  // api.upload() uses fetch with no Content-Type header set manually,
-  // letting the browser set the correct multipart boundary automatically.
   const res = await api.upload(`/reports/${reportId}/media`, formData);
   return unwrap(res);
 }
@@ -182,4 +199,43 @@ export async function deleteComment(commentId) {
 export async function toggleUpvote(reportId) {
   const res = await api.post(`/reports/${reportId}/upvote`);
   return unwrap(res);
+}
+
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export async function getNotifications(limit = 50, unreadOnly = false) {
+  const params = { limit: String(limit) };
+  // Only send unread_only when true. Some backends reject explicit "false"
+  // strings on strict bool query params, causing 422s.
+  if (unreadOnly) params.unread_only = "true";
+
+  const qs = new URLSearchParams(params).toString();
+  const res = await api.get(`/notifications?${qs}`);
+  return unwrap(res);
+}
+
+export async function getNotificationCount() {
+  const res = await api.get("/notifications/count");
+  return unwrap(res);
+}
+
+export async function markAllNotificationsRead() {
+  const res = await api.patch("/notifications/read-all");
+  return unwrap(res);
+}
+
+export async function markNotificationRead(notificationId) {
+  const res = await api.patch(`/notifications/${notificationId}/read`);
+  return unwrap(res);
+}
+
+export async function clearAllNotifications() {
+  const res = await api.delete("/notifications/clear-all");
+  return { success: res?.success ?? true, data: null, error: res?.error ?? null };
+}
+
+export async function deleteNotification(notificationId) {
+  const res = await api.delete(`/notifications/${notificationId}`);
+  return { success: res?.success ?? true, data: null, error: res?.error ?? null };
 }

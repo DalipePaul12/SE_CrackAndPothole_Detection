@@ -57,7 +57,7 @@ export function useNotifications() {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30_000);
+    const interval = setInterval(fetchNotifications, 120_000);
 
     return () => {
       abortRef.current = true;

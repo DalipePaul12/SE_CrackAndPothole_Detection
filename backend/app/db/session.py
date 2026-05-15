@@ -1,7 +1,3 @@
-"""
-Async SQLAlchemy engine and session factory.
-Single source of truth after core/database.py was removed.
-"""
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -19,6 +15,8 @@ engine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
+    pool_timeout=30,
+    pool_recycle=1800,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -29,11 +27,10 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
-SessionLocal = AsyncSessionLocal  # backward-compat alias
+SessionLocal = AsyncSessionLocal
 
 
 async def get_db():
-    """FastAPI dependency — yields an async DB session per request."""
     async with AsyncSessionLocal() as session:
         try:
             yield session

@@ -38,6 +38,8 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
 
 async def unhandled_exception_handler(request: Request, exc: Exception):
     """Catch-all — log the full trace, return safe 500."""
+    import traceback
+    traceback.print_exc()          # ADD THIS — prints to stdout no matter what
     logger.error(
         f"Unhandled exception on {request.method} {request.url}",
         exc_info=exc,

@@ -1,5 +1,12 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { getReports, updateReport, uploadReportMedia, addComment } from "../../api/reports";
+import { createPortal } from "react-dom";
+import {
+  getReports,
+  getReport,
+  updateReport,
+  uploadReportMedia,
+  addComment,
+} from "../../api/reports";
 import "./AdminManageReports.css";
 
 function isCoordinateString(str) {
@@ -7,16 +14,25 @@ function isCoordinateString(str) {
   return /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(str.trim());
 }
 
-const STATUS_FLOW   = ["pending", "verified", "assigned", "in_progress", "resolved", "rejected", "cancelled"];
+// ═══════════════════════════════════════════════════════════════════════════
+// REFACTORED STATUS FLOW — Removed "assigned" status
+// Old: pending → verified → assigned → in_progress → resolved
+// New: pending → verified → in_progress → resolved
+// ═══════════════════════════════════════════════════════════════════════════
+const STATUS_FLOW   = ["pending", "verified", "in_progress", "resolved", "rejected", "cancelled"];
 const STATUS_LABELS = {
   pending:     "Pending",
   verified:    "Verified",
-  assigned:    "Assigned",
   in_progress: "In Progress",
   resolved:    "Resolved",
   rejected:    "Rejected",
   cancelled:   "Cancelled",
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMMENTED OUT: Workers and Teams — moved to next version
+// ═══════════════════════════════════════════════════════════════════════════
+/*
 const WORKERS = [
   { id: 1, name: "Juan dela Cruz"    },
   { id: 2, name: "Maria Santos"      },
@@ -30,7 +46,9 @@ const TEAMS_DEFAULT = [
   { id: 2, name: "Team Beta",  leader: "Maria Santos",      members: ["Marco Villanueva"]                   },
   { id: 3, name: "Team Gamma", leader: "Marco Villanueva", members: ["Liza Mendoza", "Pedro Reyes"]         },
 ];
+*/
 
+// ─── Icons (unchanged) ────────────────────────────────────────────────────
 function IcoClipboard({ size = 16, ...p }) {
   return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>;
 }
@@ -240,8 +258,11 @@ function StatsCards({ reports }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// REFACTORED TIMELINE — Removed "assigned" step
+// ═══════════════════════════════════════════════════════════════════════════
 function StatusTimeline({ currentStatus }) {
-  const steps = ["pending", "verified", "assigned", "in_progress", "resolved"];
+  const steps = ["pending", "verified", "in_progress", "resolved"];
   const isRej = currentStatus === "rejected" || currentStatus === "cancelled";
   const idx   = steps.indexOf(currentStatus);
 
@@ -271,32 +292,47 @@ function StatusTimeline({ currentStatus }) {
   );
 }
 
-function BulkBar({ count, onComplete, onAssign, onCancel, onClear }) {
+function BulkBar({ count, onComplete, onCancel, onClear }) {
   return (
     <div className="bulk-bar">
       <span className="bulk-count">{count} selected</span>
       <button className="bulk-btn b-complete" onClick={onComplete}><IcoCheck size={13} /> Complete All</button>
-      <button className="bulk-btn b-assign"   onClick={onAssign}><IcoUsers size={13} /> Assign All</button>
-      <button className="bulk-btn b-reject"   onClick={onCancel}><IcoBan size={13} /> Cancel All</button>
-      <button className="bulk-btn b-clear"    onClick={onClear}><IcoX size={13} /> Clear</button>
+      {/* ═════════════════════════════════════════════════════════════════
+          COMMENTED OUT: Assign All — moved to next version
+      ═════════════════════════════════════════════════════════════════ */}
+      {/* <button className="bulk-btn b-assign" onClick={onAssign}><IcoUsers size={13} /> Assign All</button> */}
+      <button className="bulk-btn b-reject" onClick={onCancel}><IcoBan size={13} /> Cancel All</button>
+      <button className="bulk-btn b-clear" onClick={onClear}><IcoX size={13} /> Clear</button>
     </div>
   );
 }
 
-function ActionButtons({ r, onVerify, onAssign, onComplete, onCancel, isPatching }) {
+// ═══════════════════════════════════════════════════════════════════════════
+// REFACTORED ACTION BUTTONS — Removed Assign button
+// New flow: pending → Verify → verified → Start → in_progress → Complete → resolved
+// ═══════════════════════════════════════════════════════════════════════════
+function ActionButtons({ r, onVerify, onStart, onComplete, onCancel, isPatching }) {
   const st = r.status?.toLowerCase();
   return (
     <div className="action-btns">
-      {st === "pending"     && <button disabled={isPatching} className="action-btn ab-verify"   onClick={e => { e.stopPropagation(); onVerify();   }}><IcoShield size={11} />Verify</button>}
-      {st === "verified"    && <button disabled={isPatching} className="action-btn ab-assign"   onClick={e => { e.stopPropagation(); onAssign();   }}><IcoUsers size={11} />Assign</button>}
-      {(st === "assigned" || st === "in_progress") && (
+      {st === "pending"  && (
+        <button disabled={isPatching} className="action-btn ab-verify" onClick={e => { e.stopPropagation(); onVerify(); }}>
+          <IcoShield size={11}/> Verify
+        </button>
+      )}
+      {st === "verified" && (
+        <button disabled={isPatching} className="action-btn ab-start" onClick={e => { e.stopPropagation(); onStart(); }}>
+          <IcoWrench size={11}/> Start
+        </button>
+      )}
+      {(st === "verified" || st === "in_progress") && (
         <button disabled={isPatching} className="action-btn ab-complete" onClick={e => { e.stopPropagation(); onComplete(); }}>
-          <IcoCheck size={11} />Complete
+          <IcoCheck size={11}/> Complete
         </button>
       )}
       {!["resolved", "rejected", "cancelled"].includes(st) && (
         <button disabled={isPatching} className="action-btn ab-reject" onClick={e => { e.stopPropagation(); onCancel(); }}>
-          <IcoBan size={11} />Cancel
+          <IcoBan size={11}/> Cancel
         </button>
       )}
     </div>
@@ -322,50 +358,90 @@ function AdminManageReports() {
 
   const [viewReport,     setViewReport]     = useState(null);
   const [completeReport, setCompleteReport] = useState(null);
-  const [assignReport,   setAssignReport]   = useState(null);
+  // ═════════════════════════════════════════════════════════════════
+  // COMMENTED OUT: Assign modal state — moved to next version
+  // const [assignReport,   setAssignReport]   = useState(null);
+  // ═════════════════════════════════════════════════════════════════
   const [cancelReport,   setCancelReport]   = useState(null);
   const [bulkMode,       setBulkMode]       = useState(null);
 
   const [countdown, setCountdown] = useState(30);
   const timerRef = useRef(null);
 
-  const [teams, setTeams] = useState(TEAMS_DEFAULT);
+  // ═════════════════════════════════════════════════════════════════
+  // COMMENTED OUT: Teams state — moved to next version
+  // const [teams, setTeams] = useState(TEAMS_DEFAULT);
+  // ═════════════════════════════════════════════════════════════════
 
   const [patching, setPatching] = useState(new Set());
 
+  // ═════════════════════════════════════════════════════════════════
+  // CRITICAL FIX: patchStatus uses functional updates to avoid stale closures
+  // ═════════════════════════════════════════════════════════════════
   const patchStatus = useCallback(async (id, status, extra = {}) => {
-    if (patching.has(id)) return false;
-    setPatching(prev => new Set(prev).add(id));
+    let shouldAbort = false;
+    setPatching(prev => {
+      if (prev.has(id)) {
+        shouldAbort = true;
+        return prev;
+      }
+      return new Set(prev).add(id);
+    });
+
+    if (shouldAbort) return false;
+
     setError(null);
-    const res = await updateReport(id, { status, ...extra });
+
+    const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : status;
+
+    const res = await updateReport(id, { status: normalizedStatus, ...extra });
+
     if (res.success) {
       setReports(prev =>
         prev.map(r =>
-          r.id === id ? { ...r, status: status.toLowerCase(), ...extra } : r
+          r.id === id ? { ...r, status: normalizedStatus, ...extra } : r
         )
       );
     } else {
       setError(res.error || `Failed to update report #${String(id).padStart(3, '0')}. Please try again.`);
     }
+
     setPatching(prev => {
       const n = new Set(prev);
       n.delete(id);
       return n;
     });
+
     return res.success;
-  }, [patching]);
+  }, []);
 
-  const handleVerify  = useCallback((id) => patchStatus(id, "VERIFIED"),    [patchStatus]);
-  const handleStart   = useCallback((id) => patchStatus(id, "IN_PROGRESS"), [patchStatus]);
+  // ═════════════════════════════════════════════════════════════════
+  // REFACTORED STATUS HANDLERS — No more assign handler
+  // ═════════════════════════════════════════════════════════════════
+  const handleVerify  = useCallback((id) => patchStatus(id, "verified"),    [patchStatus]);
+  const handleStart   = useCallback((id) => patchStatus(id, "in_progress"), [patchStatus]);
 
+  // ═════════════════════════════════════════════════════════════════
+  // COMMENTED OUT: handleAssign — moved to next version
+  /*
   const handleAssign = useCallback(async (id, teamOrWorker) => {
-    const success = await patchStatus(id, "ASSIGNED", { assigned_to: teamOrWorker.name });
-    if (success) setAssignReport(null);
+    const success = await patchStatus(id, "assigned", { assigned_to: teamOrWorker.name });
+    if (success) {
+      setAssignReport(null);
+      const refreshed = await getReport(id);
+      if (refreshed.success) {
+        setReports(prev => prev.map(r => r.id === id ? refreshed.data : r));
+      }
+    }
+    return success;
   }, [patchStatus]);
+  */
+  // ═════════════════════════════════════════════════════════════════
 
   const handleCancel = useCallback(async (id, reason) => {
-    const success = await patchStatus(id, "CANCELLED", { decline_reason: reason });
+    const success = await patchStatus(id, "cancelled", { decline_reason: reason });
     if (success) setCancelReport(null);
+    return success;
   }, [patchStatus]);
 
   const handleCompleteSuccess = useCallback((id) => {
@@ -375,28 +451,36 @@ function AdminManageReports() {
 
   const selectedIds = [...selected];
 
-  const bulkPatch = useCallback(async (status) => {
-    await Promise.all(selectedIds.map(id => patchStatus(id, status)));
-    setSelected(new Set());
-    setBulkMode(null);
-  }, [selectedIds, patchStatus]);
+  const bulkPatch = useCallback(async (statusValue) => {
+    setSelected(prev => {
+      const ids = [...prev];
+      Promise.all(ids.map(id => patchStatus(id, statusValue))).then(() => {
+        setSelected(new Set());
+        setBulkMode(null);
+      });
+      return prev;
+    });
+  }, [patchStatus]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setCountdown(30);
+
     const res = await getReports({ page_size: 200 });
     if (!res.success) {
       setError(res.error);
       setLoading(false);
       return;
     }
+
     const raw = res.data?.results ?? [];
     setReports(raw);
     setLoading(false);
-    setCountdown(30);
 
-    const geocoded = await reverseGeocodeAll(raw);
-    setReports(geocoded);
+    reverseGeocodeAll(raw).then(geocoded => {
+      setReports(geocoded);
+    });
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -523,7 +607,7 @@ function AdminManageReports() {
                 <label>Severity</label>
                 <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
                   <option value="All">All Severity</option>
-                  <option value="non-critical">Non-Critical</option>
+                  <option value="non_critical">Non-Critical</option>
                   <option value="critical">Critical</option>
                 </select>
               </div>
@@ -564,9 +648,12 @@ function AdminManageReports() {
       {selected.size > 0 && (
         <BulkBar
           count={selected.size}
-          onComplete={() => bulkPatch("RESOLVED")}
-          onAssign={() => setBulkMode("assign")}
-          onCancel={() => bulkPatch("CANCELLED")}
+          onComplete={() => bulkPatch("resolved")}
+          // ═════════════════════════════════════════════════════════
+          // COMMENTED OUT: onAssign — moved to next version
+          // onAssign={() => setBulkMode("assign")}
+          // ═════════════════════════════════════════════════════════
+          onCancel={() => bulkPatch("cancelled")}
           onClear={() => setSelected(new Set())}
         />
       )}
@@ -583,7 +670,10 @@ function AdminManageReports() {
               <col className="col-severity" />
               <col className="col-priority" />
               <col className="col-status" />
-              <col className="col-assigned" />
+              {/* ═══════════════════════════════════════════════════════
+                  COMMENTED OUT: Assigned To column — moved to next version
+              ═══════════════════════════════════════════════════════ */}
+              {/* <col className="col-assigned" /> */}
               <col className="col-actions" />
             </colgroup>
             <thead>
@@ -597,7 +687,10 @@ function AdminManageReports() {
                   ["severity",  "Severity",    true ],
                   ["priority",  "Priority",    true ],
                   ["status",    "Status",      true ],
-                  [null,        "Assigned To", false],
+                  // ═══════════════════════════════════════════════════
+                  // COMMENTED OUT: Assigned To header — moved to next version
+                  // [null,        "Assigned To", false],
+                  // ═══════════════════════════════════════════════════
                   [null,        "Actions",     false],
                 ].map(([col, label, sortable], i) => (
                   <th
@@ -616,9 +709,9 @@ function AdminManageReports() {
 
             <tbody>
               {loading ? (
-                <tr><td colSpan={10} className="no-data">Loading reports…</td></tr>
+                <tr><td colSpan={9} className="no-data">Loading reports…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={10} className="no-data">No reports found</td></tr>
+                <tr><td colSpan={9} className="no-data">No reports found</td></tr>
               ) : filtered.map(r => {
                 const st       = r.status?.toLowerCase();
                 const pri      = getPriority(r);
@@ -676,6 +769,10 @@ function AdminManageReports() {
                     <td className="col-priority"><Badge text={pri}          className={`pri-badge pri-${pri}`} /></td>
                     <td className="col-status"><Badge text={STATUS_LABELS[st] ?? st} className={`status-badge st-${st}`} /></td>
 
+                    {/* ═══════════════════════════════════════════════
+                        COMMENTED OUT: Assigned To cell — moved to next version
+                    ═══════════════════════════════════════════════ */}
+                    {/*
                     <td className="col-assigned" onClick={e => e.stopPropagation()}>
                       {r.assigned_to ? (
                         <div className="assigned-cell-wrapper">
@@ -688,14 +785,19 @@ function AdminManageReports() {
                         <span className="unassigned">— Unassigned</span>
                       )}
                     </td>
+                    */}
 
                     <td className="col-actions" onClick={e => e.stopPropagation()}>
                       <ActionButtons
                         r={r}
-                        onVerify={()  => handleVerify(r.id)}
-                        onAssign={()  => setAssignReport(r)}
+                        onVerify={()   => handleVerify(r.id)}
+                        // ═══════════════════════════════════════════
+                        // COMMENTED OUT: onAssign — moved to next version
+                        // onAssign={()   => setAssignReport(r)}
+                        // ═══════════════════════════════════════════
+                        onStart={()    => handleStart(r.id)}
                         onComplete={() => setCompleteReport(r)}
-                        onCancel={()  => setCancelReport(r)}
+                        onCancel={()   => setCancelReport(r)}
                         isPatching={patching.has(r.id)}
                       />
                     </td>
@@ -707,26 +809,40 @@ function AdminManageReports() {
         </div>
       </div>
 
-      {viewReport && !completeReport && !assignReport && !cancelReport && (
+      {/* ═══════════════════════════════════════════════════════════════════
+          MODALS
+      ═══════════════════════════════════════════════════════════════════ */}
+
+      {viewReport && !completeReport && !cancelReport && createPortal(
         <ViewModal
           report={viewReport}
           onClose={() => setViewReport(null)}
           onMarkComplete={r => { setCompleteReport(r); setViewReport(null); }}
-          onAssign={r       => { setAssignReport(r);   setViewReport(null); }}
+          // ═════════════════════════════════════════════════════════════
+          // COMMENTED OUT: onAssign — moved to next version
+          // onAssign={r       => { setAssignReport(r);   setViewReport(null); }}
+          // ═════════════════════════════════════════════════════════════
           onCancel={r       => { setCancelReport(r);   setViewReport(null); }}
-          onVerify={id      => { handleVerify(id); setViewReport(p => ({ ...p, status: "verified" })); }}
-        />
+          onVerify={id      => { handleVerify(id); setViewReport(p => p ? { ...p, status: "verified" } : null); }}
+          onStart={id       => { handleStart(id); setViewReport(p => p ? { ...p, status: "in_progress" } : null); }}
+        />,
+        document.body
       )}
 
-      {completeReport && (
+      {completeReport && createPortal(
         <CompleteModal
           report={completeReport}
           onClose={() => setCompleteReport(null)}
           onSuccess={handleCompleteSuccess}
-        />
+        />,
+        document.body
       )}
 
-      {(assignReport || bulkMode === "assign") && (
+      {/* ═════════════════════════════════════════════════════════════════
+          COMMENTED OUT: AssignModal — moved to next version
+      ═════════════════════════════════════════════════════════════════ */}
+      {/*
+      {(assignReport || bulkMode === "assign") && createPortal(
         <AssignModal
           report={assignReport}
           bulkIds={bulkMode === "assign" ? selectedIds : null}
@@ -735,26 +851,33 @@ function AdminManageReports() {
           onClose={() => { setAssignReport(null); setBulkMode(null); }}
           onAssign={async (id, teamOrWorker) => {
             if (bulkMode === "assign") {
-              await Promise.all(selectedIds.map(sid => patchStatus(sid, "ASSIGNED", { assigned_to: teamOrWorker.name })));
+              await Promise.all(selectedIds.map(sid => patchStatus(sid, "assigned", { assigned_to: teamOrWorker.name })));
               setSelected(new Set());
               setBulkMode(null);
             } else {
               await handleAssign(id, teamOrWorker);
             }
           }}
-        />
+        />,
+        document.body
       )}
+      */}
 
-      {cancelReport && (
+      {cancelReport && createPortal(
         <CancelModal
           report={cancelReport}
           onClose={() => setCancelReport(null)}
           onCancel={handleCancel}
-        />
+        />,
+        document.body
       )}
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL COMPONENTS (mostly unchanged, except ViewModal)
+// ═══════════════════════════════════════════════════════════════════════════
 
 function ModalShell({ maxWidth = 860, onClose, children }) {
   return (
@@ -783,7 +906,11 @@ function InfoRow({ label, children }) {
   );
 }
 
-function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onVerify }) {
+// ═══════════════════════════════════════════════════════════════════════════
+// REFACTORED ViewModal — Removed Assign button, added Start button
+// New flow: Verify → Start → Complete
+// ═══════════════════════════════════════════════════════════════════════════
+function ViewModal({ report: r, onClose, onMarkComplete, onCancel, onVerify, onStart }) {
   const st    = r.status?.toLowerCase();
   const media = mediaFull(r);
   const pri   = getPriority(r);
@@ -808,9 +935,14 @@ function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onV
             <InfoRow label="Damage Type">{damageType(r)}</InfoRow>
             <InfoRow label="Severity"><Badge text={severity(r)} className={`sev-badge sev-${sev}`} /></InfoRow>
             <InfoRow label="Priority"><Badge text={pri} className={`pri-badge pri-${pri}`} /></InfoRow>
+            {/* ═══════════════════════════════════════════════════════
+                COMMENTED OUT: Assigned To display — moved to next version
+            ═══════════════════════════════════════════════════════ */}
+            {/*
             <InfoRow label="Assigned To">
               {r.assigned_to ?? <span className="unassigned-text">Unassigned</span>}
             </InfoRow>
+            */}
             {r.description && (
               <div className="description-block">
                 <div className="description-label">Description</div>
@@ -830,13 +962,25 @@ function ViewModal({ report: r, onClose, onMarkComplete, onAssign, onCancel, onV
           </div>
 
           <div className="modal-actions">
-            {st === "pending"     && <button className="action-btn wide ab-verify"   onClick={() => onVerify(r.id)}><IcoShield size={14} /> Verify Report</button>}
-            {st === "verified"    && <button className="action-btn wide ab-assign"   onClick={() => onAssign(r)}><IcoUsers size={14} /> Assign Worker / Team</button>}
-            {(st === "assigned" || st === "in_progress") && (
-              <button className="action-btn wide ab-complete" onClick={() => onMarkComplete(r)}><IcoCheck size={14} /> Mark as Completed</button>
+            {st === "pending"     && (
+              <button className="action-btn wide ab-verify" onClick={() => onVerify(r.id)}>
+                <IcoShield size={14} /> Verify Report
+              </button>
+            )}
+            {st === "verified"    && (
+              <button className="action-btn wide ab-start" onClick={() => onStart(r.id)}>
+                <IcoWrench size={14} /> Start Repair
+              </button>
+            )}
+            {(st === "verified" || st === "in_progress") && (
+              <button className="action-btn wide ab-complete" onClick={() => onMarkComplete(r)}>
+                <IcoCheck size={14} /> Mark as Completed
+              </button>
             )}
             {!["resolved", "rejected", "cancelled"].includes(st) && (
-              <button className="action-btn wide ab-reject" onClick={() => onCancel(r)}><IcoBan size={14} /> Cancel Report</button>
+              <button className="action-btn wide ab-reject" onClick={() => onCancel(r)}>
+                <IcoBan size={14} /> Cancel Report
+              </button>
             )}
           </div>
         </div>
@@ -870,12 +1014,25 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
   const fileRef = useRef(null);
   const media   = mediaFull(r);
 
+  const previewUrlRef = useRef(null);
+
   const handleFileChange = e => {
     const f = e.target.files?.[0];
     if (!f) return;
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+    const url = URL.createObjectURL(f);
+    previewUrlRef.current = url;
     setProofFile(f);
-    setPreview(URL.createObjectURL(f));
+    setPreview(url);
   };
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
 
   const handleSubmit = async () => {
     setSaving(true); setErr(null);
@@ -887,7 +1044,7 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
       const cm = await addComment(r.id, comment.trim());
       if (!cm.success) { setErr("Comment failed: " + (cm.error ?? "Unknown")); setSaving(false); return; }
     }
-    const res = await updateReport(r.id, { status: "RESOLVED" });
+    const res = await updateReport(r.id, { status: "resolved" });
     if (!res.success) { setErr("Could not resolve: " + (res.error ?? "Unknown")); setSaving(false); return; }
     setSaving(false);
     onSuccess(r.id);
@@ -903,7 +1060,12 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
             <InfoRow label="Report">#{String(r.id).padStart(3, "0")}</InfoRow>
             <InfoRow label="Reporter">{r.owner?.full_name ?? "Anonymous"}</InfoRow>
             <InfoRow label="Location"><span className="info-row-highlight">{barangay(r)}</span></InfoRow>
+            {/* ═══════════════════════════════════════════════════════
+                COMMENTED OUT: Assigned To — moved to next version
+            ═══════════════════════════════════════════════════════ */}
+            {/*
             <InfoRow label="Assigned To">{r.assigned_to ?? "—"}</InfoRow>
+            */}
           </InfoBlock>
 
           <div className="completion-form">
@@ -957,6 +1119,10 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// COMMENTED OUT: AssignModal — moved to next version
+// ═══════════════════════════════════════════════════════════════════════════
+/*
 function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign }) {
   const [tab,        setTab]        = useState("existing");
   const [chosenTeam, setChosenTeam] = useState(null);
@@ -1090,6 +1256,7 @@ function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign })
     </ModalShell>
   );
 }
+*/
 
 function CancelModal({ report: r, onClose, onCancel }) {
   const [step,   setStep]   = useState(1);

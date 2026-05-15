@@ -1,9 +1,6 @@
 // src/api/notifications.js
 import { api } from "./client";
 
-// api/client.js already normalizes to { success, data, error }.
-// Do NOT wrap with normalizeResponse() again — that creates data.data nesting.
-
 const handleError = (error) => ({
   success: false,
   data: null,
@@ -16,8 +13,7 @@ const handleError = (error) => ({
 
 export const getNotifications = async (limit = 50) => {
   try {
-    const res = await api.get(`/notifications`, { params: { limit } });
-    // FastAPI returns a plain array for this endpoint
+    const res = await api.get(`/notifications?limit=${limit}`);
     const list = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
     return { success: true, data: list, error: null };
   } catch (error) {
@@ -36,7 +32,6 @@ export const markAsRead = async (notificationId) => {
 
 export const markAllAsRead = async () => {
   try {
-    // PATCH /notifications/read-all  (fixed path — works now after backend fix)
     const res = await api.patch("/notifications/read-all");
     return { success: true, data: res.data, error: null };
   } catch (error) {
@@ -55,7 +50,6 @@ export const deleteNotification = async (notificationId) => {
 
 export const clearAllNotifications = async () => {
   try {
-    // DELETE /notifications/clear-all  (fixed path — works now after backend fix)
     await api.delete("/notifications/clear-all");
     return { success: true, data: null, error: null };
   } catch (error) {

@@ -807,7 +807,7 @@ function FilterDrawer({ typeFilter, setTypeFilter, sevFilter, setSevFilter, stat
                 aria-label="Filter by severity"
               >
                 <option value="All">All Severity</option>
-                <option value="Non-critical">Non-critical</option>
+                <option value="non_critical">Non-Critical</option>
                 <option value="Critical">Critical</option>
               </select>
             </div>

@@ -23,8 +23,7 @@ from app.models.project import Project
 from app.models.report import Report
 from app.models.user import User
 
-router = APIRouter()
-
+router = APIRouter(prefix="/projects", tags=["Projects"])
 
 # --- SCHEMAS ---
 class ProjectCreate(BaseModel):

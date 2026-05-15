@@ -69,24 +69,42 @@
   box-sizing: border-box;
 }
 
+/* Logo with image */
 .logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.logo-text {
   color: var(--snap-primary);
   font-size: var(--text-logo);
   font-weight: bolder;
-  display: flex;
-  align-items: center;
-  margin: 0;
-  line-height: 1.2;
   white-space: nowrap;
 }
 
-.logo-icon {
-  font-size: var(--text-icon);
-  color: var(--snap-primary);
-  margin-left: var(--space-2);
+/* Logo image styles */
+.navbar-logo-fallback {
   display: inline-flex;
   align-items: center;
-  flex-shrink: 0;
+  justify-content: center;
+}
+
+.navbar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.navbar-logo-img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
 }
 
 .navbar-right {
@@ -170,9 +188,7 @@
     gap: var(--space-3);
   }
 
-  .logo-icon {
-    margin-left: var(--space-3);
-  }
+  /* Logo gap handled by flex gap */
 }
 
 /* ------------------------------------------
@@ -213,9 +229,7 @@
     gap: var(--space-5);
   }
 
-  .logo-icon {
-    margin-left: var(--space-5);
-  }
+  /* Logo gap handled by flex gap */
 }
 
 /* ------------------------------------------

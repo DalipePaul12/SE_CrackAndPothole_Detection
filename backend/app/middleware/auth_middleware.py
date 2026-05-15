@@ -27,23 +27,22 @@ async def get_current_user(
     if payload is None:
         raise _CREDENTIALS_EXCEPTION
 
-    # New router sets type="access"; old tokens won't have this field.
-    # Enforce it so old tokens can't be replayed after migration.
+    # Enforce token type so old tokens cannot be replayed after migration.
+    # New tokens from auth_service.create_access_token must set type="access".
     if payload.get("type") != "access":
         raise _CREDENTIALS_EXCEPTION
 
     jti: str | None = payload.get("jti")
     if jti:
-        # Only check revocation if the token actually carries a jti.
-        # (New tokens from auth_service.create_access_token don't include jti
-        #  yet — add it there when you want full JTI blacklisting.)
+        # Only check revocation when the token carries a jti.
+        # Add jti to create_access_token when you want full JTI blacklisting.
         revoked = await db.execute(
             select(RevokedToken).where(RevokedToken.jti == jti)
         )
         if revoked.scalar_one_or_none():
             raise _CREDENTIALS_EXCEPTION
 
-    # sub = user.public_id (UUID string) — set by auth_service.create_access_token
+    # sub = user.public_id (UUID string) set by auth_service.create_access_token
     public_id: str | None = payload.get("sub")
     if not public_id:
         raise _CREDENTIALS_EXCEPTION

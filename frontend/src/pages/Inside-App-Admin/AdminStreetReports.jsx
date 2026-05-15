@@ -220,7 +220,7 @@ function AdminStreetReports() {
                 }
               >
                 <option value="All">All Severity</option>
-                <option value="Non-Critical">Non-Critical</option>
+                <option value="non_critical">Non-Critical</option>
                 <option value="Critical">Critical</option>
               </select>
             </div>

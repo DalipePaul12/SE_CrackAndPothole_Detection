@@ -1,0 +1,243 @@
+/* ══════════════════════════════════════════════════════════════
+   SEGMENTATION MASK — True YOLOv11 polygon overlay styles
+   Add/merge these rules into your existing CreateReport.css
+   (or import as a separate SegmentationMask.css)
+══════════════════════════════════════════════════════════════ */
+
+/* ── SVG canvas ────────────────────────────────────────────── */
+.seg-mask-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;   /* let clicks pass through to image */
+  z-index: 5;
+  overflow: visible;
+}
+
+/* Enable pointer events on individual detection groups so hover works */
+.seg-detection-group {
+  pointer-events: all;
+  cursor: crosshair;
+}
+
+/* ── Polygon mask fill — fade-in on mount ──────────────────── */
+.seg-mask-polygon {
+  animation: seg-fill-in 0.35s ease forwards;
+  animation-delay: var(--anim-delay, 0ms);
+  opacity: 0;
+}
+@keyframes seg-fill-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Contour stroke — draws itself along the polygon ──────── */
+.seg-mask-contour {
+  animation: seg-contour-in 0.45s ease forwards;
+  animation-delay: var(--anim-delay, 0ms);
+  opacity: 0;
+}
+@keyframes seg-contour-in {
+  from { opacity: 0; stroke-dashoffset: 200; }
+  to   { opacity: 1; stroke-dashoffset: 0;   }
+}
+
+/* ── Marching-ant dashes on the contour ───────────────────── */
+.seg-mask-march {
+  stroke-dashoffset: 0;
+  animation: seg-march 2.8s linear infinite;
+}
+@keyframes seg-march {
+  to { stroke-dashoffset: -56; }
+}
+
+/* ── Bounding box fade-in ──────────────────────────────────── */
+.seg-bbox {
+  animation: seg-bbox-in 0.3s ease forwards;
+  animation-delay: var(--anim-delay, 0ms);
+  opacity: 0;
+}
+@keyframes seg-bbox-in {
+  from { opacity: 0; }
+  to   { opacity: 0.55; }
+}
+
+/* ── Label chip fade+slide in ─────────────────────────────── */
+.seg-label-group {
+  animation: seg-label-in 0.3s cubic-bezier(0.34,1.18,0.64,1) forwards;
+  animation-delay: calc(var(--anim-delay, 0ms) + 100ms);
+  opacity: 0;
+}
+@keyframes seg-label-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* ── Hover glow pulse on the polygon ──────────────────────── */
+.seg-detection-group:hover .seg-mask-polygon {
+  animation: seg-hover-pulse 1.2s ease-in-out infinite;
+}
+@keyframes seg-hover-pulse {
+  0%,100% { opacity: 1;    }
+  50%      { opacity: 0.70; }
+}
+
+/* ── Re-render smoothly when image resizes ─────────────────── */
+.seg-mask-svg * {
+  shape-rendering: geometricPrecision;
+  text-rendering:  optimizeLegibility;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PREVIEW CONTAINER — ensure SVG is positioned correctly
+══════════════════════════════════════════════════════════════ */
+
+/* Already defined in CreateReport.css — kept here for reference */
+.preview-container {
+  position: relative;     /* SVG uses position:absolute; needs a relative parent */
+  isolation: isolate;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESULT BADGE — updated for multi-detection support
+══════════════════════════════════════════════════════════════ */
+
+.preview-result-badges {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  z-index: 10;
+  pointer-events: none;
+  max-width: calc(100% - 20px);
+}
+
+/* Individual detection badge */
+.preview-det-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  backdrop-filter: blur(4px);
+  animation: badge-in 0.3s cubic-bezier(0.34,1.18,0.64,1) both;
+}
+@keyframes badge-in {
+  from { opacity: 0; transform: scale(0.85) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+.det-badge-type {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.det-badge-sev {
+  font-size: 8px;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+  color: rgba(255,255,255,0.85);
+}
+
+.det-badge-conf {
+  font-size: 8px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  color: rgba(255,255,255,0.70);
+}
+
+/* Severity colour variants */
+.det-badge-critical     { background: rgba(239,68,68,0.90);  }
+.det-badge-non-critical { background: rgba(249,115,22,0.88); }
+
+/* Detection count chip (top-right of image) */
+.preview-det-count {
+  position: absolute;
+  top: 8px;
+  right: 42px;          /* left of the trash button */
+  background: rgba(0,0,0,0.65);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  padding: 3px 9px;
+  border-radius: 99px;
+  backdrop-filter: blur(6px);
+  z-index: 15;
+  pointer-events: none;
+  animation: badge-in 0.25s ease both;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCAN ANIMATION — shown while isAnalyzing
+══════════════════════════════════════════════════════════════ */
+
+.seg-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(56,189,248,0.70) 45%,
+    rgba(255,255,255,0.90) 50%,
+    rgba(56,189,248,0.70) 55%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 25;
+  animation: seg-scan-move 1.6s ease-in-out infinite;
+}
+@keyframes seg-scan-move {
+  0%   { top: 0%;   opacity: 0.8; }
+  50%  { top: 100%; opacity: 0.6; }
+  100% { top: 0%;   opacity: 0.8; }
+}
+
+/* Grid overlay during scanning */
+.seg-scan-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56,189,248,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 22;
+  animation: seg-grid-fade 0.3s ease forwards;
+}
+@keyframes seg-grid-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE — ensure SVG scales correctly on mobile
+══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 600px) {
+  .preview-result-badges {
+    bottom: 6px;
+    left: 6px;
+    gap: 3px;
+    max-width: calc(100% - 12px);
+  }
+  .det-badge-type { font-size: 8px; }
+  .det-badge-sev  { font-size: 7px; }
+  .det-badge-conf { font-size: 7px; }
+  .preview-det-badge { padding: 2px 7px; }
+  .preview-det-count { font-size: 8px; padding: 2px 7px; top: 6px; right: 38px; }
+}
+
+@media (max-width: 430px) {
+  .det-badge-type  { font-size: 7.5px; }
+  .preview-det-badge { padding: 2px 6px; border-radius: 6px; }
+}

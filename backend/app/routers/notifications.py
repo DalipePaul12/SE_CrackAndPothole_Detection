@@ -54,16 +54,24 @@ async def _get_notification_or_404(
 @router.get("", response_model=list[NotificationResponse])
 async def list_notifications(
     limit: int = Query(default=50, ge=1, le=100),
+    unread_only: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Notification)
-        .where(Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
-        .limit(limit)
-    )
-    return result.scalars().all()
+    try:
+        query = select(Notification).where(
+            Notification.user_id == current_user.id
+        ).order_by(Notification.created_at.desc())
+
+        if unread_only:
+            query = query.where(Notification.is_read == False)
+
+        result = await db.execute(query.limit(limit))
+        return result.scalars().all()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()  # prints full traceback to uvicorn terminal
+        raise  # still returns 500, but now you can see why
 
 
 @router.post("/send", status_code=status.HTTP_201_CREATED)
