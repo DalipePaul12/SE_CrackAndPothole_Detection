@@ -3,8 +3,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { tokenStorage } from "../api/client";
 
 // ✅ Use tokenStorage (same source of truth as the rest of the app)
-// Fall back to ws:// in dev, wss:// should be set via VITE_WS_URL in production
-const WS_BASE    = import.meta.env.VITE_WS_URL || "ws://127.0.0.1:8000/ws";
+// Fall back to a relative WS URL (uses Vite proxy in dev, same host in prod)
+// VITE_WS_URL should be set explicitly in production (e.g. wss://yourapp.com/ws)
+const _wsEnv = import.meta.env.VITE_WS_URL;
+const WS_BASE = _wsEnv
+  ? _wsEnv
+  : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
 const MAX_RETRIES = 3;
 
 /**
