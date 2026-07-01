@@ -17,9 +17,14 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     DATABASE_URL: str
+    SUPABASE_DATABASE_URL: str = ""
 
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_KEY: str = ""
+
+    @property
+    def effective_database_url(self) -> str:
+        return self.SUPABASE_DATABASE_URL if self.SUPABASE_DATABASE_URL else self.DATABASE_URL
 
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
