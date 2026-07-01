@@ -38,6 +38,7 @@ UPLOAD_DIR = "uploads"
 MAX_IMAGE_SIZE_MB = "50"
 MAX_VIDEO_SIZE_MB = "150"
 RATE_LIMIT_PER_MINUTE = "60"
+SUPABASE_DATABASE_URL = "postgresql+psycopg2://postgres.xyqxtftotueaenqtyrla:SE_Road_Damage_Detection@aws-1-ap-south-1.pooler.supabase.com:5432/postgres"
 
 [workflows]
 runButton = "Project"
