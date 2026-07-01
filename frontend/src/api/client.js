@@ -89,10 +89,17 @@ console.log(">>> FETCH", `${BASE_URL}${API_PREFIX}${endpoint}`, "token:", token 
     try { data = await response.json(); } catch { data = null; }
 
     if (response.status === 401 && !_isRetry) {
-      clearTimeout(timeout);
-      const newToken = await attemptTokenRefresh();
-      if (newToken) return request(endpoint, options, true);
-      return { success: false, data: null, error: "Session expired. Please log in again." };
+      // Auth endpoints (login, verify-otp, etc.) return 401 for wrong credentials —
+      // that is NOT a session expiry. Only attempt refresh for protected endpoints.
+      const isAuthEndpoint = endpoint.startsWith("/auth/");
+      if (!isAuthEndpoint) {
+        clearTimeout(timeout);
+        const newToken = await attemptTokenRefresh();
+        if (newToken) return request(endpoint, options, true);
+        return { success: false, data: null, error: "Session expired. Please log in again." };
+      }
+      // For auth endpoints, fall through to the generic !response.ok handler below
+      // so the real backend error (e.g. "Incorrect email or password.") is shown.
     }
 
     if (response.status === 403) {
@@ -149,10 +156,13 @@ export async function requestRaw(endpoint, options = {}, _isRetry = false) {
     const s = response.status;
 
     if (s === 401 && !_isRetry) {
-      clearTimeout(timeout);
-      const nt = await attemptTokenRefresh();
-      if (nt) return requestRaw(endpoint, options, true);
-      return { success: false, data: null, error: "Session expired.", status: 401, retryable: false };
+      const isAuthEndpoint = endpoint.startsWith("/auth/");
+      if (!isAuthEndpoint) {
+        clearTimeout(timeout);
+        const nt = await attemptTokenRefresh();
+        if (nt) return requestRaw(endpoint, options, true);
+        return { success: false, data: null, error: "Session expired.", status: 401, retryable: false };
+      }
     }
 
     if (s === 202) {
