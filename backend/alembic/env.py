@@ -27,13 +27,14 @@ import app.models
 config = context.config
 
 # Set the DB URL from settings (overrides the empty value in alembic.ini)
-config.set_main_option(
-    "sqlalchemy.url",
-    settings.DATABASE_URL
-    .replace("postgresql://", "postgresql+asyncpg://")
-    .replace("postgres://", "postgresql+asyncpg://")
-    .replace("postgresql+psycopg2://", "postgresql+asyncpg://"),
-)
+def _build_async_url(url: str) -> str:
+    url = url.replace("postgresql+psycopg2://", "postgresql://")
+    url = url.replace("postgresql://", "postgresql+asyncpg://")
+    url = url.replace("postgres://", "postgresql+asyncpg://")
+    url = url.replace("?sslmode=disable", "").replace("&sslmode=disable", "").replace("sslmode=disable&", "")
+    return url
+
+config.set_main_option("sqlalchemy.url", _build_async_url(settings.DATABASE_URL))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

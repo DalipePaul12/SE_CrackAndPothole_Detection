@@ -1,0 +1,83 @@
+modules = ["nodejs-20", "web", "python-3.12"]
+[agent]
+expertMode = true
+stack = "BEST_EFFORT_FALLBACK"
+
+[nix]
+channel = "stable-25_05"
+packages = ["cargo", "freetype", "lcms2", "libGL", "libGLU", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "postgresql", "rustc", "tcl", "tk", "zlib"]
+
+[userenv]
+
+[userenv.shared]
+ENVIRONMENT = "development"
+AI_ENABLED = "false"
+AI_FAKE_DETECTION_ENABLED = "false"
+FRONTEND_URLS = "http://localhost:5173,http://127.0.0.1:5173"
+BACKEND_CORS_ORIGINS = ""
+REDIS_URL = "redis://localhost:6379/0"
+ACCESS_TOKEN_EXPIRE_MINUTES = "15"
+REFRESH_TOKEN_EXPIRE_DAYS = "7"
+OTP_EXPIRE_MINUTES = "10"
+OTP_MAX_ATTEMPTS = "5"
+MAIL_USERNAME = ""
+MAIL_PASSWORD = ""
+MAIL_FROM = ""
+MAIL_SERVER = "smtp.gmail.com"
+MAIL_PORT = "465"
+SECRET_KEY = "a08e7c3a075fd4dd9a7ec6b3e9071ac7b8a0eda92597c9d5fae563c4fa37008d"
+ALGORITHM = "HS256"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Backend API"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Backend API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python3 -m uvicorn app.main:app --host localhost --port 8000 --reload"
+waitForPort = 8000
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+exposeLocalhost = true
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "cd frontend && npm run build && cd /home/runner/workspace/backend && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 5000"]
+build = ["bash", "-c", "cd frontend && npm run build"]
