@@ -82,7 +82,7 @@ function normalizeSeverity(sev) {
   if (!sev) return null;
   const l = sev.toLowerCase();
   if (["critical","high","severe"].includes(l))                    return "CRITICAL";
-  if (["low","non-critical","moderate","medium"].includes(l))      return "NON-CRITICAL";
+  if (["low","non_critical","moderate","medium"].includes(l))      return "NON_CRITICAL";
   return null;
 }
 
@@ -350,7 +350,7 @@ function AIAnalysisSummary({
           <div className="ais-metrics-row">
             {[
               { label: "Type",     value: damageType ?? (isAnalyzing ? "…" : "—"), cls: damageType === "CRACK" ? "val-crack" : damageType === "POTHOLE" ? "val-pothole" : "" },
-              { label: "Severity", value: severity ?? (isAnalyzing ? "…" : "—"),   cls: severity === "CRITICAL" ? "val-critical" : severity === "NON-CRITICAL" ? "val-safe" : "" },
+              { label: "Severity", value: severity ?? (isAnalyzing ? "…" : "—"),   cls: severity === "CRITICAL" ? "val-critical" : severity === "NON_CRITICAL" ? "val-safe" : "" },
               { label: "Conf.",    value: aiConfidence != null ? `${Math.round(aiConfidence * 100)}%` : (isAnalyzing ? "…" : "—"), cls: aiConfidence >= 0.7 ? "val-safe" : aiConfidence >= 0.4 ? "val-warn" : "" },
               { label: "Auth",     value: imageType ?? (isAnalyzing ? "…" : "—"),  cls: imageType === "REAL" ? "val-safe" : imageType === "AI-GENERATED" ? "val-critical" : "" },
             ].map(({ label, value, cls }) => (
@@ -1257,11 +1257,11 @@ const showMask = analysisComplete &&
                       )}
                       <div className="preview-result-badges">
                         {maskDetections.map((det, i) => {
-                          const sev = (det.severity ?? "non-critical").toLowerCase();
+                          const sev = (det.severity ?? "non_critical").toLowerCase();
                           const isCrit = ["critical","high","severe"].includes(sev);
                           return (
                             <div key={i}
-                              className={`preview-det-badge ${isCrit ? "det-badge-critical" : "det-badge-non-critical"}`}
+                              className={`preview-det-badge ${isCrit ? "det-badge-critical" : "det-badge-non_critical"}`}
                               style={{ animationDelay: `${i * 60}ms` }}>
                               <span className="det-badge-type">
                                 {(det.class ?? "DAMAGE").toUpperCase()}
@@ -1426,8 +1426,7 @@ const showMask = analysisComplete &&
                 {isAnalyzing && <FaSpinner className="spin-icon" aria-hidden="true" style={{ marginLeft: 5 }} />}
               </label>
               <div className="classification-buttons" role="group" aria-labelledby="severity-label">
-                <button className={`class-btn ${severity === "NON-CRITICAL" ? "active-non-critical" : ""}`}
-                  disabled aria-pressed={severity === "NON-CRITICAL"}>NON-CRITICAL</button>
+              <button className={`class-btn ${severity === "NON_CRITICAL" ? "active-non-critical" : ""}`}                  disabled aria-pressed={severity === "NON_CRITICAL"}>NON_CRITICAL</button>
                 <button className={`class-btn ${severity === "CRITICAL" ? "active-critical" : ""}`}
                   disabled aria-pressed={severity === "CRITICAL"}>CRITICAL</button>
               </div>

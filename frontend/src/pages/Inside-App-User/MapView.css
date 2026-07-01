@@ -667,6 +667,14 @@ html, body { margin: 0; padding: 0; background: var(--mv-bg); }
   background: var(--mv-popup-bg);
   transition: background 0.3s;
 }
+.mv-popup-thumb video,
+.mv-strip-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+}
 .mv-popup-desc {
   margin: 0;
   font-size: 0.73rem;

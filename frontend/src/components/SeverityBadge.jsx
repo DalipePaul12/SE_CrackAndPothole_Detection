@@ -28,11 +28,11 @@ const SEVERITY_CONFIG = {
     cssKey:  "critical",
     title:   "Critical severity — dangerous road condition",
   },
-  "non-critical": {
-    label:   "Non-Critical",
+  "non_critical": {
+    label:   "Non_Critical",
     icon:    "◎",
-    cssKey:  "non-critical",
-    title:   "Non-critical — cosmetic damage only",
+    cssKey:  "non_critical",
+    title:   "Non_critical — cosmetic damage only",
   },
 };
 

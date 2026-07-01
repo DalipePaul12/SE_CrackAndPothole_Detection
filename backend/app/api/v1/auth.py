@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +54,7 @@ def _mask_email(email: str) -> str:
 async def register(
     request: Request,
     user_data: UserCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -73,7 +74,7 @@ async def register(
             await db.commit()
             await db.refresh(existing)
             code = await auth_service.create_otp(db, existing.email, OTPPurpose.email_verify, existing.id)
-            await send_otp_email(existing.email, code, "email_verify")
+            background_tasks.add_task(send_otp_email, existing.email, code, "email_verify")
             return {"message": "Registration successful.", "user_id": existing.id}
 
     new_user = User(
@@ -92,7 +93,7 @@ async def register(
 
     # ← THIS WAS MISSING
     code = await auth_service.create_otp(db, new_user.email, OTPPurpose.email_verify, new_user.id)
-    await send_otp_email(new_user.email, code, "email_verify")
+    background_tasks.add_task(send_otp_email, new_user.email, code, "email_verify")
 
     logger.info("New user registered | id=%d | ip=%s", new_user.id, _get_client_ip(request))
     return {"message": "Registration successful.", "user_id": new_user.id}
@@ -103,6 +104,7 @@ async def register(
 async def login(
     request: Request,
     credentials: LoginRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(User).where(User.email == credentials.email))
@@ -123,7 +125,7 @@ async def login(
 
     try:
         code = await auth_service.create_otp(db, user.email, OTPPurpose.two_factor, user.id)
-        await send_otp_email(user.email, code, "two_factor")
+        background_tasks.add_task(send_otp_email, user.email, code, "two_factor")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
 
@@ -205,6 +207,7 @@ async def verify_email_otp(
 async def resend_login_otp(
     request: Request,
     data: EmailSchema,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(User).where(User.email == data.email))
@@ -213,7 +216,7 @@ async def resend_login_otp(
     if user and user.is_active:
         try:
             code = await auth_service.create_otp(db, user.email, OTPPurpose.two_factor, user.id)
-            await send_otp_email(user.email, code, "two_factor")
+            background_tasks.add_task(send_otp_email, user.email, code, "two_factor")
         except ValueError:
             pass
 
@@ -228,6 +231,7 @@ async def resend_login_otp(
 async def resend_email_otp(
     request: Request,
     data: EmailSchema,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(User).where(User.email == data.email))
@@ -236,7 +240,7 @@ async def resend_email_otp(
     if user and not user.is_verified:
         try:
             code = await auth_service.create_otp(db, user.email, OTPPurpose.email_verify, user.id)
-            await send_otp_email(user.email, code, "email_verify")
+            background_tasks.add_task(send_otp_email, user.email, code, "email_verify")
         except ValueError:
             pass  # cooldown — silently ignore
 
@@ -280,6 +284,7 @@ async def refresh_token(
 async def forgot_password(
     request: Request,
     data: EmailSchema,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     ip = _get_client_ip(request)
@@ -292,7 +297,7 @@ async def forgot_password(
 
     try:
         code = await auth_service.create_otp(db, data.email, OTPPurpose.password_reset, user.id)
-        await send_otp_email(data.email, code, "password_reset")  # ← add this line
+        background_tasks.add_task(send_otp_email, data.email, code, "password_reset")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
 

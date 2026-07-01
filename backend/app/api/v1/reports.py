@@ -469,6 +469,7 @@ async def delete_report(
 async def upload_media(
     request: Request,
     report_id: int,
+    background_tasks: BackgroundTasks,   # ← FIX: moved before File(...)
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -537,7 +538,7 @@ async def upload_media(
         file_name=clean_name,
         file_size_bytes=len(contents),
         media_type=media_type,
-        is_processed=True,
+        is_processed=False,   # ← FIX: will be True after ML runs
         is_ai_generated=report.is_flagged_fake,
         ai_generated_confidence=None,
     )
@@ -545,9 +546,79 @@ async def upload_media(
     await db.commit()
     await db.refresh(attachment)
 
+    # ── TRIGGER ML CLASSIFICATION ─────────────────────────────────────
+    # FIX: This endpoint previously never ran YOLO, so ai_severity stayed NULL.
+    # ── RUN ML CLASSIFICATION INLINE ─────────────────────────────────
+    # FIX: queue_service has import error, so we run inline for now.
+    import asyncio
+    from app.services.ml_service import run_yolo
+    from app.models.enums import DamageType, SeverityLevel
+    from app.models.ai_detection_result import AIDetectionResult
+    
+    try:
+        prediction = await asyncio.to_thread(run_yolo, str(file_path))
+        logger.info(f"YOLO raw prediction for report {report_id}: {prediction}")
+        
+        if prediction:
+            raw_label = prediction.get("label", "uncertain")
+            try:
+                detected_class = DamageType(raw_label)
+            except ValueError:
+                detected_class = DamageType.uncertain
+            
+            raw_severity = prediction.get("severity")
+            severity = None
+            if raw_severity:
+                normalized_sev = str(raw_severity).lower().strip().replace("-", "_").replace(" ", "_")
+                try:
+                    severity = SeverityLevel(normalized_sev)
+                except ValueError:
+                    logger.warning(
+                        f"ML returned unknown severity '{raw_severity}' "
+                        f"(normalized: '{normalized_sev}') for report {report_id}. "
+                        f"Valid values: {[s.value for s in SeverityLevel]}"
+                    )
+            
+            # Save to AIDetectionResult
+            detection = AIDetectionResult(
+                report_id=report_id,
+                media_attachment_id=attachment.id,
+                detected_class=detected_class,
+                severity=severity,
+                confidence=prediction.get("confidence", 0),
+                bounding_boxes=prediction.get("boxes"),
+                model_version="yolo",
+                inference_time_ms=prediction.get("inference_time_ms", 0),
+            )
+            db.add(detection)
+            
+            # Update Report summary
+            report.ai_damage_type = detected_class
+            report.ai_severity = severity
+            report.ai_confidence = prediction.get("confidence")
+            attachment.is_processed = True
+            
+            await db.commit()
+            logger.info(
+                f"ML inline complete: report={report_id} | "
+                f"damage={detected_class.value} | "
+                f"severity={severity.value if severity else 'none'}"
+            )
+            task_id = "inline"
+        else:
+            logger.warning(f"No ML prediction for report {report_id}")
+            attachment.is_processed = True
+            await db.commit()
+            task_id = "inline_no_detection"
+    except Exception as ml_err:
+        logger.error(f"ML inline failed for report {report_id}: {ml_err}")
+        attachment.is_processed = True
+        await db.commit()
+        task_id = "inline_failed"
+
     logger.info(
-        "Media saved | report_id=%d | media_id=%d | mime=%s | size=%d bytes | file=%s",
-        report_id, attachment.id, actual_mime, len(contents), safe_name,
+        "Media saved | report_id=%d | media_id=%d | mime=%s | size=%d bytes | file=%s | ml_task=%s",
+        report_id, attachment.id, actual_mime, len(contents), safe_name, task_id,
     )
 
     return {
@@ -555,6 +626,7 @@ async def upload_media(
         "data": {
             "media_id":    attachment.id,
             "file_url":    attachment.file_url,
+            "task_id":     task_id,   # ← frontend can poll if needed
             "ai_validation": {
                 "is_ai_generated": report.is_flagged_fake,
                 "status": "flagged" if report.is_flagged_fake else "approved",

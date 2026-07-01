@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.enums import MediaType
-from app.models.media_attachment import MediaAttachment
+from app.models.media_attachment import MediaAttachment, ProcessingStatus
 from app.models.report import Report
 
 UPLOAD_ROOT = Path(settings.UPLOAD_DIR)
@@ -43,6 +43,7 @@ async def save_upload(
     report: Report,
     file: UploadFile,
     media_type: MediaType,
+    background_tasks = None,   # ← ADDED: optional, for ML trigger
 ) -> tuple[MediaAttachment, str]:
     """
     Validates, streams the file to disk in chunks, and creates a MediaAttachment.
@@ -90,15 +91,28 @@ async def save_upload(
         file_name=safe_name,
         file_size_bytes=actual_size,
         media_type=media_type,
+        is_processed=False,   # ← FIX: False until ML runs
     )
     db.add(attachment)
     await db.commit()
     await db.refresh(attachment)
 
     # Set report primary image if first upload
+    # Set report primary image if first upload
     if not report.image_url and media_type == MediaType.image:
         report.image_url = file_url
         await db.commit()
+
+    # ── TRIGGER ML CLASSIFICATION ─────────────────────────────────────
+    # FIX: upload_service previously never ran YOLO, so ai_severity stayed NULL.
+    if background_tasks:
+        from app.services.queue_service import enqueue_ml_task
+        await enqueue_ml_task(
+            background_tasks=background_tasks,
+            media_id=attachment.id,
+            file_path=str(dest_path),
+            ai_result={"is_ai_generated": False, "confidence": 0.0},
+        )
 
     # CRITICAL: We return the file path (str) instead of the raw bytes
     # so the ML service can process it without duplicating it in memory.

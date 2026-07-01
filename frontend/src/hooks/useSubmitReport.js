@@ -22,6 +22,7 @@ export default function useSubmitReport() {
     secondary_damage = null,
     detection_note  = null,
     report_type     = "image",
+    disclaimer_accepted = false,   // ← REQUIRED by schema validator
   }) => {
     if (latitude == null || longitude == null) {
       setError("Location is required");
@@ -33,21 +34,32 @@ export default function useSubmitReport() {
     setReport(null);
 
     try {
+      // FIX: Normalize severity to lowercase enum values before sending.
+      // Backend SeverityLevel enum only accepts: "critical" | "non_critical"
+      const normalizedSeverity = ai_severity
+        ? String(ai_severity).toLowerCase().trim()
+        : null;
+
       const res = await createReport({
         latitude,
         longitude,
         barangay:        barangay    ?? null,
         street_name:     street_name ?? null,
         description:     description ?? null,
-        ai_damage_type,
-        ai_severity,
+        ai_damage_type:  ai_damage_type
+          ? String(ai_damage_type).toLowerCase().trim()
+          : null,
+        ai_severity:     normalizedSeverity,
         ai_confidence,
         is_flagged_fake,
         fake_confidence,
         is_hybrid,
-        secondary_damage,
+        secondary_damage: secondary_damage
+          ? String(secondary_damage).toLowerCase().trim()
+          : null,
         detection_note,
         report_type,
+        disclaimer_accepted,   // ← schema requires True, will fail validation if false
       });
 
       if (!res.success) {

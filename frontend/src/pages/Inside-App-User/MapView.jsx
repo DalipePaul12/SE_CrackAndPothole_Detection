@@ -15,7 +15,7 @@ import {
   Flame, Circle as CircleIcon, Map, RefreshCw,
 } from "lucide-react";
 
-// ─── Image helper ──────────────────────────────────────────────────────────────
+// ─── Image / Video helper ────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 const getThumb = (r) => {
   const url = r?.media_attachments?.[0]?.file_url;
@@ -24,6 +24,8 @@ const getThumb = (r) => {
     ? url
     : `${BASE_URL.replace(/\/$/, "")}${url}`;
 };
+
+const isVideo = (r) => r?.media_attachments?.[0]?.media_type === "video";
 
 // ─── Fix Leaflet default icon URLs ────────────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -265,7 +267,7 @@ function DensityLayer({ reports }) {
   ));
 }
 
-function Lightbox({ src, onClose }) {
+function Lightbox({ src, isVideo, onClose }) {
   useEffect(() => {
     const h = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", h);
@@ -274,10 +276,14 @@ function Lightbox({ src, onClose }) {
   return (
     <div className="mv-lightbox" onClick={onClose} role="dialog" aria-modal="true">
       <div className="mv-lightbox-inner" onClick={(e) => e.stopPropagation()}>
-        <button className="mv-lightbox-close" onClick={onClose} aria-label="Close photo">
+        <button className="mv-lightbox-close" onClick={onClose} aria-label="Close">
           <X size={18} strokeWidth={2.5} />
         </button>
-        <img src={src} alt="Report evidence" />
+        {isVideo ? (
+          <video src={src} controls autoPlay style={{ maxWidth: "100%", maxHeight: "80vh" }} />
+        ) : (
+          <img src={src} alt="Report evidence" />
+        )}
       </div>
     </div>
   );
@@ -299,6 +305,7 @@ export default function MapView() {
   const [search,       setSearch]       = useState("");
   const [flyTarget,    setFlyTarget]    = useState(null);
   const [lightbox,     setLightbox]     = useState(null);
+  const [lightboxIsVideo, setLightboxIsVideo] = useState(false);
   const [selected,     setSelected]     = useState(null);
   const [panelOpen,    setPanelOpen]    = useState(false);
   const [filtersOpen,  setFiltersOpen]  = useState(false);
@@ -379,7 +386,7 @@ export default function MapView() {
             <div className="mv-pill mv-pill--warning">
               <AlertTriangle size={11} aria-hidden="true" />
               <strong>{counts.nonCritical}</strong>
-              <span className="mv-pill-label">Non-Critical</span>
+              <span className="mv-pill-label">Non_Critical</span>
             </div>
             <div className="mv-pill mv-pill--blue">
               <Clock size={11} aria-hidden="true" />
@@ -497,7 +504,7 @@ export default function MapView() {
                 <select className="mv-select" value={filterSev} onChange={(e) => setFilterSev(e.target.value)}>
                   <option value="all">All Severity</option>
                   <option value="critical">Critical</option>
-                  <option value="non_critical">Non-Critical</option>
+                  <option value="non_critical">Non_Critical</option>
                 </select>
               </label>
               <label className="mv-filter-label">
@@ -537,10 +544,6 @@ export default function MapView() {
 
         {/* ══════════════════════════════════════════════════════════════════════
             BODY — map + right-side detail panel (side-by-side flex layout)
-            This is the KEY FIX: the map and panel are siblings in a flex row.
-            The panel slides in from the right using CSS transform, while the
-            map wrapper shrinks via margin-right transition — no modal, no
-            centered overlay, no empty green space.
         ══════════════════════════════════════════════════════════════════════ */}
         <div className="mv-body">
 
@@ -604,7 +607,7 @@ export default function MapView() {
                               {normSev(r.ai_severity) === "critical"
                                 ? "Critical"
                                 : normSev(r.ai_severity) === "non_critical"
-                                ? "Non-Critical"
+                                ? "Non_Critical"
                                 : "Unknown"}
                             </span>
                           </div>
@@ -626,9 +629,19 @@ export default function MapView() {
                             {thumb && (
                               <div
                                 className="mv-popup-thumb"
-                                onClick={(e) => { e.stopPropagation(); setLightbox(thumb); }}
+                                onClick={(e) => { e.stopPropagation(); setLightbox(thumb); setLightboxIsVideo(isVideo(r)); }}
                               >
-                                <img src={thumb} alt="Report evidence" />
+                                {isVideo(r) ? (
+                                  <video
+                                    src={thumb}
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                                  />
+                                ) : (
+                                  <img src={thumb} alt="Report evidence" />
+                                )}
                               </div>
                             )}
 
@@ -647,10 +660,6 @@ export default function MapView() {
 
           {/* ══════════════════════════════════════════════════════════════════
               RIGHT-SIDE DETAIL PANEL
-              - Always rendered so CSS transitions work
-              - Slides in with transform: translateX(0) when panelOpen=true
-              - On tablet/mobile becomes a bottom sheet (translateY)
-              - z-index sits above the map but below lightbox
           ══════════════════════════════════════════════════════════════════ */}
           <aside
             className={`mv-panel${panelOpen ? " mv-panel--open" : ""}`}
@@ -684,7 +693,7 @@ export default function MapView() {
                       {normSev(selected.ai_severity) === "critical"
                         ? "Critical"
                         : normSev(selected.ai_severity) === "non_critical"
-                        ? "Non-Critical"
+                        ? "Non_Critical"
                         : "Unknown"}
                     </span>
                     <span className="mv-badge mv-badge--status">
@@ -692,24 +701,38 @@ export default function MapView() {
                     </span>
                   </div>
 
-                  {/* ── Evidence photo ── */}
+                  {/* ── Evidence media ── */}
                   {getThumb(selected) && (
                     <div
                       className="mv-panel-image"
-                      onClick={() => setLightbox(getThumb(selected))}
+                      onClick={() => !isVideo(selected) && (setLightbox(getThumb(selected)), setLightboxIsVideo(false))}
                       role="button"
                       tabIndex={0}
-                      aria-label="View full-size evidence photo"
-                      onKeyDown={(e) => e.key === "Enter" && setLightbox(getThumb(selected))}
+                      aria-label={isVideo(selected) ? "Video evidence" : "View full-size evidence photo"}
+                      onKeyDown={(e) => e.key === "Enter" && !isVideo(selected) && (setLightbox(getThumb(selected)), setLightboxIsVideo(false))}
+                      style={isVideo(selected) ? { cursor: "default" } : undefined}
                     >
-                      <img
-                        src={getThumb(selected)}
-                        alt="Report evidence"
-                        loading="lazy"
-                      />
-                      <div className="mv-panel-image-overlay">
-                        <Maximize2 size={20} color="#fff" />
-                      </div>
+                      {isVideo(selected) ? (
+                        <video
+                          src={getThumb(selected)}
+                          muted
+                          playsInline
+                          controls
+                          preload="metadata"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <>
+                          <img
+                            src={getThumb(selected)}
+                            alt="Report evidence"
+                            loading="lazy"
+                          />
+                          <div className="mv-panel-image-overlay">
+                            <Maximize2 size={20} color="#fff" />
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -783,12 +806,22 @@ export default function MapView() {
                     onKeyDown={(e) => e.key === "Enter" && openPanel(r)}
                   >
                     {thumb ? (
-                      <img
-                        className="mv-strip-thumb"
-                        src={thumb}
-                        alt=""
-                        loading="lazy"
-                      />
+                      isVideo(r) ? (
+                        <video
+                          className="mv-strip-thumb"
+                          src={thumb}
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                      ) : (
+                        <img
+                          className="mv-strip-thumb"
+                          src={thumb}
+                          alt=""
+                          loading="lazy"
+                        />
+                      )
                     ) : (
                       <div className="mv-strip-thumb mv-strip-thumb--empty">
                         <MapPin size={16} />
@@ -812,7 +845,7 @@ export default function MapView() {
                         {normSev(r.ai_severity) === "critical"
                           ? "Critical"
                           : normSev(r.ai_severity) === "non_critical"
-                          ? "Non-Critical"
+                          ? "Non_Critical"
                           : "Unknown"}
                       </span>
                     </div>
@@ -825,9 +858,13 @@ export default function MapView() {
 
       </div>
 
-      {/* Lightbox (full-screen image viewer) */}
+      {/* Lightbox (full-screen media viewer) */}
       {lightbox && (
-        <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
+        <Lightbox
+          src={lightbox}
+          isVideo={lightboxIsVideo}
+          onClose={() => { setLightbox(null); setLightboxIsVideo(false); }}
+        />
       )}
     </div>
   );

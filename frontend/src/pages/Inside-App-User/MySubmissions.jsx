@@ -18,7 +18,7 @@ const mediaUrl  = (att) => att?.file_url ? `${BASE_URL}${att.file_url}` : null;
 
 const STATUS_LABEL  = { PENDING: "Pending", IN_PROGRESS: "In Progress", VERIFIED: "Verified", RESOLVED: "Resolved", DECLINED: "Declined" };
 const STATUS_STEPS  = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
-const SEVERITY_ORDER = { critical: 1, "non-critical": 0 };
+const SEVERITY_ORDER = { critical: 1, non_critical: 0 };
 
 function StatusProgress({ status }) {
   if (status === "DECLINED") {
@@ -342,7 +342,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
               <span className={`badge badge-${toClass(report.status ?? "")}`}>
                 {STATUS_LABEL[report.status] ?? report.status ?? "—"}
               </span>
-              <div className="sub-modal-actions-row">
+             {/* <div className="sub-modal-actions-row">
                 {canEdit && (
                   <button className="sub-modal-action-btn sub-action-edit" onClick={() => onEdit(report)}>
                     <Pencil size={12} /> Edit
@@ -357,7 +357,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
                   <Share2 size={12} /> Share
                 </button>
                 {shareMsg && <span className="sub-share-msg">{shareMsg}</span>}
-              </div>
+              </div>*/}
             </div>
           </div>
 
@@ -808,7 +808,7 @@ function FilterDrawer({ typeFilter, setTypeFilter, sevFilter, setSevFilter, stat
               >
                 <option value="All">All Severity</option>
                 <option value="non_critical">Non-Critical</option>
-                <option value="Critical">Critical</option>
+                <option value="critical">Critical</option>
               </select>
             </div>
 
@@ -960,11 +960,11 @@ function MySubmissions() {
                     <LayoutList size={15} aria-hidden="true" /> List
                   </button>
                   <button
-                    className={`sub-view-btn ${viewMode === "map" ? "active" : ""}`}
+                    className={`sub-view-btn ${viewMode === "" ? "active" : ""}`}
                     onClick={() => setViewMode("map")}
                     aria-pressed={viewMode === "map"}
                   >
-                    <Map size={15} aria-hidden="true" /> Map
+                    <Map size={15} aria-hidden="true" /> 
                   </button>
                 </div>
               </div>
@@ -1070,7 +1070,6 @@ function MySubmissions() {
                         <th scope="col">Severity</th>
                         <th scope="col">Status</th>
                         <th scope="col">Date</th>
-                        <th scope="col">Upvotes</th>
                       </tr>
                     </thead>
                     <tbody>

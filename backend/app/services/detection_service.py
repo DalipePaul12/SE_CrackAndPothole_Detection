@@ -241,7 +241,7 @@ def analyze_image(image_path: str) -> dict:
                 elif len(crit_dets) == 1 and crit_dets[0].get("confidence", 0) >= 0.70:
                     result["severity"] = "critical"
                 else:
-                    result["severity"] = "non-critical"
+                    result["severity"] = "non_critical"
                 unique_types = list(set(d["class"] for d in all_detections))
                 result["reason"] = f"Detected: {', '.join(unique_types)}"
                 logger.info("YOLO result — types: %s  best_conf: %.2f  total_dets: %d",
@@ -307,7 +307,7 @@ def resolve_hybrid(frame_results: list[dict]) -> dict:
 
     # Majority-based severity: critical only if most detections are critical
     crit_count = sum(1 for r in frame_results if r.get("severity") == "critical")
-    severity = "critical" if crit_count > len(frame_results) / 2 else "non-critical"
+    severity = "critical" if crit_count > len(frame_results) / 2 else "non_critical"
     
     crack_frames   = [r for r in frame_results if r.get("damage_type") == "crack"]
     pothole_frames = [r for r in frame_results if r.get("damage_type") == "pothole"]

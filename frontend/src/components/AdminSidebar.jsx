@@ -142,7 +142,9 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
           )}
         </button>
 
-        <Link
+       
+       
+       {/* <Link
           to="/adminpanel/settings"
           className={`admin-footer-btn ${location.pathname === "/adminpanel/settings" ? "active" : ""}`}
           title={isCollapsed ? "Settings" : ""}
@@ -150,7 +152,7 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
           <Settings size={18} />
           <span className={isCollapsed ? "hidden" : ""}>Settings</span>
         </Link>
-
+*/}
         <button
           className="admin-footer-btn admin-logout-btn"
           onClick={handleLogout}

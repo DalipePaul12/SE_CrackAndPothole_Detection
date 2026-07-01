@@ -62,7 +62,7 @@ const confColor = (v) => {
   return "#2e7d32";
 };
 const sevWeight = (r) => {
-  const map = { critical: 0, "non-critical": 1 };
+  const map = { critical: 0, "non_critical": 1 };
   return map[severity(r).toLowerCase()] ?? 99;
 };
 
@@ -283,11 +283,6 @@ export default function AdminAllReports() {
     showToast(`Bulk action applied to ${ids.length} report(s)`);
   };
 
-  const viewOnMap = (r, e) => {
-    e.stopPropagation();
-    navigate("/admin/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } });
-  };
-
   const pageCount   = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageStart   = (page - 1) * PAGE_SIZE + 1;
   const pageEnd     = Math.min(page * PAGE_SIZE, total);
@@ -369,20 +364,17 @@ export default function AdminAllReports() {
 
         <div className={`aar-filters-panel ${showFilters ? "open" : "closed"}`}>
           <div className="aar-filters-grid">
-            <div className="filter-group">
+            <div className="filter-group filter-group--type">
               <label>Damage Type</label>
               <div className="filter-btn-row">
                 {TYPE_OPTIONS.map((t) => (
-                  <button
-                    key={t}
-                    className={`flt-btn ${filters.type === t ? "active" : ""}`}
-                    onClick={() => setFilter("type", t)}
-                  >{t}</button>
+                  <button key={t} className={`flt-btn ${filters.type === t ? "active" : ""}`}
+                    onClick={() => setFilter("type", t)}>{t}</button>
                 ))}
               </div>
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-group--status">
               <label>Status</label>
               <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
                 {STATUS_OPTIONS.map((s) => (
@@ -391,7 +383,7 @@ export default function AdminAllReports() {
               </select>
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-group--severity">
               <label>Severity</label>
               <select value={filters.severity} onChange={(e) => setFilter("severity", e.target.value)}>
                 <option value="All">All Severity</option>
@@ -400,7 +392,7 @@ export default function AdminAllReports() {
               </select>
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-group--barangay">
               <label>Barangay</label>
               <select value={filters.barangay} onChange={(e) => setFilter("barangay", e.target.value)}>
                 {barangays.map((b) => (
@@ -409,17 +401,17 @@ export default function AdminAllReports() {
               </select>
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-group--datefrom">
               <label>Date From</label>
               <input type="date" value={filters.dateFrom} onChange={(e) => setFilter("dateFrom", e.target.value)} />
             </div>
 
-            <div className="filter-group">
+            <div className="filter-group filter-group--dateto">
               <label>Date To</label>
               <input type="date" value={filters.dateTo} onChange={(e) => setFilter("dateTo", e.target.value)} />
             </div>
 
-            <div className="filter-group filter-conf-group">
+            <div className="filter-group filter-conf-group filter-group--conf">
               <label>AI Confidence: <strong>{filters.confMin}%–{filters.confMax}%</strong></label>
               <div className="conf-dual-range">
                 <input type="range" min="0" max="100" value={filters.confMin}
@@ -434,7 +426,11 @@ export default function AdminAllReports() {
               </div>
             </div>
 
-            <button className="btn-reset" onClick={resetFilters}><RotateCcw size={16} /> Reset All</button>
+            <div className="filter-group filter-group--reset">
+              <button className="btn-reset" onClick={resetFilters}>
+                <RotateCcw size={16} /> Reset All
+              </button>
+            </div>
           </div>
         </div>
 
@@ -592,6 +588,7 @@ export default function AdminAllReports() {
                           {r.created_at ? new Date(r.created_at).toLocaleDateString("en-PH") : "—"}
                         </td>
 
+                        {/* ═══ FIXED ACTIONS COLUMN ═══ */}
                         <td className="td-actions" onClick={(e) => e.stopPropagation()}>
                           <div className="inline-actions">
                             {transitions.length > 0 && (
@@ -599,6 +596,7 @@ export default function AdminAllReports() {
                                 className="status-select"
                                 disabled={isActing}
                                 value=""
+                                onClick={(e) => e.stopPropagation()}
                                 onChange={(e) => {
                                   if (e.target.value) handleStatusChange(r.id, e.target.value);
                                 }}
@@ -609,9 +607,42 @@ export default function AdminAllReports() {
                                 ))}
                               </select>
                             )}
-                            <button className="act-map-btn"    onClick={(e) => viewOnMap(r, e)} title="View on Map"><MapPin size={14} /></button>
-                            <button className="act-detail-btn" onClick={() => setSelectedReport(r)} title="View Details"><ArrowUpRight size={14} /></button>
-                            {isActing && <span className="act-spinner"><Loader2 size={14} className="spin" /></span>}
+
+                            {/* MAP BUTTON → AdminMapView.jsx */}
+                            <button
+                              type="button"
+                              className="act-map-btn"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                navigate("/adminpanel/map", {
+                                  state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } },
+                                });
+                              }}
+                              title="View on Map"
+                            >
+                              <MapPin size={14} />
+                            </button>
+
+                            {/* ARROW BUTTON → open modal only */}
+                            <button
+                              type="button"
+                              className="act-detail-btn"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSelectedReport(r);
+                              }}
+                              title="View Details"
+                            >
+                              <ArrowUpRight size={14} />
+                            </button>
+
+                            {isActing && (
+                              <span className="act-spinner">
+                                <Loader2 size={14} className="spin" />
+                              </span>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -655,9 +686,9 @@ export default function AdminAllReports() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────
-   REPORT MODAL — Professional Redesign (Image 2 Reference)
-   ───────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   REPORT MODAL
+   ═══════════════════════════════════════════════════════════════ */
 function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navigate }) {
   const [r,              setR]             = useState(initial);
   const [activeTab,      setTab]           = useState("details");
@@ -679,14 +710,12 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const sev         = severity(r);
   const sevClass    = toClass(sev);
 
-  /* Close on Escape */
   useEffect(() => {
     const fn = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", fn);
     return () => document.removeEventListener("keydown", fn);
   }, [onClose]);
 
-  /* Load comments */
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     fetch(`${BASE_URL}/api/v1/reports/${r.id}/comments`, {
@@ -777,7 +806,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
 
   const flowIndex = STATUS_FLOW_ORDER.indexOf(r.status);
 
-  /* Tab definitions — with icons matching Image 2 */
   const TABS = [
     { id: "details", label: "Details", icon: <FileIcon size={15} />,        badge: null              },
     { id: "media",   label: "Media",   icon: <ImageIcon size={15} />,       badge: attachments.length },
@@ -790,7 +818,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
 
-        {/* ── Header: left-aligned, ID + status + AI badge, X top-right ── */}
         <div className="modal-hdr">
           <div className="modal-hdr-left">
             <span className="modal-id">{padId(r.id)}</span>
@@ -811,7 +838,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
           </button>
         </div>
 
-        {/* ── Tabs: icons + labels, full-width bottom border ── */}
         <div className="modal-tabs">
           {TABS.map(({ id, label, icon, badge }) => (
             <button
@@ -826,94 +852,49 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
           ))}
         </div>
 
-        {/* ── Scrollable content ── */}
         <div className="modal-content-area">
 
-          {/* DETAILS TAB */}
           {activeTab === "details" && (
             <div className="tab-pane details-pane">
               <div className="detail-grid">
-
-                {/* Reporter */}
                 <div className="detail-card">
                   <h5 className="detail-card-title"><User size={14} /> Reporter</h5>
                   <div className="detail-body">
-                    <div className="detail-row">
-                      <span>Name</span>
-                      <strong>{r.owner?.full_name ?? "Anonymous"}</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Contact</span>
-                      <strong>{r.owner?.phone ?? "—"}</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Email</span>
-                      <strong>{r.owner?.email ?? "—"}</strong>
-                    </div>
+                    <div className="detail-row"><span>Name</span><strong>{r.owner?.full_name ?? "Anonymous"}</strong></div>
+                    <div className="detail-row"><span>Contact</span><strong>{r.owner?.phone ?? "—"}</strong></div>
+                    <div className="detail-row"><span>Email</span><strong>{r.owner?.email ?? "—"}</strong></div>
                   </div>
                 </div>
 
-                {/* Damage Info */}
                 <div className="detail-card">
                   <h5 className="detail-card-title"><AlertTriangle size={14} /> Damage Info</h5>
                   <div className="detail-body">
-                    <div className="detail-row">
-                      <span>Type</span>
-                      <strong>{damageType(r)}</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Severity</span>
-                      <span className={`sev-text ${sevClass}`}>
-                        {sev.toUpperCase()}
-                      </span>
-                    </div>
+                    <div className="detail-row"><span>Type</span><strong>{damageType(r)}</strong></div>
+                    <div className="detail-row"><span>Severity</span><span className={`sev-text ${sevClass}`}>{sev.toUpperCase()}</span></div>
                     {conf !== null && (
-                      <div className="detail-row">
-                        <span>AI Confidence</span>
-                        <span className="conf-text" style={{ color: confColor(conf) }}>
-                          {conf}%
-                        </span>
-                      </div>
+                      <div className="detail-row"><span>AI Confidence</span><span className="conf-text" style={{ color: confColor(conf) }}>{conf}%</span></div>
                     )}
                   </div>
                 </div>
 
-                {/* Location */}
                 <div className="detail-card">
                   <h5 className="detail-card-title"><MapPin size={14} /> Location</h5>
                   <div className="detail-body">
-                    <div className="detail-row">
-                      <span>Address</span>
-                      <strong>{r.location_address ?? "—"}</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Street</span>
-                      <strong>{r.street_name ?? "—"}</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Barangay</span>
-                      <strong>{r.barangay ?? "—"}</strong>
-                    </div>
+                    <div className="detail-row"><span>Address</span><strong>{r.location_address ?? "—"}</strong></div>
+                    <div className="detail-row"><span>Street</span><strong>{r.street_name ?? "—"}</strong></div>
+                    <div className="detail-row"><span>Barangay</span><strong>{r.barangay ?? "—"}</strong></div>
                   </div>
                 </div>
 
-                {/* Timeline */}
                 <div className="detail-card">
                   <h5 className="detail-card-title"><Calendar size={14} /> Timeline</h5>
                   <div className="detail-body">
-                    <div className="detail-row">
-                      <span>Submitted</span>
-                      <strong>{fmtDate(r.created_at)}</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Updated</span>
-                      <strong>{fmtDate(r.updated_at)}</strong>
-                    </div>
+                    <div className="detail-row"><span>Submitted</span><strong>{fmtDate(r.created_at)}</strong></div>
+                    <div className="detail-row"><span>Updated</span><strong>{fmtDate(r.updated_at)}</strong></div>
                   </div>
                 </div>
               </div>
 
-              {/* Description */}
               {r.description && (
                 <div className="detail-desc-card">
                   <h5 className="detail-card-title"><FileText size={14} /> Description</h5>
@@ -921,7 +902,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                 </div>
               )}
 
-              {/* Decline notice */}
               {r.status === "DECLINED" && r.decline_reason && (
                 <div className="decline-notice">
                   <Ban size={16} />
@@ -929,7 +909,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                 </div>
               )}
 
-              {/* Assignment */}
               <div className="detail-card assign-card">
                 <h5 className="detail-card-title"><UserCog size={14} /> Assignment</h5>
                 <div className="assign-row">
@@ -942,11 +921,10 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                 </div>
               </div>
 
-              {/* View on Map */}
               <div className="modal-map-link">
                 <button
                   className="btn-view-map"
-                  onClick={() => navigate("/admin/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } })}
+                  onClick={() => navigate("/adminpanel/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } })}
                 >
                   <MapPin size={16} /> View on Map
                 </button>
@@ -954,7 +932,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
-          {/* MEDIA TAB */}
           {activeTab === "media" && (
             <div className="tab-pane media-pane">
               {attachments.length === 0 ? (
@@ -988,7 +965,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
-          {/* NOTES TAB */}
           {activeTab === "notes" && (
             <div className="tab-pane notes-pane">
               <div className="notes-timeline">
@@ -1031,7 +1007,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
-          {/* ACTIONS TAB */}
           {activeTab === "actions" && (
             <div className="tab-pane actions-pane">
               <div className="workflow-section">
@@ -1097,7 +1072,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
             </div>
           )}
 
-          {/* UPDATES / MESSAGE TAB */}
           {activeTab === "message" && (
             <div className="tab-pane message-pane">
               {!r.owner?.id ? (

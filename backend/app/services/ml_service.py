@@ -126,18 +126,18 @@ def _blur_conf_weight(blur: float) -> float:
 
 def _compute_severity(boxes: list[dict], image_w: int, image_h: int) -> str:
     if not boxes or image_w * image_h == 0:
-        return "non-critical"
+        return "non_critical"
     max_ratio = max(
         (b.get("width", 0) * b.get("height", 0)) / (image_w * image_h) for b in boxes
     )
-    return "critical" if max_ratio >= 0.15 else "non-critical"
+    return "critical" if max_ratio >= 0.15 else "non_critical"
 
 
 def _severity_from_bbox_norm(bbox: list[float], confidence: float = 0.5) -> str:
-    """Confidence-only severity: >= 70% = critical, below = non-critical."""
+    """Confidence-only severity: >= 70% = critical, below = non_critical."""
     if not bbox or len(bbox) < 4:
-        return "non-critical"
-    return "critical" if confidence >= 0.70 else "non-critical"
+        return "non_critical"
+    return "critical" if confidence >= 0.70 else "non_critical"
 
 
 # ── Distance feedback (calibrated for ~1.5 m) ────────────────────────────────
@@ -666,7 +666,7 @@ def _process_video_sync(file_path: str) -> dict[str, Any]:
             "class": c.get("label", "damage"),
             "label": c.get("label", "damage"),
             "confidence": c.get("avg_confidence", 0),
-            "severity": _severity_from_bbox_norm(bbox, confidence=c.get("avg_confidence", 0)) if bbox else "non-critical",
+            "severity": _severity_from_bbox_norm(bbox, confidence=c.get("avg_confidence", 0)) if bbox else "non_critical",
             "box": [
                 raw.get("x", 0),
                 raw.get("y", 0),
@@ -700,7 +700,7 @@ def _process_video_sync(file_path: str) -> dict[str, Any]:
         "prediction": {
             "label": best["label"],
             "confidence": best["avg_confidence"],
-            "severity": _severity_from_bbox_norm(bbox, confidence=best["avg_confidence"]) if bbox else "non-critical",
+            "severity": _severity_from_bbox_norm(bbox, confidence=best["avg_confidence"]) if bbox else "non_critical",
             "frames_seen": best["frames_seen"],
             "boxes": [raw],
             "norm_bbox": bbox,
@@ -810,7 +810,7 @@ async def process_media_pipeline(image_bytes: bytes) -> dict[str, Any]:
         elif len(crit_dets) == 1 and crit_dets[0].get("confidence", 0) >= 0.70:
             overall_sev = "critical"
         else:
-            overall_sev = "non-critical"
+            overall_sev = "non_critical"
             
         prediction = {
             "label": best["class"],
@@ -861,7 +861,7 @@ async def run_realtime_frame(image_bytes: bytes) -> dict[str, Any]:
         elif len(crit_dets) == 1 and crit_dets[0].get("confidence", 0) >= 0.70:
             overall_sev = "critical"
         else:
-            overall_sev = "non-critical"
+            overall_sev = "non_critical"
             
         best = {
             "label": all_detections[0]["class"],
@@ -923,7 +923,7 @@ def run_yolo(file_path: str) -> dict[str, Any] | None:
     elif len(crit_dets) == 1 and crit_dets[0].get("confidence", 0) >= 0.70:
         overall_sev = "critical"
     else:
-        overall_sev = "non-critical"
+        overall_sev = "non_critical"
     
     return {
         "label": best["class"],

@@ -365,7 +365,7 @@ function MyProfile() {
     else if (reportFilter === "resolved")
       list = list.filter((r) => r.status === "RESOLVED");
 
-    const sevOrder = { CRITICAL: 0, "NON-CRITICAL": 1 };
+    const sevOrder = { CRITICAL: 0, "NON_CRITICAL": 1 };
     if (sortOption === "oldest")
       list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     else if (sortOption === "severity")
@@ -450,6 +450,9 @@ function MyProfile() {
 
   /* ─── Change Password ─── */
   // FIX 3: Replaced raw fetch with updatePassword from useUser hook
+  /* ─── Change Password ─── */
+  const [pwLoading, setPwLoading] = useState(false);
+
   const handleChangePassword = async () => {
     const errors = {};
     if (!pwData.current)
@@ -463,13 +466,20 @@ function MyProfile() {
     setPwErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
-    const success = await updatePassword(pwData.current, pwData.newPw);
-    if (success) {
-      setPwData({ current: "", newPw: "", confirm: "" });
-      setPwErrors({});
-      showToast("Password changed successfully!", "success");
-    } else {
-      showToast("Failed to change password. Check your current password.", "error");
+    setPwLoading(true);
+    try {
+      const success = await updatePassword(pwData.current, pwData.newPw);
+      if (success) {
+        setPwData({ current: "", newPw: "", confirm: "" });
+        setPwErrors({});
+        showToast("Password changed successfully!", "success");
+      } else {
+        showToast("Failed to change password. Check your current password.", "error");
+      }
+    } catch (err) {
+      showToast(err.message || "Password change failed.", "error");
+    } finally {
+      setPwLoading(false);
     }
   };
 
@@ -896,8 +906,8 @@ function MyProfile() {
               </div>
 
               <div className="settings-actions" style={{ marginTop: "16px" }}>
-                <button className="save" onClick={handleChangePassword}>
-                  Change Password
+                <button className="save" onClick={handleChangePassword} disabled={pwLoading}>
+                  {pwLoading ? "Changing…" : "Change Password"}
                 </button>
               </div>
             </div>

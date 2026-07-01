@@ -73,7 +73,7 @@ function authHeaders(token) {
 // ── Core request ──────────────────────────────────────────────────────────────
 async function request(endpoint, options = {}, _isRetry = false) {
   const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), 15000);
+  const timeout    = setTimeout(() => controller.abort(), 30000);
 
   try {
     const token = tokenStorage.getAccess();
@@ -131,7 +131,7 @@ console.error(`[API Error ${response.status}] ${endpoint}:`, JSON.stringify(data
 // ── Raw request — for 202 polling (usePipeline) ───────────────────────────────
 export async function requestRaw(endpoint, options = {}, _isRetry = false) {
   const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), 15000);
+  const timeout    = setTimeout(() => controller.abort(), 30000);
 
   try {
     const token = tokenStorage.getAccess();

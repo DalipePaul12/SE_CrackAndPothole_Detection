@@ -163,7 +163,7 @@ function AdminStreetReports() {
     const matchSeverity =
       filters.severity === "All" ||
       (filters.severity === "Critical" && row.critical > 0) ||
-      (filters.severity === "Non-Critical" && row.total - row.critical > 0);
+      (filters.severity === "Non_Critical" && row.total - row.critical > 0);
     const matchStatus =
       filters.status === "All" ||
       row.reports.some((r) => r.status === filters.status);
@@ -220,8 +220,8 @@ function AdminStreetReports() {
                 }
               >
                 <option value="All">All Severity</option>
-                <option value="non_critical">Non-Critical</option>
-                <option value="Critical">Critical</option>
+                <option value="non_critical">Non_Critical</option>
+                <option value="critical">Critical</option>
               </select>
             </div>
           </div>
@@ -303,7 +303,7 @@ function AdminStreetReports() {
                           {row.critical} Critical
                         </span>
                       ) : (
-                        <span className="sev-badge non-critical">Standard</span>
+                        <span className="sev-badge non_critical">Standard</span>
                       )}
                     </td>
                     <td>

@@ -49,7 +49,7 @@ const MAX_FILE_MB      = 5;
 
 const SEVERITY_CONFIG = {
   critical:    { color: "#ef4444", label: "Critical"     },
-  noncritical: { color: "#f59e0b", label: "Non-Critical" },
+  non_critical: { color: "#f59e0b", label: "Non_Critical" },
   resolved:    { color: "#52b788", label: "Fixed"        },
   default:     { color: "#6b7280", label: "Unknown"      },
 };
@@ -106,7 +106,7 @@ function getSevKey(r) {
   if (st === "resolved") return "resolved";
   const s = (r.ai_severity ?? r.severity ?? "").toLowerCase().replace(/[^a-z_]/g, "");
   if (["critical", "severe", "high"].includes(s))                        return "critical";
-  if (["non_critical", "noncritical", "non-critical"].includes(s))       return "noncritical";
+  if (["non_critical", "noncritical", "non_critical"].includes(s))       return "noncritical";
   return "default";
 }
 
@@ -665,7 +665,7 @@ function AdminMapView() {
               <div className="amv-pill amv-pill--warning">
                 <AlertTriangle size={11} />
                 <strong>{counts.noncritical ?? 0}</strong>
-                <span className="amv-pill-label">Non-Critical</span>
+                <span className="amv-pill-label">Non_Critical</span>
               </div>
               <div className="amv-pill amv-pill--blue">
                 <Clock size={11} />
@@ -797,7 +797,7 @@ function AdminMapView() {
                   <select className="amv-select" value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
                     <option value="all">All Severity</option>
                     <option value="critical">Critical</option>
-                    <option value="noncritical">Non-Critical</option>
+                    <option value="noncritical">Non_Critical</option>
                   </select>
                 </label>
                 <label className="amv-filter-label">
@@ -861,7 +861,7 @@ function AdminMapView() {
                   <p className="amv-legend-title">Severity</p>
                   {[
                     { color: "#ef4444", label: "Critical"     },
-                    { color: "#f59e0b", label: "Non-Critical" },
+                    { color: "#f59e0b", label: "Non_Critical" },
                     { color: "#52b788", label: "Fixed"        },
                     { color: "#6b7280", label: "Unknown"      },
                   ].map(({ color, label }) => (

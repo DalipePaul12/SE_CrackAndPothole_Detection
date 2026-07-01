@@ -8,7 +8,7 @@
  * {
  *   class: "pothole" | "crack",
  *   confidence: 0.94,
- *   severity: "critical" | "non-critical" | "low" | "moderate" | ...,
+ *   severity: "critical" | "non_critical" | "low" | "moderate" | ...,
  *   box: [x1, y1, x2, y2],          // absolute pixel coords in original image
  *   segments: [[x,y], [x,y], ...],  // absolute pixel polygon points
  *   // OR normalized variants:
@@ -38,7 +38,7 @@ const SEVERITY_STYLES = {
     boxStroke:    "#ef4444",
     dashArray:    "none",
   },
-  "non-critical": {
+  "non_critical": {
     fill:         "rgba(249,115,22,0.22)",
     fillHover:    "rgba(249,115,22,0.38)",
     stroke:       "#f97316",
@@ -52,9 +52,9 @@ const SEVERITY_STYLES = {
 };
 
 function normalizeSeverity(sev) {
-  if (!sev) return "non-critical";
+  if (!sev) return "non_critical";
   const s = sev.toLowerCase().replace("_", "-");
-  return s === "critical" ? "critical" : "non-critical";
+  return s === "critical" ? "critical" : "non_critical";
 }
 
 // ─── Build SVG polygon "points" string ────────────────────────────────────────
@@ -458,7 +458,7 @@ export function normalizePrediction(raw) {
     class:         raw.class ?? raw.label ?? "damage",
     label:         raw.label ?? raw.class ?? "damage",
     confidence:    raw.confidence ?? raw.conf ?? null,
-    severity:      raw.severity ?? raw.class_severity ?? "non-critical",
+    severity:      raw.severity ?? raw.class_severity ?? "non_critical",
     box:           raw.box           ?? null,
     norm_bbox,                                          // ← derived if missing
     segments:      raw.segments      ?? null,

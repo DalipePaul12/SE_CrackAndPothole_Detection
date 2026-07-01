@@ -189,7 +189,7 @@ export default function AdminPanel() {
     { id: "total",      label: "Total Reports", value: summary?.total_reports ?? 0,                            accent: "#155318", Icon: LayoutDashboard, delta: null },
     { id: "resolved",   label: "Resolved",       value: summary?.resolved ?? 0,                                accent: "#43a047", Icon: CheckCircle2,    delta: null },
     { id: "critical",   label: "Critical",        value: severityMap.critical ?? 0,                            accent: "#e53935", Icon: AlertCircle,     delta: (severityMap.critical ?? 0) > 0 ? "Needs immediate attention" : null, deltaClass: "delta-danger" },
-    { id: "noncrit",    label: "Non-Critical",    value: (severityMap.low ?? 0) + (severityMap.medium ?? 0),  accent: "#fb8c00", Icon: AlertTriangle,   delta: null },
+    { id: "noncrit",    label: "Non_Critical",    value: (severityMap.low ?? 0) + (severityMap.medium ?? 0),  accent: "#fb8c00", Icon: AlertTriangle,   delta: null },
     { id: "pending",    label: "Pending Review",  value: summary?.pending ?? 0,                                accent: "#1e88e5", Icon: Clock,           delta: (summary?.pending ?? 0) > 5 ? "High queue" : null, deltaClass: "delta-danger" },
     { id: "inprogress", label: "In Progress",     value: summary?.in_progress ?? 0,                            accent: "#7b1fa2", Icon: Settings2,       delta: null },
   ];

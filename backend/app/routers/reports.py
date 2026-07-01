@@ -175,6 +175,7 @@ async def delete_report(
 async def upload_media(
     request: Request,
     report_id: int,
+    background_tasks: BackgroundTasks,   # ← FIX: required for ML enqueue
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -223,7 +224,7 @@ async def upload_media(
         file_name=file.filename or safe_name,
         file_size_bytes=len(contents),
         media_type=media_type,
-        is_processed=True,
+        is_processed=False,   # ← FIX: False until ML runs
         is_ai_generated=report.is_flagged_fake,
         ai_generated_confidence=None,
     )
@@ -231,9 +232,19 @@ async def upload_media(
     await db.commit()
     await db.refresh(attachment)
 
+    # ── TRIGGER ML CLASSIFICATION ─────────────────────────────────────
+    # FIX: This endpoint previously never ran YOLO, so ai_severity stayed NULL.
+    from app.services.queue_service import enqueue_ml_task
+    task_id = await enqueue_ml_task(
+        background_tasks=background_tasks,
+        media_id=attachment.id,
+        file_path=str(file_path),
+        ai_result={"is_ai_generated": report.is_flagged_fake, "confidence": 0.0},
+    )
+
     logger.info(
-        "Media attached — report_id=%d  media_id=%d  type=%s  size=%d bytes",
-        report_id, attachment.id, media_type.value, len(contents),
+        "Media attached — report_id=%d  media_id=%d  type=%s  size=%d bytes | ml_task=%s",
+        report_id, attachment.id, media_type.value, len(contents), task_id,
     )
 
     return {
@@ -241,6 +252,7 @@ async def upload_media(
         "data": {
             "media_id": attachment.id,
             "file_url": attachment.file_url,
+            "task_id": task_id,
             "ai_validation": {
                 "is_ai_generated": report.is_flagged_fake,
                 "status": "flagged" if report.is_flagged_fake else "approved",
@@ -251,7 +263,6 @@ async def upload_media(
             },
         },
     }
-
 
 @router.post("/{report_id}/upvote")
 async def toggle_upvote(
