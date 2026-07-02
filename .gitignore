@@ -107,3 +107,9 @@ backend/uploads/
 runs/
 outputs/
 predictions/
+
+.replit
+replit.nix
+.config/
+.cache/
+.upm/
