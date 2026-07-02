@@ -29,5 +29,4 @@ EXPOSE 8080
 # Run Alembic migrations, then start the app.
 # If migrations should NOT run on every boot, remove the alembic line
 # and run migrations manually/once instead.
-CMD alembic upgrade head && \
-    uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
