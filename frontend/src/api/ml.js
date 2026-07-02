@@ -1,9 +1,7 @@
-const BASE_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
-
 const ENDPOINTS = {
-  image:    `${BASE_URL}/api/v1/ml/analyze`,
-  video:    `${BASE_URL}/api/v1/ml/analyze/video`,
-  realtime: `${BASE_URL}/api/v1/ml/analyze/realtime`,
+  image:    `/api/v1/ml/analyze`,
+  video:    `/api/v1/ml/analyze/video`,
+  realtime: `/api/v1/ml/analyze/realtime`,
 };
 
 const TIMEOUTS = {
@@ -303,7 +301,8 @@ export class RealtimeDetectionSocket {
   }
 
   connect() {
-    const wsBase = BASE_URL.replace(/^http/, "ws");
+    const wsProto = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsBase  = `${wsProto}://${window.location.host}`;
     this.ws = new WebSocket(`${wsBase}/api/v1/ml/ws/realtime-overlay`);
 
     this.ws.onopen = () => {
