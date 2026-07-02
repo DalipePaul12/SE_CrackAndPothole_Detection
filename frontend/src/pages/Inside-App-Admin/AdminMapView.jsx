@@ -628,7 +628,7 @@ function AdminMapView() {
       date:     r.created_at
                   ? new Date(r.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
                   : "—",
-      user:     r.reported_by ?? r.user_email ?? null,
+      user:     r.owner?.full_name ?? "—",
     };
   }
 

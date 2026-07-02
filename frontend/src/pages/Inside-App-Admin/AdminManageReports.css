@@ -1103,6 +1103,7 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
 }
 
 .modal-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.modal-actions .action-btn.wide { max-width: 260px; }
 
 .modal-media {
   background: var(--bg-secondary);

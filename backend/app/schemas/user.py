@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, computed_field, field_validator
 
 from app.models.enums import UserRole
 from app.schemas.base import AppBaseModel
@@ -79,6 +79,8 @@ class UserPublic(AppBaseModel):
     role: UserRole
     reputation_score: float
     created_at: datetime
+    email: EmailStr
+    contact_number: Optional[str] = None
 
 
 class UserResponse(AppBaseModel):
