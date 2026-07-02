@@ -20,17 +20,23 @@ from ultralytics import YOLO
 logger = logging.getLogger(__name__)
 
 
-# ── Model loading ─────────────────────────────────────────────────────────────
+pothole_model = None
+crack_model = None
 
-try:
-    pothole_model = YOLO(settings.POTHOLE_MODEL_PATH)
-    crack_model   = YOLO(settings.CRACK_MODEL_PATH)
-    logger.info("YOLO models loaded — pothole: %s | crack: %s",
-                settings.POTHOLE_MODEL_PATH, settings.CRACK_MODEL_PATH)
-except Exception as e:
-    logger.error("YOLO model load failed: %s", e)
-    pothole_model = None
-    crack_model   = None
+
+def _ensure_models_loaded():
+    global pothole_model, crack_model
+    if pothole_model is not None and crack_model is not None:
+        return
+    try:
+        pothole_model = YOLO(settings.POTHOLE_MODEL_PATH)
+        crack_model   = YOLO(settings.CRACK_MODEL_PATH)
+        logger.info("YOLO models loaded — pothole: %s | crack: %s",
+                    settings.POTHOLE_MODEL_PATH, settings.CRACK_MODEL_PATH)
+    except Exception as e:
+        logger.error("YOLO model load failed: %s", e)
+        pothole_model = None
+        crack_model   = None
 
 
 # ── HuggingFace config ────────────────────────────────────────────────────────
@@ -44,6 +50,7 @@ HF_API_URL = (
 # ── Image analysis (photo pipeline — MULTI-DETECTION) ─────────────────────────
 
 def analyze_image(image_path: str) -> dict:
+    _ensure_models_loaded()
     """
     Full analysis pipeline for a single image:
       1. HuggingFace AI-generated detection (if enabled)
