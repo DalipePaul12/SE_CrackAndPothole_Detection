@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -32,6 +33,33 @@ from app.api.v1 import auth, analytics, cctv, media, ml, notifications, projects
 from app.routers import comments, ws
 
 
+# ── Background model loading ──────────────────────────────────────────────────
+# CRITICAL FIX: loading YOLO/torch models BEFORE `yield` blocks the event loop
+# and delays the port bind. On low-CPU instances (e.g. Render free tier, 0.1
+# CPU) this can take well over 100s — longer than Render's deploy timeout —
+# causing "Exited with status 128" with zero logs, because the process never
+# gets the chance to bind and answer the health check.
+#
+# Fix: bind the port immediately (yield right away), and load models as a
+# fire-and-forget background task. `app.state.models_ready` gates ML routes.
+async def _load_models_background(app: FastAPI) -> None:
+    app.state.models_ready = False
+    app.state.models_error = None
+    try:
+        from app.services.ml_service import load_models
+        # load_models() is likely sync/CPU-bound (torch.load, YOLO()), so run
+        # it in a thread to avoid blocking the event loop entirely.
+        await asyncio.to_thread(load_models)
+        app.state.models_ready = True
+        logger.info("ML models loaded and ready.")
+    except FileNotFoundError as exc:
+        app.state.models_error = str(exc)
+        logger.critical("Model weights missing: %s — ML endpoints will fail.", exc)
+    except Exception as exc:
+        app.state.models_error = str(exc)
+        logger.error("Failed to load ML models: %s", exc)
+
+
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -39,18 +67,17 @@ async def lifespan(app: FastAPI):
     logger.info("Starting %s [%s]", settings.PROJECT_NAME, settings.ENVIRONMENT)
 
     if settings.AI_ENABLED:
-        try:
-            from app.services.ml_service import load_models
-            load_models()
-            logger.info("ML models loaded and ready.")
-        except FileNotFoundError as exc:
-            logger.critical("Model weights missing: %s — ML endpoints will fail.", exc)
-        except Exception as exc:
-            logger.error("Failed to preload ML models: %s", exc)
+        # Fire-and-forget: do NOT await here. The server must bind the port
+        # first so Render's health check / port scan succeeds immediately.
+        app.state.models_ready = False
+        asyncio.create_task(_load_models_background(app))
+        logger.info("ML model loading scheduled in background.")
     else:
+        app.state.models_ready = False
+        app.state.models_error = None
         logger.info("AI_ENABLED=False — skipping model preload.")
 
-    logger.info("Startup complete.")
+    logger.info("Startup complete — server is accepting connections.")
     yield
     logger.info("Shutting down %s.", settings.PROJECT_NAME)
 
@@ -124,12 +151,16 @@ app.include_router(ws.router)            # WebSocket — no API prefix
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
+# NOTE: Render's health check just needs a 200 + open port — it should NOT
+# depend on models_ready, or you'll be back to the same timeout problem.
 @app.get("/health", tags=["Health"])
 async def health():
     return {
         "status":                   "ok",
         "environment":              settings.ENVIRONMENT,
         "ai_enabled":               settings.AI_ENABLED,
+        "models_ready":             getattr(app.state, "models_ready", False),
+        "models_error":             getattr(app.state, "models_error", None),
         "fake_detection_enabled":   settings.AI_FAKE_DETECTION_ENABLED,
         "version":                  "1.0.0",
     }

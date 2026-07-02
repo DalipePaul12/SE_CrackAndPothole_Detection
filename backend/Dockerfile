@@ -18,10 +18,22 @@ WORKDIR /app
 # so we can actually see logs/errors in Render instead of silence
 ENV PYTHONUNBUFFERED=1
 
-# Install Python dependencies first (better layer caching)
-COPY requirements.txt .
+# ── CPU-only torch FIRST ──────────────────────────────────────────────────
+# Default PyPI torch pulls the full CUDA/NVIDIA toolkit (~2+ GB of cuBLAS,
+# cuFFT, cuSolver, cuSparse, NCCL, etc.) even though Render has no GPU.
+# That bloats the image, slows the import at startup, and on a 0.1 CPU /
+# 512 MB instance is enough to blow past Render's deploy timeout with zero
+# logs (exit 128). Installing the CPU wheel avoids pulling any nvidia-*
+# packages entirely.
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir torch==2.11.0 torchvision==0.26.0 \
+       --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python dependencies (torch/torchvision must already be
+# removed from requirements.txt, or pip will re-resolve and pull the GPU
+# build right back in, undoing the step above)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the backend code (app/, alembic/, models, etc.)
 COPY . .
