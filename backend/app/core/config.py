@@ -24,7 +24,11 @@ class Settings(BaseSettings):
 
     @property
     def effective_database_url(self) -> str:
-        return self.SUPABASE_DATABASE_URL if self.SUPABASE_DATABASE_URL else self.DATABASE_URL
+        url = self.SUPABASE_DATABASE_URL.strip() if self.SUPABASE_DATABASE_URL.strip() else self.DATABASE_URL.strip()
+        if "sslmode=" not in url:
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}sslmode=require"
+        return url
 
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
@@ -37,8 +41,8 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     AI_ENABLED: bool = True
-    POTHOLE_MODEL_PATH: str = str(BASE_DIR / "app" / "Pothole_best.pt")
-    CRACK_MODEL_PATH: str = str(BASE_DIR / "app" / "Crack_best.pt")
+    POTHOLE_MODEL_PATH: str = str(BASE_DIR /"Pothole_best.pt")
+    CRACK_MODEL_PATH: str = str(BASE_DIR /"Crack_best.pt")
     AI_CONFIDENCE_THRESHOLD: float = 0.35
     AI_FAKE_DETECTION_ENABLED: bool = True
     HF_API_TOKEN: Optional[str] = None
