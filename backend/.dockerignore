@@ -1,0 +1,17 @@
+# Place this file at: backend/.dockerignore
+
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.*
+uploads/
+data/
+docs/
+.git/
+.gitignore
+package-lock.json
+package.json
+*.log
