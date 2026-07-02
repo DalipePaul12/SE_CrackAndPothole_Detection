@@ -2760,9 +2760,14 @@ body.dark .reporter-name {
 
 .modal-actions {
   display: flex;
+  flex-direction: row;
   gap: 8px;
   width: 100%;
   margin-top: 6px;
+}
+
+.modal-box-confirm .modal-actions {
+  flex-direction: row;
 }
 
 .btn-modal-secondary {

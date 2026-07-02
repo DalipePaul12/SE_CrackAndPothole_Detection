@@ -11,6 +11,7 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading]             = useState(false);
   const [error, setError]                 = useState(null);
+  const [liveNotification, setLiveNotification] = useState(null);
 
   const abortRef        = useRef(false);
   const pausePollingRef = useRef(false);
@@ -85,6 +86,7 @@ export function useNotifications() {
         if (prev.some(n => n.id === newNotif.id)) return prev;
         return [newNotif, ...prev];
       });
+      setLiveNotification({ ...newNotif, _ts: Date.now() });
     } catch {
     }
   }, [lastMessage]);
@@ -135,6 +137,7 @@ export function useNotifications() {
     unreadCount,
     loading,
     error,
+    liveNotification,
     markAsRead,
     markAllAsRead,
     remove,

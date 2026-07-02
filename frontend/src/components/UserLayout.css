@@ -69,3 +69,100 @@
 body.dark .mobile-menu-btn {
   background: linear-gradient(135deg, #1a3d1a, #0f1a10);
 }
+
+/* ── Real-time notification toasts ─────────────────────────── */
+.notif-toast-stack {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 340px;
+  width: calc(100vw - 48px);
+}
+
+.notif-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #1e2d1e;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  animation: toastIn 0.3s cubic-bezier(0.34,1.18,0.64,1);
+  cursor: default;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+.notif-toast--success { border-left: 3px solid #22c55e; }
+.notif-toast--info    { border-left: 3px solid #3b82f6; }
+.notif-toast--warning { border-left: 3px solid #f59e0b; }
+.notif-toast--error   { border-left: 3px solid #ef4444; }
+
+.notif-toast-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.notif-toast-body {
+  flex: 1;
+  cursor: pointer;
+}
+
+.notif-toast-title {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e8f5e9;
+}
+
+.notif-toast-msg {
+  margin: 0;
+  font-size: 11.5px;
+  color: #a5c9a7;
+  line-height: 1.4;
+}
+
+.notif-toast-close {
+  background: none;
+  border: none;
+  color: #6b8f6b;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  margin-top: -1px;
+  transition: color 0.15s;
+}
+
+.notif-toast-close:hover { color: #e8f5e9; }
+
+body:not(.dark) .notif-toast {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+body:not(.dark) .notif-toast-title { color: #1a2e1a; }
+body:not(.dark) .notif-toast-msg   { color: #4a6b4a; }
+body:not(.dark) .notif-toast-close { color: #9cbb9c; }
+body:not(.dark) .notif-toast-close:hover { color: #1a2e1a; }
+
+@media (max-width: 600px) {
+  .notif-toast-stack {
+    bottom: 16px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+  }
+}

@@ -1,12 +1,58 @@
-import { useState, useEffect, useCallback } from "react";
-import { Outlet } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Outlet, useNavigate } from "react-router-dom";
 import UserSidebar from "./UserSidebar";
 import AppHeader from "./AppHeader";
+import { useNotifications } from "../hooks/useNotifications";
 import "./UserLayout.css";
+
+const TYPE_ICON = {
+  success: "✅",
+  warning: "⚠️",
+  error:   "❌",
+  info:    "🔔",
+};
+
+function NotificationToast({ notif, onDismiss }) {
+  const navigate = useNavigate();
+  const icon = TYPE_ICON[notif?.type] ?? "🔔";
+
+  const handleClick = () => {
+    onDismiss();
+    navigate("/dashboard/notifications");
+  };
+
+  return (
+    <div className={`notif-toast notif-toast--${notif?.type ?? "info"}`} role="alert">
+      <span className="notif-toast-icon">{icon}</span>
+      <div className="notif-toast-body" onClick={handleClick}>
+        <p className="notif-toast-title">{notif?.title}</p>
+        <p className="notif-toast-msg">{notif?.message}</p>
+      </div>
+      <button className="notif-toast-close" onClick={onDismiss} aria-label="Dismiss">×</button>
+    </div>
+  );
+}
 
 function UserLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth < 1024);
+  const [toasts, setToasts] = useState([]);
+  const timerRef = useRef({});
+
+  const { liveNotification } = useNotifications();
+
+  useEffect(() => {
+    if (!liveNotification) return;
+    const id = liveNotification._ts;
+    setToasts(prev => [...prev, { ...liveNotification, _toastId: id }]);
+    timerRef.current[id] = setTimeout(() => dismissToast(id), 5000);
+    return () => clearTimeout(timerRef.current[id]);
+  }, [liveNotification]);
+
+  const dismissToast = (id) => {
+    clearTimeout(timerRef.current[id]);
+    setToasts(prev => prev.filter(t => t._toastId !== id));
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -22,8 +68,8 @@ function UserLayout() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const toggleSidebar = useCallback(() => setIsSidebarOpen(prev => !prev), []);
-  const closeSidebar = useCallback(() => setIsSidebarOpen(false), []);
+  const toggleSidebar  = useCallback(() => setIsSidebarOpen(prev => !prev), []);
+  const closeSidebar   = useCallback(() => setIsSidebarOpen(false), []);
   const toggleCollapse = useCallback(() => setIsCollapsed(prev => !prev), []);
 
   return (
@@ -49,7 +95,6 @@ function UserLayout() {
         onToggleCollapse={toggleCollapse}
       />
 
-      {/* Pass both toggle and collapse state */}
       <AppHeader 
         onMenuClick={toggleSidebar} 
         isCollapsed={isCollapsed}
@@ -60,6 +105,18 @@ function UserLayout() {
       </main>
 
       {isSidebarOpen && <div className="sidebar-backdrop" onClick={closeSidebar} />}
+
+      {toasts.length > 0 && (
+        <div className="notif-toast-stack">
+          {toasts.map(t => (
+            <NotificationToast
+              key={t._toastId}
+              notif={t}
+              onDismiss={() => dismissToast(t._toastId)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
