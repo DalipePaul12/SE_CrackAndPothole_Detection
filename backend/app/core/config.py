@@ -25,7 +25,19 @@ class Settings(BaseSettings):
     @property
     def effective_database_url(self) -> str:
         url = self.SUPABASE_DATABASE_URL.strip() if self.SUPABASE_DATABASE_URL.strip() else self.DATABASE_URL.strip()
-        if "sslmode=" not in url:
+        # Ensure asyncpg driver for async operations
+        url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://")
+        url = url.replace("postgres://", "postgresql+asyncpg://")
+        if "postgresql://" in url and "+asyncpg" not in url and "+psycopg2" not in url:
+            url = url.replace("postgresql://", "postgresql+asyncpg://")
+        # For Replit's internal helium DB, disable SSL (it's local/internal)
+        if "helium" in url or "sslmode=disable" in url:
+            url = url.replace("?sslmode=require", "").replace("&sslmode=require", "")
+            url = url.replace("?ssl=require", "").replace("&ssl=require", "")
+            if "sslmode=" not in url and "ssl=" not in url:
+                separator = "&" if "?" in url else "?"
+                url = f"{url}{separator}sslmode=disable"
+        elif "sslmode=" not in url and "ssl=" not in url:
             separator = "&" if "?" in url else "?"
             url = f"{url}{separator}sslmode=require"
         return url
@@ -41,8 +53,8 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     AI_ENABLED: bool = True
-    POTHOLE_MODEL_PATH: str = str(BASE_DIR /"Pothole_best.pt")
-    CRACK_MODEL_PATH: str = str(BASE_DIR /"Crack_best.pt")
+    POTHOLE_MODEL_PATH: str = str(BASE_DIR /  "Pothole_best.pt")
+    CRACK_MODEL_PATH: str = str(BASE_DIR /  "Crack_best.pt")
     AI_CONFIDENCE_THRESHOLD: float = 0.35
     AI_FAKE_DETECTION_ENABLED: bool = True
     HF_API_TOKEN: Optional[str] = None
@@ -89,22 +101,44 @@ class Settings(BaseSettings):
                 seen.add(origin)
                 merged.append(origin)
 
-        for dev_origin in ("http://localhost:5173", "http://127.0.0.1:5173"):
+        for dev_origin in (
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:5000",
+            "http://127.0.0.1:5000",
+        ):
             if dev_origin not in seen:
                 merged.append(dev_origin)
 
         self.cors_origins = merged
 
+        # Resolve relative model paths against BASE_DIR so they work
+        # regardless of the working directory uvicorn is launched from.
+        def _resolve(path_str: str) -> str:
+            p = Path(path_str)
+            if not p.is_absolute():
+                p = BASE_DIR / p
+            return str(p.resolve())
+
+        self.POTHOLE_MODEL_PATH = _resolve(self.POTHOLE_MODEL_PATH)
+        self.CRACK_MODEL_PATH   = _resolve(self.CRACK_MODEL_PATH)
+
         if self.AI_ENABLED:
-            for label, path_str in (
+            for label, resolved in (
                 ("Pothole", self.POTHOLE_MODEL_PATH),
                 ("Crack",   self.CRACK_MODEL_PATH),
             ):
-                if not Path(path_str).exists():
+                if not Path(resolved).exists():
                     logger.warning(
-                        "[CONFIG] %s model not found at '%s'. "
-                        "AI endpoints will fail until the file is placed there.",
-                        label, path_str,
+                        "\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        " MISSING MODEL FILE: %s\n"
+                        " Expected location : %s\n"
+                        " Action required   : Place the .pt weight file at\n"
+                        "   the path above, then restart the server.\n"
+                        " While missing, all ML/AI endpoints will return 503.\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                        label, resolved,
                     )
 
         return self

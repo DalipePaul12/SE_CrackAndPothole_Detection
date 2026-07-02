@@ -1,19 +1,60 @@
-import os
 import requests
 import time
-from ultralytics import YOLO
+from pathlib import Path
 from app.core.config import settings
 
-try:
-    pothole_model = YOLO(settings.POTHOLE_MODEL_PATH)
-    crack_model = YOLO(settings.CRACK_MODEL_PATH)
-    print("YOLOv11 Models Loaded")
-except Exception as e:
-    print(f"YOLO Error: {e}")
-    pothole_model = None
-    crack_model = None
-
 HF_API_URL = "https://api-inference.huggingface.co/models/dima806/deepfake_vs_real_image_detection"
+
+_pothole_model = None
+_crack_model = None
+
+
+def _get_models():
+    """Lazy-load YOLO models on first use. Returns (pothole_model, crack_model).
+    Either may be None if the weight file is missing or AI is disabled."""
+    global _pothole_model, _crack_model
+
+    if _pothole_model is not None or _crack_model is not None:
+        return _pothole_model, _crack_model
+
+    if not settings.AI_ENABLED:
+        return None, None
+
+    try:
+        from ultralytics import YOLO
+    except ImportError:
+        print("ultralytics not installed — YOLO inference unavailable.")
+        return None, None
+
+    pothole_path = Path(settings.POTHOLE_MODEL_PATH)
+    crack_path = Path(settings.CRACK_MODEL_PATH)
+
+    if pothole_path.exists():
+        try:
+            _pothole_model = YOLO(str(pothole_path))
+            print(f"Pothole model loaded from {pothole_path}")
+        except Exception as e:
+            print(f"Failed to load pothole model: {e}")
+    else:
+        print(
+            f"[ai_fake_detector] Pothole model not found at '{pothole_path.resolve()}'. "
+            "Place the .pt file there and restart the server."
+        )
+
+    if crack_path.exists():
+        try:
+            _crack_model = YOLO(str(crack_path))
+            print(f"Crack model loaded from {crack_path}")
+        except Exception as e:
+            print(f"Failed to load crack model: {e}")
+    else:
+        print(
+            f"[ai_fake_detector] Crack model not found at '{crack_path.resolve()}'. "
+            "Place the .pt file there and restart the server."
+        )
+
+    return _pothole_model, _crack_model
+
 
 def analyze_image(image_path: str):
     result = {
@@ -30,12 +71,12 @@ def analyze_image(image_path: str):
         try:
             print("Sending image to Hugging Face...")
             headers = {"Authorization": f"Bearer {settings.HF_API_TOKEN}"}
-            
+
             with open(image_path, "rb") as f:
                 image_data = f.read()
 
             response = requests.post(HF_API_URL, headers=headers, data=image_data)
-            
+
             if response.status_code == 503:
                 print("Hugging Face model is asleep. Waiting 15 seconds to wake it up...")
                 time.sleep(15)
@@ -45,27 +86,27 @@ def analyze_image(image_path: str):
             if response.status_code == 200:
                 fake_analysis = response.json()
                 print(f"HF RAW RESPONSE: {fake_analysis}")
-                print(f"HF AI Check Success: {fake_analysis}")
                 artificial_score = 0.0
-                
+
                 for item in fake_analysis:
                     label = item.get('label', '').lower()
                     if label in ['artificial', 'fake', 'ai', 'ai-generated']:
                         artificial_score = item.get('score', 0.0)
                         break
-                
+
                 if artificial_score > 0.70:
                     result["valid"] = False
                     result["is_ai_generated"] = True
                     result["ai_generated_confidence"] = round(artificial_score, 2)
-                    result["reason"] = f"Warning: AI-generated image ({round(artificial_score*100)}%)."
+                    result["reason"] = f"Warning: AI-generated image ({round(artificial_score * 100)}%)."
             else:
                 print(f"HF Error ({response.status_code}): {response.text}")
-                
+
         except Exception as e:
             print(f"HF Request Failed: {e}")
 
     if result["valid"]:
+        pothole_model, crack_model = _get_models()
         try:
             highest_conf = 0.0
             damage_detected = None
@@ -97,7 +138,7 @@ def analyze_image(image_path: str):
                 result["reason"] = f"Detected: {', '.join(unique_types)}"
             else:
                 result["reason"] = "No road damage detected."
-                
+
         except Exception as e:
             print(f"YOLO Processing Failed: {e}")
 
