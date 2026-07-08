@@ -707,8 +707,15 @@
    STATUS PROGRESS
    ============================================ */
 .sub-status-progress {
+  display: flex;
+  align-items: center;
+  gap: 0;
   padding: 16px 16px 24px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
   margin-bottom: 2rem;
+  overflow-x: auto;
 }
 
 .sub-declined-progress {
