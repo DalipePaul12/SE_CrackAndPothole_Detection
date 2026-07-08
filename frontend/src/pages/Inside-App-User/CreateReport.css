@@ -2766,13 +2766,13 @@ body.dark .reporter-name {
   margin-top: 6px;
 }
 
-.modal-box-confirm .modal-actions {
-  flex-direction: row;
+.modal-box.modal-box-confirm {
+  max-width: min(420px, calc(100vw - 32px)) !important;
+  padding: 14px 18px 12px;
 }
 
-.modal-box-confirm {
-  max-width: min(420px, calc(100vw - 32px));
-  padding: 14px 18px 12px;
+.modal-box-confirm .modal-actions {
+  flex-direction: row;
 }
 
 .modal-box-confirm .modal-icon {
