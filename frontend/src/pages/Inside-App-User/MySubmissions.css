@@ -710,11 +710,11 @@
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 14px 16px;
+  padding: 14px 16px 20px;
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.75rem;
   overflow-x: auto;
 }
 
