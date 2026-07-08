@@ -1,5 +1,5 @@
 /* OVERLAY */
-.csm-overlay {
+.confirm-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
@@ -11,64 +11,71 @@
 }
 
 /* MODAL */
-.csm-modal {
+.confirm-modal {
   background-color: rgb(250, 238, 228);
-  width: 430px;
-  padding: 30px;
-  border-radius: 30px;
+  width: 100%;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 18px 22px 16px;
+  border-radius: 20px;
   text-align: center;
   border: 1px solid #000;
   box-shadow: 0 10px 30px rgba(0,0,0,0.3);
   animation: csm-scaleIn 0.2s ease-in-out;
 }
 
-.csm-modal h3 {
-  margin-bottom: 10px;
+.confirm-modal h3 {
+  margin-bottom: 8px;
   color: #206220;
+  font-size: 1.05rem;
 }
 
-.csm-modal p {
-  font-size: 0.9rem;
+.confirm-modal p {
+  font-size: 0.85rem;
   color: #666;
-  margin-bottom: 25px;
+  margin-bottom: 16px;
+  line-height: 1.4;
 }
 
 /* BUTTON ROW */
-.csm-actions {
+.confirm-actions {
   display: flex;
   justify-content: space-between;
-  gap: 15px;
+  gap: 12px;
 }
 
 /* CANCEL */
-.csm-cancel {
+.confirm-cancel {
   flex: 1;
-  padding: 10px;
-  border-radius: 12px;
+  padding: 8px;
+  border-radius: 10px;
   border: 1px solid #000;
   background: white;
   cursor: pointer;
   transition: 0.2s;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
-.csm-cancel:hover {
+.confirm-cancel:hover {
   background: #aaa;
 }
 
 /* CONFIRM */
-.csm-confirm {
+.confirm-confirm {
   flex: 1;
-  padding: 10px;
-  border-radius: 12px;
+  padding: 8px;
+  border-radius: 10px;
   border: 1px solid #000;
   background: linear-gradient(360deg, #206220, #43a343);
   color: white;
   cursor: pointer;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
-.csm-confirm:hover {
+.confirm-confirm:hover {
   background: linear-gradient(360deg, #184918, #58c758);
 }
 
