@@ -983,7 +983,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 18px;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-bottom: 2px solid transparent;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   background: var(--bg-secondary);
@@ -991,14 +991,12 @@
   font-size: 0.84rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-fast);
   white-space: nowrap;
 }
 
 .sub-modal-tab:hover {
   color: var(--text);
   background: var(--card-hover);
-  border-color: var(--border);
 }
 
 .sub-modal-tab.active {
@@ -1518,16 +1516,3 @@
   .sub-filter-drawer { border-radius: var(--radius-lg); }
 }
 
-/* === DEBUG: tab visibility diagnostic === */
-.sub-modal-tabs {
-  outline: 4px solid red !important;
-  min-height: 60px !important;
-  background: yellow !important;
-}
-.sub-modal-tab {
-  outline: 3px solid blue !important;
-  background: orange !important;
-  color: black !important;
-  min-width: 80px !important;
-  min-height: 40px !important;
-}
