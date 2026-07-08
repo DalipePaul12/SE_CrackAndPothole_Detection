@@ -2770,6 +2770,24 @@ body.dark .reporter-name {
   flex-direction: row;
 }
 
+.modal-box-confirm {
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 14px 18px 12px;
+}
+
+.modal-box-confirm .modal-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+}
+
+.modal-box-confirm .btn-modal-secondary,
+.modal-box-confirm .btn-modal-primary {
+  padding: 6px 12px;
+  min-height: 32px;
+  font-size: 11px;
+}
+
 .btn-modal-secondary {
   flex: 1;
   padding: 8px 14px;

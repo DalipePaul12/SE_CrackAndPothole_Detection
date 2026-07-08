@@ -65,6 +65,24 @@ async def notify(
     except Exception:
         logger.exception("Failed to send WebSocket notification to user_id=%d", user_id)
 
+    # ── Send email notification (best-effort, never blocks) ───────────────────
+    try:
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.services.email_service import send_notification_email
+
+        result = await db.execute(select(User.email).where(User.id == user_id))
+        email = result.scalar_one_or_none()
+        if email:
+            await send_notification_email(
+                email=email,
+                title=title,
+                message=message,
+                report_id=report_id,
+            )
+    except Exception:
+        logger.exception("Failed to send notification email to user_id=%d", user_id)
+
     return notif
 
 
@@ -89,6 +107,25 @@ async def notify_background(
             db.add(notif)
             await db.commit()
             logger.info("Background notification created for user_id=%d", user_id)
+
+            # ── Send email notification ─────────────────────────────────
+            try:
+                from sqlalchemy import select
+                from app.models.user import User
+                from app.services.email_service import send_notification_email
+
+                result = await db.execute(select(User.email).where(User.id == user_id))
+                email = result.scalar_one_or_none()
+                if email:
+                    await send_notification_email(
+                        email=email,
+                        title=title,
+                        message=message,
+                        report_id=report_id,
+                    )
+            except Exception:
+                logger.exception("Background email failed for user_id=%d", user_id)
+
     except Exception:
         logger.exception("Background notification failed for user_id=%d", user_id)
 
