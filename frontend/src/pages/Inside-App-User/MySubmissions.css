@@ -1517,3 +1517,17 @@
   .sub-mini-stat { padding: 8px 4px; border-radius: var(--radius-md); }
   .sub-filter-drawer { border-radius: var(--radius-lg); }
 }
+
+/* === DEBUG: tab visibility diagnostic === */
+.sub-modal-tabs {
+  outline: 4px solid red !important;
+  min-height: 60px !important;
+  background: yellow !important;
+}
+.sub-modal-tab {
+  outline: 3px solid blue !important;
+  background: orange !important;
+  color: black !important;
+  min-width: 80px !important;
+  min-height: 40px !important;
+}
