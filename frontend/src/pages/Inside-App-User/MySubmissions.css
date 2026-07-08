@@ -707,15 +707,8 @@
    STATUS PROGRESS
    ============================================ */
 .sub-status-progress {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 14px 16px 20px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  margin-bottom: 1.75rem;
-  overflow-x: auto;
+  padding: 16px 16px 24px;
+  margin-bottom: 2rem;
 }
 
 .sub-declined-progress {
@@ -971,39 +964,42 @@
 
 .sub-modal-tabs {
   display: flex;
-  border-bottom: 1px solid var(--border);
-  margin-top: 1rem;
-  margin-bottom: 1.25rem;
-  gap: 2px;
+  border-bottom: 1px solid var(--border-strong);
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  gap: 6px;
+  padding: 4px;
   overflow-x: auto;
+  min-height: 52px;
+  background: var(--card);
 }
 
 .sub-modal-tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 18px;
-  border: 1px solid var(--border);
-  border-bottom: 2px solid transparent;
+  padding: 10px 20px;
+  border: 1.5px solid var(--border-strong);
+  border-bottom: none;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
-  background: var(--bg-secondary);
-  color: var(--subtext);
-  font-size: 0.84rem;
-  font-weight: 600;
+  background: var(--card-hover);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  min-height: 40px;
+  flex-shrink: 0;
 }
 
 .sub-modal-tab:hover {
-  color: var(--text);
-  background: var(--card-hover);
+  background: var(--primary-subtle);
 }
 
 .sub-modal-tab.active {
+  background: var(--primary-subtle);
+  border-color: var(--primary);
   color: var(--primary);
-  background: var(--card);
-  border-color: var(--border);
-  border-bottom-color: var(--primary);
 }
 
 .sub-tab-badge {
