@@ -982,20 +982,30 @@
   align-items: center;
   gap: 6px;
   padding: 8px 18px;
-  border: none;
-  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--bg-secondary);
   color: var(--subtext);
   font-size: 0.84rem;
   font-weight: 600;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
   transition: all var(--transition-fast);
   white-space: nowrap;
 }
 
-.sub-modal-tab:hover { color: var(--text); }
+.sub-modal-tab:hover {
+  color: var(--text);
+  background: var(--card-hover);
+  border-color: var(--border);
+}
 
-.sub-modal-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.sub-modal-tab.active {
+  color: var(--primary);
+  background: var(--card);
+  border-color: var(--border);
+  border-bottom-color: var(--primary);
+}
 
 .sub-tab-badge {
   background: var(--primary);
