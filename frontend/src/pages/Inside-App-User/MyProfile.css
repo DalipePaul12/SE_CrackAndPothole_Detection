@@ -1118,6 +1118,7 @@ body:not(.dark) .modal-box {
   position: static;
   float: none;
   margin: 0;
+  margin-left: auto;
 }
 
 .modal-close:hover {
@@ -1143,7 +1144,7 @@ body:not(.dark) .modal-box {
 }
 
 /* ── Report Detail Modal ── */
-.report-detail-modal { max-width: 700px; }
+.modal-box.report-detail-modal { max-width: 700px; }
 
 /* Hero image */
 .modal-report-img {
@@ -1389,8 +1390,8 @@ body.dark .rep-total {
   .modal-body { padding: 14px 16px 20px; }
   .modal-detail-grid { grid-template-columns: 1fr; }
 
-  .report-detail-modal { max-width: 100%; }
-  .rep-modal { max-width: 100%; }
+  .modal-box.report-detail-modal { max-width: 100%; }
+  .modal-box.rep-modal { max-width: 100%; }
 }
 
 /* ============================================================
