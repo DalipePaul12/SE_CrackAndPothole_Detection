@@ -710,11 +710,11 @@
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 14px 16px 20px;
+  padding: 14px 16px 28px;
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
-  margin-bottom: 1.75rem;
+  margin-bottom: 2rem;
   overflow-x: auto;
 }
 
@@ -972,6 +972,7 @@
 .sub-modal-tabs {
   display: flex;
   border-bottom: 1px solid var(--border);
+  margin-top: 0.75rem;
   margin-bottom: 1.25rem;
   gap: 2px;
   overflow-x: auto;
@@ -992,6 +993,7 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sub-modal-tab:hover {
@@ -1488,6 +1490,9 @@
   .sub-filter-drawer { width: 100%; right: 0; left: 0; }
   .sub-modal-content { padding: 1.1rem; border-radius: var(--radius-2xl); }
   .sub-modal-header { flex-direction: column; padding-right: 40px; }
+  .sub-status-progress { padding: 12px 14px 24px; margin-bottom: 1.75rem; }
+  .sub-modal-tabs { margin-top: 0.5rem; }
+  .sub-modal-tab { padding: 7px 14px; font-size: 0.78rem; }
   .sub-detail-grid { grid-template-columns: 1fr; }
   .sub-confirm-actions { flex-direction: column; }
   .sub-cancel-btn, .sub-delete-btn { width: 100%; }
@@ -1507,6 +1512,11 @@
   .sub-sort-select { font-size: 0.8rem; min-width: unset; }
   .sub-filter-drawer-select { padding: 8px 28px 8px 12px; font-size: 0.8rem; }
   .sub-filter-drawer-label { font-size: 0.65rem; }
+  .sub-status-progress { padding: 10px 12px 22px; margin-bottom: 1.5rem; }
+  .sub-modal-tabs { margin-top: 0.25rem; }
+  .sub-modal-tab { padding: 6px 12px; font-size: 0.74rem; }
+  .sub-step-label { font-size: 0.6rem; }
+  .sub-progress-step { min-width: 60px; }
 }
 
 @media (max-width: 360px) {
