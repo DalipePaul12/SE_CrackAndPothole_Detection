@@ -8,6 +8,8 @@ CRITICAL FIXES:
    (prevents service from seeing None when auto-assigning)
 2. assigned_to is explicitly committed before service call to avoid session conflicts
 3. Added comprehensive logging for debugging assignment issues
+4. Added POST /{report_id}/summary — Gemini-generated plain-language report
+   summary, owner/admin-only, cached on first successful generation.
 """
 
 from __future__ import annotations
@@ -64,7 +66,7 @@ from app.schemas.report import (
     ReportResponse,
     ReportUpdate,
 )
-from app.services import report_service
+from app.services import report_service, summary_service
 from app.services.notification_service import notify_background
 from app.utils.geo import calculate_distance
 
@@ -167,11 +169,6 @@ def _normalize_status(status_input: ReportStatus | str | None) -> ReportStatus |
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail=f"Status must be a string or ReportStatus enum, got {type(status_input)}",
     )
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# 422 Exception handler — logs exact Pydantic field errors to server stdout
-# ═════════════════════════════════════════════════════════════════════════════
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -309,32 +306,7 @@ async def get_report(
     response = ReportResponse.model_validate(report)
     response.upvote_count = await report_service.get_upvote_count(db, report.id)
     return response
-# backend/app/services/report_service.py
-# Change update_report_status to NOT commit — caller owns the transaction
 
-async def update_report_status(
-    db: AsyncSession,
-    report: Report,
-    data: ReportUpdate,
-    current_user,
-) -> Report:
-    """
-    Apply partial updates to report ORM object only.
-    DOES NOT COMMIT — the calling route handler owns the commit.
-    """
-    if data.status is not None:
-        report.status = data.status
-    if data.decline_reason is not None:
-        report.decline_reason = data.decline_reason
-    if data.assigned_to is not None:
-        report.assigned_to = data.assigned_to
-    if data.requires_admin_review is not None:
-        report.requires_admin_review = data.requires_admin_review
-    if data.review_reason is not None:
-        report.review_reason = data.review_reason
-
-    # ✅ No db.commit() here — route handler commits after all mutations
-    return report
 
 @router.patch("/{report_id}", response_model=ReportResponse)
 async def update_report(
@@ -554,18 +526,18 @@ async def upload_media(
     from app.services.ml_service import run_yolo
     from app.models.enums import DamageType, SeverityLevel
     from app.models.ai_detection_result import AIDetectionResult
-    
+
     try:
         prediction = await asyncio.to_thread(run_yolo, str(file_path))
         logger.info(f"YOLO raw prediction for report {report_id}: {prediction}")
-        
+
         if prediction:
             raw_label = prediction.get("label", "uncertain")
             try:
                 detected_class = DamageType(raw_label)
             except ValueError:
                 detected_class = DamageType.uncertain
-            
+
             raw_severity = prediction.get("severity")
             severity = None
             if raw_severity:
@@ -578,7 +550,7 @@ async def upload_media(
                         f"(normalized: '{normalized_sev}') for report {report_id}. "
                         f"Valid values: {[s.value for s in SeverityLevel]}"
                     )
-            
+
             # Save to AIDetectionResult
             detection = AIDetectionResult(
                 report_id=report_id,
@@ -591,13 +563,13 @@ async def upload_media(
                 inference_time_ms=prediction.get("inference_time_ms", 0),
             )
             db.add(detection)
-            
+
             # Update Report summary
             report.ai_damage_type = detected_class
             report.ai_severity = severity
             report.ai_confidence = prediction.get("confidence")
             attachment.is_processed = True
-            
+
             await db.commit()
             logger.info(
                 f"ML inline complete: report={report_id} | "
@@ -769,3 +741,58 @@ async def get_nearby_cctv(
     ]
     nearby.sort(key=lambda c: c["distance_meters"])
     return nearby
+
+
+# ── AI SUMMARY ────────────────────────────────────────────────────────────────
+
+@router.post("/{report_id}/summary", response_model=ReportResponse)
+@limiter.limit("10/minute")
+async def generate_summary(
+    request: Request,
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate (or return cached) plain-language AI summary of a report using
+    Gemini. Owner or admin only, since this hits a billed external API.
+
+    Idempotent: if report.ai_summary is already set, returns it without
+    calling Gemini again. There is no force-refresh flag yet — add one later
+    if reports need re-summarizing after status/severity changes.
+    """
+    report = await _fetch_report_or_404(db, report_id)
+
+    if report.owner_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to generate a summary for this report.",
+        )
+
+    if report.ai_summary:
+        response = ReportResponse.model_validate(report)
+        response.upvote_count = await report_service.get_upvote_count(db, report.id)
+        return response
+
+    location = ", ".join(filter(None, [report.street_name, report.barangay])) or "Unknown location"
+
+    summary = await summary_service.generate_report_summary(
+        damage_type=_enum_val(report.ai_damage_type) or "unclassified",
+        severity=_enum_val(report.ai_severity) or "unknown",
+        location=location,
+        ai_confidence=report.ai_confidence or 0.0,
+        description=report.description,
+    )
+
+    if summary:
+        report.ai_summary = summary
+        report.ai_summary_generated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(report)
+        logger.info("Generated AI summary for report %d", report_id)
+    else:
+        logger.warning("Summary generation returned no result for report %d", report_id)
+
+    response = ReportResponse.model_validate(report)
+    response.upvote_count = await report_service.get_upvote_count(db, report.id)
+    return response

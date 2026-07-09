@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     AI_FAKE_DETECTION_ENABLED: bool = True
     HF_API_TOKEN: Optional[str] = None
 
+    GROQ_API_KEY: Optional[str] = None
+
     MAIL_USERNAME: str = ""
     MAIL_PASSWORD: str = ""
     MAIL_FROM: str = ""

@@ -1195,6 +1195,82 @@
   line-height: 1.6;
 }
 
+/* ============================================
+   AI SUMMARY CARD (Gemini)
+   ============================================ */
+.sub-ai-summary-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.sub-ai-summary-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.sub-ai-summary-text {
+  font-size: 0.87rem;
+  color: var(--subtext);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.sub-ai-summary-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sub-ai-summary-empty-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+}
+
+.sub-ai-summary-btn {
+  padding: 7px 16px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.sub-ai-summary-btn:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+}
+
+.sub-ai-summary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sub-ai-summary-err {
+  width: 100%;
+  font-size: 0.76rem;
+  color: var(--danger);
+  margin: 6px 0 0;
+}
+
 .sub-decline-reason {
   display: flex;
   align-items: flex-start;
@@ -2009,6 +2085,15 @@
 
   .sub-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sub-ai-summary-empty {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sub-ai-summary-btn {
+    width: 100%;
   }
 
   .sub-confirm-actions {

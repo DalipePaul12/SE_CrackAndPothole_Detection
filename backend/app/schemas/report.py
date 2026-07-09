@@ -47,12 +47,16 @@ class ReportCreate(AppBaseModel):
     is_flagged_fake: bool          = False
     fake_confidence: Optional[float] = Field(0.0, ge=0.0, le=1.0)
 
-    # ── Structured AI validation audit ────────────────────────────────────────
-    ai_validation_status:     Optional[str]   = Field(None, max_length=50)
-    ai_validation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
-    ai_validation_model:      Optional[str]   = Field(None, max_length=100)
+# ── Structured AI validation audit ────────────────────────────────────────
+    ai_validation_status:     Optional[str]   = None
+    ai_validation_confidence: Optional[float] = None
+    ai_validation_model:      Optional[str]   = None
 
-    # ── Capture metadata (angle, distance, device info) ───────────────────────
+    # ── AI-generated summary (Gemini/Groq) ────────────────────────────────────
+    ai_summary:              Optional[str]      = None
+    ai_summary_generated_at: Optional[datetime] = None
+
+    # ── Capture metadata ──────────────────────────────────────────────────────
     capture_metadata: Optional[dict] = None
 
     # ── Admin review flags ────────────────────────────────────────────────────

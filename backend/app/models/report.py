@@ -86,7 +86,9 @@ class Report(Base):
     ai_validation_status     = Column(String(50),  nullable=True)
     ai_validation_confidence = Column(Float,        nullable=True)
     ai_validation_model      = Column(String(100),  nullable=True)
-
+    # ── AI-GENERATED SUMMARY (Gemini) ─────────────────────────────────────────
+    ai_summary              = Column(Text, nullable=True)
+    ai_summary_generated_at = Column(DateTime(timezone=True), nullable=True)
     # ── CAPTURE METADATA (angle, distance, device info) ───────────────────────
     # FIX: Was in schema but missing from ORM.
     capture_metadata = Column(JSON, nullable=True)

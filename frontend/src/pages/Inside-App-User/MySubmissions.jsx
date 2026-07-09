@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import "./MySubmissions.css";
 import { useNavigate } from "react-router-dom";
 import { useReports } from "../../hooks/useReports";
+import { useReportSummary } from "../../hooks/useReportSummary";
 import {
   FileText, LayoutList, Map, Search, X, SlidersHorizontal,
   RotateCcw, AlertTriangle, Image, Video, ThumbsUp,
   ChevronLeft, ChevronRight, CircleCheck, Clock, Wrench,
   Send, FileSearch, Trash2, Pencil, Share2, Bot, ZoomIn,
   MessageSquare, Info, ShieldX, CheckCheck, MapPin, ChevronDown,
+  Sparkles,
 } from "lucide-react";
 
 const BASE_URL  = import.meta.env.VITE_API_URL || "";
@@ -195,6 +197,49 @@ function AITooltip({ report }) {
   );
 }
 
+// ── AI Summary card ────────────────────────────────────────────────────────
+// Shows a cached ai_summary if present; otherwise offers a "Generate" action
+// that hits POST /reports/{id}/summary via useReportSummary. On success it
+// calls onGenerated so the parent can lift the new summary into local state
+// (avoids losing it if the modal is closed before a full refetch happens).
+function AISummaryCard({ report, onGenerated }) {
+  const { summary, loading, error, fetchSummary } = useReportSummary(report.id);
+  const displaySummary = summary ?? report.ai_summary ?? null;
+
+  const handleGenerate = async () => {
+    const ok = await fetchSummary();
+    if (ok) {
+      // fetchSummary sets internal `summary` state already; also bubble up
+      // so MySubmissions can patch its reports list without a full refetch.
+      onGenerated?.(report.id);
+    }
+  };
+
+  if (displaySummary) {
+    return (
+      <div className="sub-ai-summary-card">
+        <p className="sub-ai-summary-label">
+          <Sparkles size={13} aria-hidden="true" /> AI Summary
+        </p>
+        <p className="sub-ai-summary-text">{displaySummary}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sub-ai-summary-card sub-ai-summary-empty">
+      <div className="sub-ai-summary-empty-body">
+        <Sparkles size={16} aria-hidden="true" />
+        <span>Get a plain-language AI summary of this report.</span>
+      </div>
+      <button className="sub-ai-summary-btn" onClick={handleGenerate} disabled={loading}>
+        {loading ? "Generating…" : "Generate Summary"}
+      </button>
+      {error && <p className="sub-ai-summary-err">{error}</p>}
+    </div>
+  );
+}
+
 function ReportTimeline({ report }) {
   const events = useMemo(() => {
     const evts = [{ label: "Submitted",  date: report.created_at,     Icon: Send }];
@@ -246,7 +291,7 @@ function DeleteConfirmModal({ report, onConfirm, onCancel, loading }) {
   );
 }
 
-function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details" }) {
+function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, initialTab = "details" }) {
   const [comments, setComments]           = useState([]);
   const [lightboxSrc, setLightboxSrc]     = useState(null);
   const [imgErr1, setImgErr1]             = useState(false);
@@ -418,6 +463,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, initialTab = "details"
                     <p>{report.description}</p>
                   </div>
                 )}
+
+                <AISummaryCard report={report} onGenerated={onSummaryGenerated} />
 
                 <AITooltip report={report} />
 
@@ -854,8 +901,8 @@ function MySubmissions() {
   const [viewMode, setViewMode]         = useState("list");
   const searchRef = useRef(null);
 
-  const { reports, loading, error, page, setPage, total, refetch } = useReports({ 
-    mine: true  
+  const { reports, loading, error, page, setPage, total, refetch } = useReports({
+    mine: true
   });
 
   useEffect(() => {
@@ -931,6 +978,14 @@ function MySubmissions() {
     declined:   reports.filter((r) => r.status === "DECLINED").length,
   }), [reports]);
 
+  // Called after AISummaryCard successfully generates a summary. We don't
+  // have the summary text itself here (it lives in the hook's local state),
+  // so we just refetch the list in the background to keep `reports` in sync
+  // for the next time this report is opened or rendered in the table/cards.
+  const handleSummaryGenerated = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
   return (
     <>
       <main className="submissions-page">
@@ -960,11 +1015,11 @@ function MySubmissions() {
                     <LayoutList size={15} aria-hidden="true" /> List
                   </button>
                   <button
-                    className={`sub-view-btn ${viewMode === "" ? "active" : ""}`}
+                    className={`sub-view-btn ${viewMode === "map" ? "active" : ""}`}
                     onClick={() => setViewMode("map")}
                     aria-pressed={viewMode === "map"}
                   >
-                    <Map size={15} aria-hidden="true" /> 
+                    <Map size={15} aria-hidden="true" /> Map
                   </button>
                 </div>
               </div>
@@ -1115,6 +1170,7 @@ function MySubmissions() {
           onClose={() => { setSelectedReport(null); setInitialTab("details"); }}
           onDelete={() => refetch()}
           onEdit={(r) => console.log("Edit:", r.id)}
+          onSummaryGenerated={handleSummaryGenerated}
           initialTab={initialTab}
         />
       )}

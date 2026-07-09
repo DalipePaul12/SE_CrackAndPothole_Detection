@@ -239,3 +239,8 @@ export async function deleteNotification(notificationId) {
   const res = await api.delete(`/notifications/${notificationId}`);
   return { success: res?.success ?? true, data: null, error: res?.error ?? null };
 }
+
+export async function generateReportSummary(reportId) {
+  const res = await api.post(`/reports/${reportId}/summary`);
+  return unwrap(res);
+}
