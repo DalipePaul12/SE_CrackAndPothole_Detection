@@ -1121,14 +1121,15 @@
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 24px 28px 32px;
+  padding: 24px 32px 32px 28px;
   background: var(--card);
   transition: background 0.3s ease;
   min-height: 0;
+  scrollbar-gutter: stable;
 }
 
-.modal-content-area::-webkit-scrollbar       { width: 5px; }
-.modal-content-area::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
+.modal-content-area::-webkit-scrollbar       { width: 6px; }
+.modal-content-area::-webkit-scrollbar-track { background: transparent; margin: 8px 0; }
 .modal-content-area::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 100px; }
 .modal-content-area::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 .modal-content-area { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
@@ -1152,27 +1153,25 @@
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  align-items: start;
+  gap: 16px;
+  align-items: stretch;
 }
 
 .detail-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 20px 22px;
+  padding: 18px 20px;
   transition: background 0.3s ease, border-color 0.3s ease;
   min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: 100%;
   box-sizing: border-box;
 }
 
 .assign-card {
-  grid-column: 1 / -1;
-  height: auto;
+  margin-top: 0;
 }
 
 .detail-card-title {
@@ -1203,15 +1202,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
+  padding: 9px 0;
   font-size: 0.875rem;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
   min-width: 0;
 }
 
 .detail-row:last-child { border-bottom: none; padding-bottom: 0; }
-.detail-row > span:first-child { color: var(--subtext); flex-shrink: 0; font-size: 0.875rem; font-weight: 400; }
+.detail-row > span:first-child { color: var(--subtext); flex-shrink: 0; font-size: 0.82rem; font-weight: 400; }
 .detail-row > strong,
 .detail-row > span:last-child  { text-align: right; font-size: 0.875rem; color: var(--text); word-break: break-word; min-width: 0; font-weight: 600; }
 
@@ -1813,10 +1812,10 @@
   .modal-hdr { padding: 18px 20px 14px; }
   .modal-tabs { padding: 0 16px; }
   .tab-btn { padding: 12px 14px; font-size: 0.84rem; gap: 6px; }
-  .modal-content-area { padding: 18px 20px 24px; }
-  .detail-grid { grid-template-columns: 1fr; gap: 12px; }
+  .modal-content-area { padding: 18px 24px 24px 20px; }
+  .detail-grid { grid-template-columns: 1fr; gap: 14px; }
   .media-grid  { grid-template-columns: 1fr; gap: 12px; }
-  .detail-card { height: auto; }
+  .detail-card { padding: 16px 18px; }
   .status-action-btns { flex-direction: column; }
   .status-action-btn  { width: 100%; min-width: unset; }
   .workflow-track     { padding: 14px 10px; }
@@ -1855,8 +1854,9 @@
   .modal-hdr { padding: 14px 16px 12px; }
   .modal-tabs { padding: 0 12px; }
   .tab-btn { padding: 10px 11px; font-size: 0.8rem; gap: 5px; }
-  .modal-content-area { padding: 14px 16px 20px; }
-  .detail-card { padding: 16px 16px; }
+  .modal-content-area { padding: 14px 20px 20px 16px; }
+  .detail-grid { grid-template-columns: 1fr; gap: 12px; }
+  .detail-card { padding: 14px 16px; }
   .detail-card-title { margin-bottom: 10px; padding-bottom: 10px; }
   .detail-row { padding: 8px 0; font-size: 0.82rem; }
   .modal-id { font-size: 1.05rem; }

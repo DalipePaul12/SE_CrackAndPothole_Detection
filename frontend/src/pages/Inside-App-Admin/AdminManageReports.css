@@ -853,18 +853,18 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
 .modal-content {
   background: var(--card);
   width: 100%;
-  /* CHANGED: cap width so it never exceeds viewport minus overlay padding */
   max-width: min(860px, calc(100vw - 48px));
   max-height: 90vh;
   overflow-y: auto;
   border-radius: var(--radius-2xl);
-  padding: 32px;
+  padding: 32px 36px 32px 32px;
   position: relative;
   box-shadow: var(--shadow-xl);
   border: 1px solid var(--border);
   color: var(--text);
   animation: amrUp 0.3s ease;
   transition: background var(--transition-med);
+  scrollbar-gutter: stable;
 }
 
 .modal-content-sm { max-width: min(520px, calc(100vw - 48px)); }
