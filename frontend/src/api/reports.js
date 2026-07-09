@@ -70,10 +70,12 @@ export const submitReport = createReport;
 
 export async function getReports(params = {}) {
   const qs = buildQS({
-    status:    params.status,
-    barangay:  params.barangay,
-    page:      params.page      ?? 1,
-    page_size: params.page_size ?? 200,
+    status:      params.status,
+    barangay:    params.barangay,
+    damage_type: params.damage_type,
+    severity:    params.severity,
+    page:        params.page      ?? 1,
+    page_size:   params.page_size ?? 15,
   });
   const res = await api.get(`/reports${qs}`);
   return unwrap(res);

@@ -195,37 +195,31 @@ function AllReports() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [drawerOpen, setDrawerOpen]     = useState(false);
 
-  const { reports, loading, error, page, setPage, total, refetch } = useReports({
-    mine:     false,
-    status:   activeFilters.status ?? null,
-    barangay: activeFilters.barangay ?? null,
+  const { reports, loading, error, page, setPage, total, pageSize, refetch } = useReports({
+    mine:        false,
+    status:      activeFilters.status      ?? null,
+    barangay:    activeFilters.barangay    ?? null,
+    damage_type: activeFilters.type        ?? null,
+    severity:    activeFilters.severity    ?? null,
   });
 
   const applyFilters = useCallback(() => {
-    setPage(1);
     setActiveFilters({
+      // Backend ReportStatus enum values are lowercase ("pending", "in_progress", …)
       status:   filters.status   !== "All" ? filters.status.toLowerCase()   : null,
+      // DamageType enum values are lowercase ("crack", "pothole")
       type:     filters.type     !== "All" ? filters.type.toLowerCase()     : null,
+      // SeverityLevel enum values are lowercase ("critical", "non_critical")
       severity: filters.severity !== "All" ? filters.severity.toLowerCase() : null,
     });
     setDrawerOpen(false);
-  }, [filters, setPage]);
+  }, [filters]);
 
   const resetFilters = useCallback(() => {
     setFilters({ type: "All", severity: "All", status: "All" });
     setActiveFilters({});
-    setPage(1);
     setDrawerOpen(false);
-  }, [setPage]);
-
-  const filteredReports = reports.filter((r) => {
-    const type     = (r.ai_damage_type ?? "").toLowerCase();
-    const severity = (r.ai_severity    ?? "").toLowerCase();
-    return (
-      (!activeFilters.type     || type     === activeFilters.type) &&
-      (!activeFilters.severity || severity === activeFilters.severity)
-    );
-  });
+  }, []);
 
   const handleRowClick = useCallback((report) => setSelectedReport(report), []);
   const closeModal     = useCallback(() => setSelectedReport(null), []);
@@ -349,8 +343,8 @@ function AllReports() {
               </tr>
             </thead>
             <tbody>
-              {filteredReports.length > 0 ? (
-                filteredReports.map((report) => (
+              {reports.length > 0 ? (
+                reports.map((report) => (
                   <tr
                     key={report.id}
                     onClick={() => handleRowClick(report)}
@@ -399,7 +393,7 @@ function AllReports() {
       </div>
 
       {!loading && (
-        <Pagination page={page} setPage={setPage} total={total} pageSize={10} />
+        <Pagination page={page} setPage={setPage} total={total} pageSize={pageSize} />
       )}
 
       {selectedReport && (

@@ -48,12 +48,15 @@ from app.middleware.auth_middleware import (
     require_admin_or_contractor,
 )
 from app.middleware.rate_limiter import limiter
+from app.models.audit_log import AuditLog
 from app.models.cctv import CCTV
 from app.models.comment import Comment
 from app.models.enums import (
+    DamageType,
     MediaType,
     NotificationType,
     ReportStatus,
+    SeverityLevel,
     UserRole,
 )
 from app.models.report import Report
@@ -251,13 +254,21 @@ async def list_reports(
     request: Request,
     status: ReportStatus | None = Query(None),
     barangay: str | None = Query(None, max_length=100),
+    damage_type: DamageType | None = Query(None),
+    severity: SeverityLevel | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     reports, total = await report_service.list_reports(
-        db, status=status, barangay=barangay, page=page, page_size=page_size,
+        db,
+        status=status,
+        barangay=barangay,
+        damage_type=damage_type,
+        severity=severity,
+        page=page,
+        page_size=page_size,
     )
     results = await _build_report_list(db, reports)
     return ReportListResponse(total=total, page=page, page_size=page_size, results=results)
@@ -352,8 +363,12 @@ async def update_report(
             )
         if report.status not in (ReportStatus.PENDING, ReportStatus.DECLINED):
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only edit a report while it is pending or declined.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Report #{report_id} cannot be edited because its status is "
+                    f"'{report.status.value}'. You can only edit a report while it "
+                    f"is pending or declined."
+                ),
             )
 
         provided = data.model_dump(exclude_unset=True)
@@ -361,7 +376,10 @@ async def update_report(
         if disallowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only edit barangay, street name, and description.",
+                detail=(
+                    f"You are not allowed to modify: {sorted(disallowed)}. "
+                    f"Citizens may only edit barangay, street_name, and description."
+                ),
             )
 
         if "barangay" in provided:
@@ -372,13 +390,22 @@ async def update_report(
             report.description = provided["description"]
         report.updated_at = datetime.now(timezone.utc)
 
+        # ── Audit log: citizen self-edit ──────────────────────────────────────
+        db.add(AuditLog(
+            user_id=current_user.id,
+            action="REPORT_OWNER_EDITED",
+            target_resource="reports",
+            target_id=report_id,
+            details={"edited_fields": sorted(provided.keys())},
+        ))
+
         await db.commit()
         await db.refresh(report)
 
         updated = await _fetch_report_or_404(db, report_id)
         response = ReportResponse.model_validate(updated)
         response.upvote_count = await report_service.get_upvote_count(db, report_id)
-        logger.info("Owner self-edit for report %d by user %d", report_id, current_user.id)
+        logger.info("Owner self-edit: report=%d user=%d fields=%s", report_id, current_user.id, sorted(provided.keys()))
         return response
 
     logger.info(
@@ -478,6 +505,7 @@ async def update_report(
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_report(
     report_id: int,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -487,7 +515,7 @@ async def delete_report(
         UserRole.admin, UserRole.superadmin, UserRole.contractor,
     )
     if not is_privileged:
-        # Owner self-withdraw path: same PENDING/DECLINED-only window as edits.
+        # ── Owner self-withdraw path ──────────────────────────────────────────
         if current_user.id != report.owner_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -495,12 +523,61 @@ async def delete_report(
             )
         if report.status not in (ReportStatus.PENDING, ReportStatus.DECLINED):
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only withdraw a report while it is pending or declined.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Report #{report_id} cannot be withdrawn because its status is "
+                    f"'{report.status.value}'. You can only withdraw a report while it "
+                    f"is pending or declined."
+                ),
             )
+
+    # ── Fetch admin IDs before the row is deleted (needed for notifications) ─
+    # Only relevant for citizen withdrawals; admin deletes don't notify peers.
+    admin_ids: list[int] = []
+    if not is_privileged:
+        admin_result = await db.execute(
+            select(User.id).where(
+                User.role.in_([UserRole.admin, UserRole.superadmin]),
+                User.is_active.is_(True),
+            )
+        )
+        admin_ids = [row[0] for row in admin_result.all()]
+
+        # ── Audit log: citizen self-withdraw ──────────────────────────────────
+        db.add(AuditLog(
+            user_id=current_user.id,
+            action="REPORT_OWNER_WITHDRAWN",
+            target_resource="reports",
+            target_id=report_id,
+            details={
+                "status_at_withdrawal": report.status.value,
+                "barangay": report.barangay,
+                "street_name": report.street_name,
+            },
+        ))
 
     await db.delete(report)
     await db.commit()
+
+    # ── Notify all admins of the citizen withdrawal ───────────────────────────
+    # Done after commit so the notification never blocks or rolls back the delete.
+    if admin_ids:
+        for admin_id in admin_ids:
+            background_tasks.add_task(
+                notify_background,
+                user_id=admin_id,
+                title="Report Withdrawn by Citizen",
+                message=(
+                    f"Report #{report_id} has been withdrawn by its owner "
+                    f"(user #{current_user.id})."
+                ),
+                type=NotificationType.warning,
+                report_id=None,   # row is gone; don't link a dead FK
+            )
+        logger.info(
+            "Citizen withdrawal: report=%d user=%d notified %d admin(s)",
+            report_id, current_user.id, len(admin_ids),
+        )
 
 
 # ── UPLOAD MEDIA ──────────────────────────────────────────────────────────────

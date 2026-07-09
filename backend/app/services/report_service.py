@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.enums import ReportStatus
+from app.models.enums import DamageType, ReportStatus, SeverityLevel
 from app.models.report import Report
 from app.models.report_upvote import ReportUpvote
 from app.schemas.report import ReportCreate, ReportUpdate
@@ -89,6 +89,8 @@ async def list_reports(
     owner_id: int | None = None,
     status: ReportStatus | None = None,
     barangay: str | None = None,
+    damage_type: DamageType | None = None,
+    severity: SeverityLevel | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[Sequence[Report], int]:
@@ -108,6 +110,10 @@ async def list_reports(
         base_q = base_q.where(Report.status == status)
     if barangay is not None:
         base_q = base_q.where(Report.barangay == barangay)
+    if damage_type is not None:
+        base_q = base_q.where(Report.ai_damage_type == damage_type)
+    if severity is not None:
+        base_q = base_q.where(Report.ai_severity == severity)
 
     # Total count — runs against base_q WITHOUT limit/offset
     count_q = select(func.count()).select_from(base_q.subquery())
