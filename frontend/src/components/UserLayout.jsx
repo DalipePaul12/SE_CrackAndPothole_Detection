@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import UserSidebar from "./UserSidebar";
 import AppHeader from "./AppHeader";
+import ChatbotWidget from "./ChatbotWidget";
 import { useNotifications } from "../hooks/useNotifications";
 import "./UserLayout.css";
 
@@ -117,6 +118,8 @@ function UserLayout() {
           ))}
         </div>
       )}
+
+      <ChatbotWidget />
     </div>
   );
 }
