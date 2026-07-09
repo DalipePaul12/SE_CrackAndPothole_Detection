@@ -1,17 +1,20 @@
 import { useState, useRef, useEffect } from "react";
 import { FaComments, FaTimes, FaPaperPlane, FaRobot } from "react-icons/fa";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useChatbot } from "../hooks/useChatbot.js";
 import "./ChatbotWidget.css";
 
-export default function ChatbotWidget() {
+export default function ChatbotWidget({ userName = null, pendingReportCount = null }) {
   const {
     messages,
     loading,
     isOpen,
+    suggestions,
     toggleOpen,
     sendMessage,
     clearChat,
-  } = useChatbot();
+  } = useChatbot(userName, pendingReportCount);
   const [input, setInput] = useState("");
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
@@ -35,6 +38,10 @@ export default function ChatbotWidget() {
     if (!input.trim() || loading) return;
     sendMessage(input.trim());
     setInput("");
+  };
+
+  const handleSuggestion = (text) => {
+    sendMessage(text);
   };
 
   return (
@@ -88,13 +95,22 @@ export default function ChatbotWidget() {
                 className={`chatbot-msg chatbot-msg--${msg.role}`}
               >
                 <div className="chatbot-bubble">
-                  <p className="chatbot-text">{msg.content}</p>
+                  {msg.role === "assistant" ? (
+                    <div className="chatbot-markdown">
+                      <Markdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </Markdown>
+                    </div>
+                  ) : (
+                    <p className="chatbot-text">{msg.content}</p>
+                  )}
                 </div>
               </div>
             ))}
             {loading && (
               <div className="chatbot-msg chatbot-msg--assistant">
                 <div className="chatbot-bubble chatbot-bubble--typing">
+                  <span className="chatbot-typing-label">SnapBot is typing</span>
                   <span className="chatbot-typing-dot" />
                   <span className="chatbot-typing-dot" />
                   <span className="chatbot-typing-dot" />
@@ -102,6 +118,21 @@ export default function ChatbotWidget() {
               </div>
             )}
           </div>
+
+          {/* Suggestion chips */}
+          {suggestions.length > 0 && !loading && (
+            <div className="chatbot-suggestions">
+              {suggestions.map((text, idx) => (
+                <button
+                  key={idx}
+                  className="chatbot-chip"
+                  onClick={() => handleSuggestion(text)}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Input */}
           <form className="chatbot-input-row" onSubmit={handleSubmit}>

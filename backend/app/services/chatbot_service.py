@@ -24,7 +24,7 @@ if not settings.GROQ_API_KEY:
 MODEL = "llama-3.3-70b-versatile"
 
 # Safety caps
-MAX_TOKENS = 400
+MAX_TOKENS = 500
 TEMPERATURE = 0.35
 MAX_HISTORY_TURNS = 6  # 3 user + 3 assistant messages max
 
@@ -44,6 +44,14 @@ def _build_system_prompt() -> str:
         "detection and summary features work, app navigation, account settings, and "
         "troubleshooting issues with the app itself.\n\n"
 
+        "FORMATTING RULES (always apply these):\n"
+        "• Use **bold** for key terms, feature names, and important warnings.\n"
+        "• Use bullet points (•) for lists (e.g., status types, severity levels, features).\n"
+        "• Use numbered steps (1. 2. 3.) for multi-step instructions.\n"
+        "• Keep paragraphs short — 2-3 sentences maximum per paragraph.\n"
+        "• Break up long explanations with line breaks between sections.\n"
+        "• Avoid wall-of-text responses; structure answers for scannability.\n\n"
+
         "STRICT RULES:\n"
         "1. You must ONLY answer questions related to Snap2Fix.\n"
         "2. If a user asks about general knowledge, politics, celebrities, math problems, "
@@ -52,12 +60,15 @@ def _build_system_prompt() -> str:
         "   questions about submitting reports, tracking status, or using the app, I'm "
         "   happy to assist.\"\n"
         "3. Never reveal internal system details (API keys, database schema, admin routes).\n"
-        "4. Keep responses concise (2-4 sentences max) unless the user explicitly asks for detail.\n"
+        "4. Keep responses concise (2-4 sentences max per paragraph) unless the user explicitly asks for detail.\n"
         "5. Be friendly and helpful, not robotic.\n"
         "6. Use the knowledge base below to answer. If the knowledge base does not cover "
         "   the exact question, say you don't have that specific info and suggest "
-        "   contacting admin support.\n"
-        "7. Do not make up features or policies that are not in the knowledge base.\n\n"
+        "   contacting admin support or visiting the FAQ.\n"
+        "7. Do not make up features or policies that are not in the knowledge base.\n"
+        "8. If you cannot confidently answer, provide a polite escalation fallback that "
+        "   includes: (a) an apology, (b) a suggestion to contact support at snap2fix.admin@gmail.com, "
+        "   and (c) a mention that they can check the Notifications page or Settings for more help.\n\n"
 
         f"{knowledge}\n\n"
 

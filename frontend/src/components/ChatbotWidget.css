@@ -41,9 +41,9 @@
   position: absolute;
   bottom: 72px;
   right: 0;
-  width: 360px;
+  width: 380px;
   max-width: calc(100vw - 48px);
-  height: 520px;
+  height: 540px;
   max-height: calc(100vh - 120px);
   background: var(--card);
   border-radius: var(--radius-xl);
@@ -151,7 +151,7 @@
 }
 
 .chatbot-bubble {
-  max-width: 85%;
+  max-width: 90%;
   padding: 10px 14px;
   border-radius: var(--radius-lg);
   font-size: 0.84rem;
@@ -177,12 +177,66 @@
   white-space: pre-wrap;
 }
 
+/* ── Markdown rendering ── */
+.chatbot-markdown {
+  margin: 0;
+}
+
+.chatbot-markdown p {
+  margin: 0 0 0.5em 0;
+}
+
+.chatbot-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.chatbot-markdown ul,
+.chatbot-markdown ol {
+  margin: 0.35em 0;
+  padding-left: 1.2em;
+}
+
+.chatbot-markdown li {
+  margin: 0.15em 0;
+}
+
+.chatbot-markdown strong {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.chatbot-msg--user .chatbot-markdown strong {
+  color: #d0f0d8;
+}
+
+.chatbot-markdown h1,
+.chatbot-markdown h2,
+.chatbot-markdown h3 {
+  font-size: 0.9rem;
+  margin: 0.5em 0 0.3em 0;
+  font-weight: 700;
+}
+
+.chatbot-markdown code {
+  background: rgba(0,0,0,0.06);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
 /* Typing indicator */
 .chatbot-bubble--typing {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 14px 16px;
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+.chatbot-typing-label {
+  font-size: 0.78rem;
+  color: var(--subtext);
+  font-style: italic;
+  margin-right: 4px;
 }
 
 .chatbot-typing-dot {
@@ -195,10 +249,40 @@
 
 .chatbot-typing-dot:nth-child(2) { animation-delay: 0.15s; }
 .chatbot-typing-dot:nth-child(3) { animation-delay: 0.30s; }
+.chatbot-typing-dot:nth-child(4) { animation-delay: 0.45s; }
 
 @keyframes typingBounce {
   0%, 80%, 100% { transform: translateY(0); }
   40% { transform: translateY(-6px); }
+}
+
+/* ── Suggestion chips ── */
+.chatbot-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+  flex-shrink: 0;
+}
+
+.chatbot-chip {
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.chatbot-chip:hover {
+  background: var(--primary-subtle);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 /* ── Input row ── */

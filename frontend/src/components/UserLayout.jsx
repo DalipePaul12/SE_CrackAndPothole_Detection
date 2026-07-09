@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import UserSidebar from "./UserSidebar";
 import AppHeader from "./AppHeader";
 import ChatbotWidget from "./ChatbotWidget";
+import { useAuth } from "../hooks/useAuth";
 import { useNotifications } from "../hooks/useNotifications";
 import "./UserLayout.css";
 
@@ -40,6 +41,7 @@ function UserLayout() {
   const [toasts, setToasts] = useState([]);
   const timerRef = useRef({});
 
+  const { user } = useAuth();
   const { liveNotification } = useNotifications();
 
   useEffect(() => {
@@ -119,7 +121,10 @@ function UserLayout() {
         </div>
       )}
 
-      <ChatbotWidget />
+      <ChatbotWidget
+        userName={user?.full_name || user?.name || null}
+        pendingReportCount={user?.pending_reports_count ?? null}
+      />
     </div>
   );
 }
