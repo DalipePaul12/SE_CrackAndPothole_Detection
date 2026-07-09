@@ -3,6 +3,7 @@ import "./MySubmissions.css";
 import { useNavigate } from "react-router-dom";
 import { useReports } from "../../hooks/useReports";
 import { useReportSummary } from "../../hooks/useReportSummary";
+import { updateReport } from "../../api/reports";
 import {
   FileText, LayoutList, Map, Search, X, SlidersHorizontal,
   RotateCcw, AlertTriangle, Image, Video, ThumbsUp,
@@ -274,12 +275,17 @@ function ReportTimeline({ report }) {
   );
 }
 
-function DeleteConfirmModal({ report, onConfirm, onCancel, loading }) {
+function DeleteConfirmModal({ report, onConfirm, onCancel, loading, error }) {
   return (
     <div className="s2f-modal-overlay" onClick={onCancel} role="dialog" aria-modal="true" aria-labelledby="del-title">
       <div className="sub-confirm-modal" onClick={(e) => e.stopPropagation()}>
         <h3 id="del-title">Withdraw Report?</h3>
         <p>Are you sure you want to withdraw <strong>Report #{report.id}</strong>? This cannot be undone.</p>
+        {error && (
+          <p role="alert" style={{ color: "var(--danger)", fontSize: "0.82rem", fontWeight: 600, margin: "0 0 10px" }}>
+            {error}
+          </p>
+        )}
         <div className="sub-confirm-actions">
           <button className="sub-cancel-btn" onClick={onCancel} disabled={loading}>Cancel</button>
           <button className="sub-delete-btn" onClick={onConfirm} disabled={loading}>
@@ -291,7 +297,7 @@ function DeleteConfirmModal({ report, onConfirm, onCancel, loading }) {
   );
 }
 
-function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, initialTab = "details" }) {
+function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGenerated, initialTab = "details" }) {
   const [comments, setComments]           = useState([]);
   const [lightboxSrc, setLightboxSrc]     = useState(null);
   const [imgErr1, setImgErr1]             = useState(false);
@@ -301,15 +307,70 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
   const [unreadAdmin, setUnreadAdmin]     = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError]     = useState("");
   const [shareMsg, setShareMsg]           = useState("");
 
-  const originalAtt = report.media_attachments?.[0];
-  const proofAtt    = report.media_attachments?.[1];
+  const [isEditing, setIsEditing]     = useState(false);
+  const [editForm, setEditForm]       = useState({ barangay: "", street_name: "", description: "" });
+  const [editSaving, setEditSaving]   = useState(false);
+  const [editError, setEditError]     = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
+  const [liveReport, setLiveReport]   = useState(report);
+
+  useEffect(() => { setLiveReport(report); }, [report]);
+
+  const originalAtt = liveReport.media_attachments?.[0];
+  const proofAtt    = liveReport.media_attachments?.[1];
   const originalUrl = !imgErr1 ? mediaUrl(originalAtt) : null;
   const proofUrl    = !imgErr2 ? mediaUrl(proofAtt)    : null;
-  const isResolved  = report.status === "RESOLVED";
-  const canEdit     = report.status === "PENDING" || report.status === "DECLINED";
-  const canDelete   = report.status === "PENDING" || report.status === "DECLINED";
+  const isResolved  = liveReport.status === "RESOLVED";
+  const canEdit     = liveReport.status === "PENDING" || liveReport.status === "DECLINED";
+  const canDelete   = liveReport.status === "PENDING" || liveReport.status === "DECLINED";
+
+  const startEdit = () => {
+    setEditForm({
+      barangay:    liveReport.barangay ?? "",
+      street_name: liveReport.street_name ?? "",
+      description: liveReport.description ?? "",
+    });
+    setEditError("");
+    setEditSuccess("");
+    setIsEditing(true);
+    setActiveTab("details");
+    onEdit?.(liveReport);
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setEditError("");
+  };
+
+  const saveEdit = async () => {
+    setEditSaving(true);
+    setEditError("");
+    const res = await updateReport(liveReport.id, {
+      barangay:    editForm.barangay.trim(),
+      street_name: editForm.street_name.trim(),
+      description: editForm.description.trim(),
+    });
+    setEditSaving(false);
+    if (!res.success) {
+      setEditError(res.error ?? "Failed to save changes.");
+      return;
+    }
+    // Backend returns status lowercase; this page's UI logic expects the
+    // uppercase form used everywhere else (canEdit/canDelete/labels/progress).
+    const updated = {
+      ...liveReport,
+      ...res.data,
+      status: (res.data?.status ?? liveReport.status)?.toUpperCase?.() ?? liveReport.status,
+    };
+    setLiveReport(updated);
+    setIsEditing(false);
+    setEditSuccess("Report updated successfully.");
+    setTimeout(() => setEditSuccess(""), 3000);
+    onUpdated?.(updated);
+  };
 
   const loadComments = useCallback(() => {
     const token = localStorage.getItem("access_token");
@@ -336,7 +397,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
   useEffect(() => { loadComments(); }, [loadComments]);
 
   const handleShare = () => {
-    const url = `${window.location.origin}/reports/${report.id}`;
+    const url = `${window.location.origin}/reports/${liveReport.id}`;
     navigator.clipboard.writeText(url).then(() => {
       setShareMsg("Link copied!");
       setTimeout(() => setShareMsg(""), 2500);
@@ -345,18 +406,27 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
 
   const handleDelete = async () => {
     setDeleteLoading(true);
+    setDeleteError("");
     try {
       const token = localStorage.getItem("access_token");
-      const res = await fetch(`${BASE_URL}/api/v1/reports/${report.id}`, {
+      const res = await fetch(`${BASE_URL}/api/v1/reports/${liveReport.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        let detail = "Failed to withdraw report.";
+        try {
+          const body = await res.json();
+          detail = body?.detail ?? detail;
+        } catch { /* no JSON body */ }
+        throw new Error(detail);
+      }
       setShowDeleteConfirm(false);
-      onDelete(report.id);
+      onDelete(liveReport.id);
       onClose();
-    } catch {
+    } catch (err) {
       setDeleteLoading(false);
+      setDeleteError(err.message || "Failed to withdraw report.");
     }
   };
 
@@ -377,23 +447,23 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
 
           <div className="sub-modal-header">
             <div>
-              <h2 id="modal-title" className="sub-modal-title">Report #{report.id}</h2>
+              <h2 id="modal-title" className="sub-modal-title">Report #{liveReport.id}</h2>
               <p className="sub-modal-subtitle">
                 <MapPin size={12} style={{ display: "inline", marginRight: 4 }} aria-hidden="true" />
-                {report.barangay ?? report.street_name ?? "—"}
+                {liveReport.barangay ?? liveReport.street_name ?? "—"}
               </p>
             </div>
             <div className="sub-modal-header-right">
-              <span className={`badge badge-${toClass(report.status ?? "")}`}>
-                {STATUS_LABEL[report.status] ?? report.status ?? "—"}
+              <span className={`badge badge-${toClass(liveReport.status ?? "")}`}>
+                {STATUS_LABEL[liveReport.status] ?? liveReport.status ?? "—"}
               </span>
-             {/* <div className="sub-modal-actions-row">
-                {canEdit && (
-                  <button className="sub-modal-action-btn sub-action-edit" onClick={() => onEdit(report)}>
+              <div className="sub-modal-actions-row">
+                {canEdit && !isEditing && (
+                  <button className="sub-modal-action-btn sub-action-edit" onClick={startEdit}>
                     <Pencil size={12} /> Edit
                   </button>
                 )}
-                {canDelete && (
+                {canDelete && !isEditing && (
                   <button className="sub-modal-action-btn sub-action-delete" onClick={() => setShowDeleteConfirm(true)}>
                     <Trash2 size={12} /> Withdraw
                   </button>
@@ -402,11 +472,21 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
                   <Share2 size={12} /> Share
                 </button>
                 {shareMsg && <span className="sub-share-msg">{shareMsg}</span>}
-              </div>*/}
+              </div>
             </div>
           </div>
 
-          <StatusProgress status={report.status} />
+          {editSuccess && (
+            <div className="sub-edit-success" role="status" style={{
+              background: "var(--success-bg, #e6f7ee)", border: "1px solid var(--success-border, #34c98a)",
+              color: "var(--success, #1e8f5f)", borderRadius: "var(--radius-lg)", padding: "10px 14px",
+              margin: "0 0 12px", fontSize: "0.85rem", fontWeight: 600,
+            }}>
+              {editSuccess}
+            </div>
+          )}
+
+          <StatusProgress status={liveReport.status} />
 
           <div className="sub-modal-tabs" role="tablist">
             {TABS.map(({ id, label, Icon, badge }) => (
@@ -426,56 +506,114 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
 
           <div className="sub-modal-body">
 
-            {activeTab === "details" && (
+            {activeTab === "details" && isEditing && (
+              <div className="sub-edit-form">
+                {editError && (
+                  <div className="sub-decline-reason" role="alert" style={{ marginBottom: 12 }}>
+                    <AlertTriangle size={16} aria-hidden="true" />
+                    <div>{editError}</div>
+                  </div>
+                )}
+                <label className="sub-detail-key" htmlFor="edit-barangay" style={{ display: "flex", marginBottom: 6 }}>
+                  <MapPin size={12} aria-hidden="true" /> Barangay
+                </label>
+                <input
+                  id="edit-barangay"
+                  type="text"
+                  className="sub-search-input"
+                  style={{ width: "100%", marginBottom: 14 }}
+                  value={editForm.barangay}
+                  onChange={(e) => setEditForm((f) => ({ ...f, barangay: e.target.value }))}
+                  disabled={editSaving}
+                  maxLength={100}
+                />
+
+                <label className="sub-detail-key" htmlFor="edit-street" style={{ display: "flex", marginBottom: 6 }}>
+                  <MapPin size={12} aria-hidden="true" /> Street name
+                </label>
+                <input
+                  id="edit-street"
+                  type="text"
+                  className="sub-search-input"
+                  style={{ width: "100%", marginBottom: 14 }}
+                  value={editForm.street_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, street_name: e.target.value }))}
+                  disabled={editSaving}
+                  maxLength={200}
+                />
+
+                <label className="sub-detail-key" htmlFor="edit-description" style={{ display: "flex", marginBottom: 6 }}>
+                  <Info size={12} aria-hidden="true" /> Description
+                </label>
+                <textarea
+                  id="edit-description"
+                  className="sub-note-textarea"
+                  style={{ width: "100%", minHeight: 100, marginBottom: 16 }}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                  disabled={editSaving}
+                  maxLength={1000}
+                />
+
+                <div className="sub-confirm-actions">
+                  <button className="sub-cancel-btn" onClick={cancelEdit} disabled={editSaving}>Cancel</button>
+                  <button className="sub-modal-action-btn sub-action-edit" onClick={saveEdit} disabled={editSaving}>
+                    {editSaving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "details" && !isEditing && (
               <div>
                 <div className="sub-detail-grid">
                   {[
-                    { key: "Damage Type", val: report.ai_damage_type ?? "—", Icon: FileText },
-                    { key: "Severity",    val: report.ai_severity ?? "—",    Icon: AlertTriangle },
-                    { key: "Submitted",   val: fmtDate(report.created_at),   Icon: Clock },
-                    { key: "Barangay",    val: report.barangay ?? "—",        Icon: MapPin },
-                    { key: "Street",      val: report.street_name ?? "—",     Icon: MapPin },
-                    ...(report.upvote_count > 0 ? [{ key: "Upvotes", val: `${report.upvote_count} people`, Icon: ThumbsUp }] : []),
+                    { key: "Damage Type", val: liveReport.ai_damage_type ?? "—", Icon: FileText },
+                    { key: "Severity",    val: liveReport.ai_severity ?? "—",    Icon: AlertTriangle },
+                    { key: "Submitted",   val: fmtDate(liveReport.created_at),   Icon: Clock },
+                    { key: "Barangay",    val: liveReport.barangay ?? "—",        Icon: MapPin },
+                    { key: "Street",      val: liveReport.street_name ?? "—",     Icon: MapPin },
+                    ...(liveReport.upvote_count > 0 ? [{ key: "Upvotes", val: `${liveReport.upvote_count} people`, Icon: ThumbsUp }] : []),
                   ].map(({ key, val, Icon }) => (
                     <div key={key} className="sub-detail-item">
                       <span className="sub-detail-key"><Icon size={12} aria-hidden="true" />{key}</span>
-                      <span className={`sub-detail-val ${key === "Severity" ? `sev-chip sev-${toClass(report.ai_severity ?? "")}` : ""}`}>
+                      <span className={`sub-detail-val ${key === "Severity" ? `sev-chip sev-${toClass(liveReport.ai_severity ?? "")}` : ""}`}>
                         {val}
                       </span>
                     </div>
                   ))}
-                  {report.ai_confidence != null && (
+                  {liveReport.ai_confidence != null && (
                     <div className="sub-detail-item" style={{ gridColumn: "span 2" }}>
                       <span className="sub-detail-key"><Bot size={12} aria-hidden="true" />AI Confidence</span>
                       <div className="sub-confidence-wrap">
-                        <span className="sub-confidence-text">{(report.ai_confidence * 100).toFixed(1)}%</span>
+                        <span className="sub-confidence-text">{(liveReport.ai_confidence * 100).toFixed(1)}%</span>
                         <div className="sub-confidence-track">
-                          <span className="sub-confidence-fill" style={{ width: `${(report.ai_confidence * 100).toFixed(0)}%` }} />
+                          <span className="sub-confidence-fill" style={{ width: `${(liveReport.ai_confidence * 100).toFixed(0)}%` }} />
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {report.description && (
+                {liveReport.description && (
                   <div className="sub-detail-description">
                     <span className="sub-detail-key"><Info size={12} aria-hidden="true" />Description</span>
-                    <p>{report.description}</p>
+                    <p>{liveReport.description}</p>
                   </div>
                 )}
 
-                <AISummaryCard report={report} onGenerated={onSummaryGenerated} />
+                <AISummaryCard report={liveReport} onGenerated={onSummaryGenerated} />
 
-                <AITooltip report={report} />
+                <AITooltip report={liveReport} />
 
-                {report.status === "DECLINED" && report.decline_reason && (
+                {liveReport.status === "DECLINED" && liveReport.decline_reason && (
                   <div className="sub-decline-reason" role="alert">
                     <ShieldX size={16} aria-hidden="true" />
-                    <div><strong>Decline Reason:</strong> {report.decline_reason}</div>
+                    <div><strong>Decline Reason:</strong> {liveReport.decline_reason}</div>
                   </div>
                 )}
 
-                {report.is_flagged_fake && (
+                {liveReport.is_flagged_fake && (
                   <div className="sub-ai-flag-badge" role="alert">
                     <AlertTriangle size={16} aria-hidden="true" />
                     Flagged as possibly AI-generated — pending admin review
@@ -484,7 +622,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
               </div>
             )}
 
-            {activeTab === "timeline" && <ReportTimeline report={report} />}
+            {activeTab === "timeline" && <ReportTimeline report={liveReport} />}
 
             {activeTab === "media" && (
               <div className="sub-tab-media">
@@ -586,7 +724,6 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
                 </div>
               )}
 
-              <NoteComposer reportId={report.id} onSent={loadComments} />
                 {comments.length > 0 ? (
                   <div className="sub-comments-thread">
                     <p className="sub-thread-label">Thread ({comments.length})</p>
@@ -614,6 +751,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
                     No messages yet. Send a note to start the conversation.
                   </div>
                 )}
+
+                <NoteComposer reportId={report.id} onSent={loadComments} />
               </div>
             )}
           </div>
@@ -626,10 +765,11 @@ function ReportModal({ report, onClose, onDelete, onEdit, onSummaryGenerated, in
 
       {showDeleteConfirm && (
         <DeleteConfirmModal
-          report={report}
+          report={liveReport}
           onConfirm={handleDelete}
-          onCancel={() => setShowDeleteConfirm(false)}
+          onCancel={() => { setShowDeleteConfirm(false); setDeleteError(""); }}
           loading={deleteLoading}
+          error={deleteError}
         />
       )}
     </>
@@ -1169,7 +1309,7 @@ function MySubmissions() {
           report={selectedReport}
           onClose={() => { setSelectedReport(null); setInitialTab("details"); }}
           onDelete={() => refetch()}
-          onEdit={(r) => console.log("Edit:", r.id)}
+          onUpdated={() => refetch()}
           onSummaryGenerated={handleSummaryGenerated}
           initialTab={initialTab}
         />

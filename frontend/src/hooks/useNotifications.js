@@ -18,7 +18,31 @@ export function useNotifications() {
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  const { lastMessage } = useWebSocket("/ws/notifications");
+  // Stable callback — useWebSocket calls this for every inbound JSON event.
+  // Uses functional state updates so it never needs to close over stale state.
+  const handleWsMessage = useCallback((data) => {
+    if (data.event !== "notification") return;
+
+    const newNotif = {
+      id:         data.id,
+      title:      data.title,
+      message:    data.message,
+      type:       data.type,
+      report_id:  data.report_id,
+      is_read:    data.is_read ?? false,
+      created_at: data.created_at ?? new Date().toISOString(),
+    };
+
+    setNotifications((prev) => {
+      // Deduplicate — backend may resend on reconnect
+      if (prev.some((n) => n.id === newNotif.id)) return prev;
+      return [newNotif, ...prev];
+    });
+
+    setLiveNotification({ ...newNotif, _ts: Date.now() });
+  }, []); // empty deps — only uses stable setState updaters
+
+  const { connected: wsConnected } = useWebSocket(handleWsMessage);
 
   const fetchNotifications = useCallback(async () => {
     const token = localStorage.getItem("access_token");
@@ -66,30 +90,7 @@ export function useNotifications() {
     };
   }, [fetchNotifications]);
 
-  useEffect(() => {
-    if (!lastMessage) return;
-    try {
-      const payload = JSON.parse(lastMessage.data);
-      if (payload.event !== "notification") return;
-
-      const newNotif = {
-        id:         payload.id,
-        title:      payload.title,
-        message:    payload.message,
-        type:       payload.type,
-        report_id:  payload.report_id,
-        is_read:    payload.is_read ?? false,
-        created_at: payload.created_at,
-      };
-
-      setNotifications(prev => {
-        if (prev.some(n => n.id === newNotif.id)) return prev;
-        return [newNotif, ...prev];
-      });
-      setLiveNotification({ ...newNotif, _ts: Date.now() });
-    } catch {
-    }
-  }, [lastMessage]);
+  // (WS message handling is done in handleWsMessage above — no extra effect needed)
 
   const markAsRead = useCallback(async (id) => {
     setNotifications((prev) =>
@@ -138,6 +139,7 @@ export function useNotifications() {
     loading,
     error,
     liveNotification,
+    wsConnected,
     markAsRead,
     markAllAsRead,
     remove,

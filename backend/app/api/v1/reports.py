@@ -308,16 +308,26 @@ async def get_report(
     return response
 
 
+# Fields a report owner (non-admin/contractor) is allowed to touch when
+# editing their own PENDING/DECLINED report. Anything else (status,
+# assigned_to, decline_reason, rejection_reason, requires_admin_review,
+# review_reason) stays admin/contractor-only — no exceptions.
+_OWNER_EDITABLE_FIELDS = {"barangay", "street_name", "description"}
+
+
 @router.patch("/{report_id}", response_model=ReportResponse)
 async def update_report(
     report_id: int,
     data: ReportUpdate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_or_contractor),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Update report status and/or assignment.
+    Update report status and/or assignment (admin/contractor), OR let the
+    report owner edit their own barangay/street_name/description while the
+    report is still PENDING or DECLINED (citizen self-edit — status and all
+    admin-only fields remain untouchable for owners).
 
     CRITICAL FIXES:
     1. Normalizes status input (handles both enum and string, case-insensitive)
@@ -328,6 +338,48 @@ async def update_report(
     """
     report = await _fetch_report_or_404(db, report_id)
     owner_id = report.owner_id
+
+    is_privileged = current_user.role in (
+        UserRole.admin, UserRole.superadmin, UserRole.contractor,
+    )
+
+    if not is_privileged:
+        # ── Owner self-edit path: tightly scoped, no status changes ──────
+        if current_user.id != owner_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action.",
+            )
+        if report.status not in (ReportStatus.PENDING, ReportStatus.DECLINED):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only edit a report while it is pending or declined.",
+            )
+
+        provided = data.model_dump(exclude_unset=True)
+        disallowed = set(provided) - _OWNER_EDITABLE_FIELDS
+        if disallowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only edit barangay, street name, and description.",
+            )
+
+        if "barangay" in provided:
+            report.barangay = provided["barangay"]
+        if "street_name" in provided:
+            report.street_name = provided["street_name"]
+        if "description" in provided:
+            report.description = provided["description"]
+        report.updated_at = datetime.now(timezone.utc)
+
+        await db.commit()
+        await db.refresh(report)
+
+        updated = await _fetch_report_or_404(db, report_id)
+        response = ReportResponse.model_validate(updated)
+        response.upvote_count = await report_service.get_upvote_count(db, report_id)
+        logger.info("Owner self-edit for report %d by user %d", report_id, current_user.id)
+        return response
 
     logger.info(
         "PATCH report_id=%d | user_id=%d | raw_status=%s | assigned_to=%s",
@@ -427,9 +479,26 @@ async def update_report(
 async def delete_report(
     report_id: int,
     db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
     report = await _fetch_report_or_404(db, report_id)
+
+    is_privileged = current_user.role in (
+        UserRole.admin, UserRole.superadmin, UserRole.contractor,
+    )
+    if not is_privileged:
+        # Owner self-withdraw path: same PENDING/DECLINED-only window as edits.
+        if current_user.id != report.owner_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action.",
+            )
+        if report.status not in (ReportStatus.PENDING, ReportStatus.DECLINED):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only withdraw a report while it is pending or declined.",
+            )
+
     await db.delete(report)
     await db.commit()
 
@@ -672,13 +741,28 @@ async def decline_report(
     return {"message": "Report declined."}
 
 
+def _assert_can_access_report_comments(report: "Report", current_user: User) -> None:
+    """Only the report owner or admin/contractor/superadmin staff may read or
+    post comments on a report — prevents any authenticated citizen from
+    reading/posting on someone else's report by guessing its id (IDOR)."""
+    is_privileged = current_user.role in (
+        UserRole.admin, UserRole.superadmin, UserRole.contractor,
+    )
+    if not is_privileged and report.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view or comment on this report.",
+        )
+
+
 @router.get("/{report_id}/comments")
 async def get_comments(
     report_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await _fetch_report_or_404(db, report_id)
+    report = await _fetch_report_or_404(db, report_id)
+    _assert_can_access_report_comments(report, current_user)
     result = await db.execute(
         select(Comment)
         .options(selectinload(Comment.user))
@@ -695,11 +779,20 @@ async def add_comment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await _fetch_report_or_404(db, report_id)
+    report = await _fetch_report_or_404(db, report_id)
+    _assert_can_access_report_comments(report, current_user)
+
+    content = data.content.strip()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Comment cannot be empty.",
+        )
+
     comment = Comment(
         report_id=report_id,
         user_id=current_user.id,
-        content=data.content.strip(),
+        content=content,
     )
     db.add(comment)
     await db.commit()

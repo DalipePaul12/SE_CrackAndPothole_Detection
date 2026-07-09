@@ -2,7 +2,7 @@ import "./UserSidebar.css";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useTheme } from "../pages/Contexts/ThemeContext";
-import { useNotifications } from "../hooks/useNotifications";
+import { useNotifications } from "../pages/Contexts/NotificationContext";
 import CreateReport from "../pages/Inside-App-User/CreateReport";
 
 import {

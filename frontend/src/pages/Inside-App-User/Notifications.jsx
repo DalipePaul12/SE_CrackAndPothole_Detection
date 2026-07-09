@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Notifications.css";
-import { useNotifications } from "../../hooks/useNotifications.js";
+import { useNotificationContext } from "../Contexts/NotificationContext.jsx";
 import { getReport } from "../../api/reports";
 
 import {
@@ -311,7 +311,7 @@ export default function Notifications() {
     markAllAsRead,
     remove,
     refetch,
-  } = useNotifications();
+  } = useNotificationContext();
 
   const { toasts, addToast, removeToast } = useToasts();
 

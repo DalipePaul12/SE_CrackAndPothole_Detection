@@ -4,7 +4,7 @@ import UserSidebar from "./UserSidebar";
 import AppHeader from "./AppHeader";
 import ChatbotWidget from "./ChatbotWidget";
 import { useAuth } from "../hooks/useAuth";
-import { useNotifications } from "../hooks/useNotifications";
+import { useNotifications } from "../pages/Contexts/NotificationContext";
 import "./UserLayout.css";
 
 const TYPE_ICON = {

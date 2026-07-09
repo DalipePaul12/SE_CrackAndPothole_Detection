@@ -53,6 +53,7 @@ const SEVERITY_BACKEND = {
 }
 const REALTIME_CONF_THRESHOLD = 0.60;
 const MAX_REC_SECS            = 10;
+const MAX_ANALYSIS_RETRIES    = 3;
 const ANGLE_MIN               = 45;
 const ANGLE_MAX               = 75;
 
@@ -461,6 +462,7 @@ function CreateReport({ onClose }) {
   const [isAnalyzing,      setIsAnalyzing]      = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(null);
   const [analyzeError,     setAnalyzeError]     = useState(null);
+  const [retryCount,       setRetryCount]       = useState(0);
   const [hfStatus,         setHfStatus]         = useState(null);
   const [hfConfidence,     setHfConfidence]     = useState(null);
   const [hfModel,          setHfModel]          = useState(null);
@@ -714,6 +716,13 @@ if (ai_validation && typeof ai_validation === "object") {
     }
   }, [resetAnalysis]);
 
+  // ── Retry handler — re-runs analysis on the same file, tracks attempt count ─
+  const handleRetryAnalysis = useCallback(() => {
+    if (!file || isAnalyzing) return;   // guard: ignore clicks while already running
+    setRetryCount((c) => c + 1);
+    runFullAnalysis(file);
+  }, [file, isAnalyzing, runFullAnalysis]);
+
   // ── Camera helpers (UNCHANGED) ─────────────────────────────────────────────
   const stopCamera = useCallback(() => {
     clearInterval(detectionLoopRef.current);
@@ -809,6 +818,7 @@ if (ai_validation && typeof ai_validation === "object") {
   const capturePhoto = useCallback(async () => {
     if (!videoRef.current || capturing) return;
     setCapturing(true);
+    setRetryCount(0);
     const blob     = await snapFrameBlob(videoRef.current);
     const captured = new File([blob], "snap_capture.jpg", { type: "image/jpeg" });
     setFile(captured);
@@ -831,6 +841,7 @@ if (ai_validation && typeof ai_validation === "object") {
       if (mr._discard) return;
       clearInterval(recordTimerRef.current);
       setIsRecording(false);
+      setRetryCount(0);
       const blob     = new Blob(chunksRef.current, { type: "video/webm" });
       const captured = new File([blob], "snap_video.webm", { type: "video/webm" });
       setFile(captured);
@@ -921,6 +932,7 @@ if (ai_validation && typeof ai_validation === "object") {
   const handleFileChange = useCallback(async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    setRetryCount(0);
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setFormError("");
@@ -933,6 +945,7 @@ if (ai_validation && typeof ai_validation === "object") {
     setFile(null);
     setPreview(null);
     setDisclaimerAccepted(false);
+    setRetryCount(0);
     resetAnalysis();
     if (fileRef.current) fileRef.current.value = "";
     stopCamera(); // ← FIX: ensure camera stream is killed
@@ -1372,13 +1385,35 @@ const showMask = analysisComplete &&
               />
             )}
             {analyzeError && !isAnalyzing && (
-              <p className={
-                damageType === null && analysisComplete && imageType !== "AI-GENERATED"
-                  ? "analyze-error" : "analyze-warning"
-              } role="alert">
-                <FaExclamationTriangle aria-hidden="true" style={{ marginRight: 4 }} />
-                {analyzeError}
-              </p>
+              <div className="analyze-error-block">
+                <p className={
+                  damageType === null && analysisComplete && imageType !== "AI-GENERATED"
+                    ? "analyze-error" : "analyze-warning"
+                } role="alert">
+                  <FaExclamationTriangle aria-hidden="true" style={{ marginRight: 4 }} />
+                  {analyzeError}
+                </p>
+                {file && retryCount < MAX_ANALYSIS_RETRIES ? (
+                  <button
+                    className="btn-retry-analysis"
+                    onClick={handleRetryAnalysis}
+                    type="button"
+                    aria-label={`Retry analysis, ${MAX_ANALYSIS_RETRIES - retryCount} attempts remaining`}
+                  >
+                    <FaRedo aria-hidden="true" />
+                    Retry Analysis
+                    <span className="retry-attempts-left">
+                      {MAX_ANALYSIS_RETRIES - retryCount} left
+                    </span>
+                  </button>
+                ) : file && retryCount >= MAX_ANALYSIS_RETRIES ? (
+                  <p className="retry-exhausted-msg" role="alert">
+                    <FaExclamationCircle aria-hidden="true" style={{ marginRight: 4 }} />
+                    Analysis failed after {MAX_ANALYSIS_RETRIES} retries. Please retake the photo
+                    with better lighting or a clearer angle, then upload again.
+                  </p>
+                ) : null}
+              </div>
             )}
             {aiConfidence !== null && !isAnalyzing && (
               <div className="confidence-bar-wrapper"

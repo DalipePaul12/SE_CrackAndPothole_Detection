@@ -1,19 +1,4 @@
-"""
-backend/app/schemas/report.py
-──────────────────────────────
-Pydantic v2 schemas for Report create / update / response.
 
-FIXES APPLIED:
-  1. Added disclaimer_accepted @field_validator — must be True on create,
-     prevents submitting reports without legal confirmation.
-
-  2. Added DeclineRequest model to replace Form(...) in the decline endpoint,
-     making all mutation endpoints consistently use JSON bodies.
-
-  3. AppBaseModel must have model_config = ConfigDict(from_attributes=True)
-     so model_validate(orm_object) works with SQLAlchemy ORM instances.
-     Added here as a safety net in case base schema is missing it.
-"""
 
 from datetime import datetime
 from typing import List, Optional
@@ -114,6 +99,7 @@ class ReportUpdate(AppBaseModel):
     rejection_reason: Optional[str]          = Field(None, max_length=500)
     barangay:         Optional[str]          = Field(None, max_length=100)
     street_name:      Optional[str]          = Field(None, max_length=200)
+    description:      Optional[str]          = Field(None, max_length=1000)
     assigned_to:      Optional[str]          = Field(None, max_length=200)
 
     # Admin review controls
