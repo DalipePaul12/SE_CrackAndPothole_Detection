@@ -1,0 +1,104 @@
+.notfound-container {
+  font-family: "Poppins", sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  background: linear-gradient(180deg, #1c3f1e, #3b823e);
+  color: whitesmoke;
+}
+
+.notfound-content {
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.notfound-icon {
+  font-size: 3rem;
+  color: whitesmoke;
+  margin-bottom: 1rem;
+  opacity: 0.9;
+}
+
+.notfound-content h1 {
+  font-size: clamp(4rem, 12vw, 7rem);
+  margin: 0;
+  line-height: 1;
+  -webkit-text-stroke: 2px #000000;
+  color: whitesmoke;
+  font-weight: bold;
+}
+
+.notfound-content h2 {
+  font-size: clamp(1.2rem, 3vw, 1.8rem);
+  margin: 0.5rem 0 1rem;
+  font-weight: bold;
+}
+
+.notfound-content p {
+  font-size: clamp(0.9rem, 2vw, 1.05rem);
+  margin-bottom: 2.5rem;
+  opacity: 0.95;
+  line-height: 1.5;
+}
+
+.notfound-buttons {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.notfound-buttons .primary-btn {
+  padding: 0.75rem 2.5rem;
+  background: linear-gradient(0deg, #3b823e, #1c3f1e);
+  box-shadow: 0 2px 4px rgba(1, 48, 32, 0.9);
+  color: white;
+  border: 1px solid rgba(2, 57, 17, 0.532);
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.notfound-buttons .primary-btn:hover {
+  background: linear-gradient(180deg, #3b823e, #1c3f1e);
+  box-shadow: 0 4px 8px rgba(1, 48, 32, 0.9);
+  transform: translateY(-2px);
+}
+
+.notfound-buttons .secondary-btn {
+  padding: 0.75rem 2.5rem;
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.notfound-buttons .secondary-btn:hover {
+  background: linear-gradient(180deg, #ffffff, #8abc8c);
+  color: #063d06;
+  box-shadow: 0 4px 8px rgba(1, 48, 32, 0.9);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 430px) {
+  .notfound-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .notfound-buttons .primary-btn,
+  .notfound-buttons .secondary-btn {
+    width: 100%;
+  }
+}

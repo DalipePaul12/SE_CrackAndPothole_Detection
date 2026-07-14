@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import "./AdminManageRequests.css";
 import { getReports, updateReport } from "../../api/reports";
+import { REPORT_STATUS } from "../../constants/reportStatus";
 import { sendNotification } from "../../api/notifications";
 import {
   Check, X, Mail, Camera, Video, MapPin, CheckCircle, XCircle,
@@ -53,7 +54,7 @@ export default function AdminManageRequests() {
       return;
     }
     const all = res.data?.results ?? [];
-    setReports(all.filter((r) => r.status?.toLowerCase() === "pending"));
+    setReports(all.filter((r) => r.status?.toLowerCase() === REPORT_STATUS.PENDING));
     setLoading(false);
   }, []);
 
@@ -70,7 +71,7 @@ export default function AdminManageRequests() {
 
   const handleConfirm = async (id) => {
     setActionLoading(id + "-confirm");
-    const res = await updateReport(id, { status: "VERIFIED" });
+    const res = await updateReport(id, { status: REPORT_STATUS.VERIFIED });
     if (res.success) {
       setReports(prev => prev.filter(r => r.id !== id));
       if (selectedReport?.id === id) setSelected(null);
@@ -85,7 +86,7 @@ export default function AdminManageRequests() {
   const handleDecline = async (id, reason) => {
     setActionLoading(id + "-decline");
     const res = await updateReport(id, {
-      status:         "DECLINED",
+      status:         REPORT_STATUS.DECLINED,
       decline_reason: reason.trim(),
     });
     if (res.success) {
@@ -116,11 +117,11 @@ export default function AdminManageRequests() {
   };
 
   const handleAssign = async (reportId, assignee) => {
-    const res = await updateReport(reportId, { assigned_to: assignee, status: "ASSIGNED" });
+    const res = await updateReport(reportId, { assigned_to: assignee });
     if (res.success) {
-      setReports(prev => prev.map(r => r.id === reportId ? { ...r, assigned_to: assignee, status: "assigned" } : r));
+      setReports(prev => prev.map(r => r.id === reportId ? { ...r, assigned_to: assignee } : r));
       if (selectedReport?.id === reportId) {
-        setSelected(prev => ({ ...prev, assigned_to: assignee, status: "assigned" }));
+        setSelected(prev => ({ ...prev, assigned_to: assignee }));
       }
       showToast(`Assigned to ${assignee}`);
     } else {
@@ -327,7 +328,7 @@ function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessag
   const mType   = r.media_attachments?.[0]?.media_type;
   const fullUrl = mUrl ? `${base}${mUrl}` : null;
   const mCount  = mediaCount(r);
-  const status  = r.status ?? "pending";
+  const status  = r.status ?? REPORT_STATUS.PENDING;
   const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
 
   const tabs = [

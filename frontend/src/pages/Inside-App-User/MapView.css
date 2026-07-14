@@ -1075,21 +1075,6 @@ html, body { margin: 0; padding: 0; background: var(--mv-bg); }
   flex-wrap: wrap;
   justify-content: center;
 }
-.mv-mock-btn {
-  padding: 0.42rem 1.1rem;
-  background: var(--mv-surface-2);
-  color: var(--mv-primary);
-  border: 1.5px solid var(--mv-primary);
-  border-radius: var(--mv-r-md);
-  font-size: 0.8rem;
-  font-family: var(--mv-font);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.mv-mock-btn:hover { background: var(--mv-primary); color: #fff; }
-.mv-mock-hint { font-size: 0.7rem; color: var(--mv-muted); margin-top: 0.5rem; font-style: italic; }
-
 /* ═══════════════════════════════════════════════
    RESPONSIVE — Tablet (≤ 1024px)
    Panel converts to a bottom sheet.

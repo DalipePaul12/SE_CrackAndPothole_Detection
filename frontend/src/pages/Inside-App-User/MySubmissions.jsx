@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "./MySubmissions.css";
 import { useNavigate } from "react-router-dom";
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { useReports } from "../../hooks/useReports";
 import { useReportSummary } from "../../hooks/useReportSummary";
 import { updateReport } from "../../api/reports";
+import { normalizeStatus } from "../../utils/normalizeStatus";
 import {
   FileText, LayoutList, Map, Search, X, SlidersHorizontal,
   RotateCcw, AlertTriangle, Image, Video, ThumbsUp,
@@ -23,7 +27,40 @@ const STATUS_LABEL  = { PENDING: "Pending", IN_PROGRESS: "In Progress", VERIFIED
 const STATUS_STEPS  = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
 const SEVERITY_ORDER = { critical: 1, non_critical: 0 };
 
-function StatusProgress({ status }) {
+// ── Map marker setup (same visual language as MapView.jsx) ──────────────────
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+const SUB_MAP_CENTER = [14.6615, 120.966];
+
+const makeSubMarkerIcon = (color) =>
+  L.divIcon({
+    html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 54" width="34" height="46">
+      <circle cx="20" cy="20" r="13" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="20" cy="20" r="5.5" fill="#fff" opacity="0.95"/>
+      <path d="M20 35 L13.5 23 Q20 9 26.5 23 Z" fill="${color}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>`,
+    className: "",
+    iconSize:    [34, 46],
+    iconAnchor:  [17, 44],
+    popupAnchor: [0, -46],
+  });
+
+const SUB_MAP_ICONS = {
+  critical:     makeSubMarkerIcon("#ef4444"),
+  non_critical: makeSubMarkerIcon("#f59e0b"),
+  unknown:      makeSubMarkerIcon("#6b7280"),
+};
+
+const getSubMapIcon = (r) =>
+  SUB_MAP_ICONS[(r.ai_severity || "").toLowerCase()] || SUB_MAP_ICONS.unknown;
+
+function StatusProgress({ status: rawStatus }) {
+  const status = normalizeStatus(rawStatus);
   if (status === "DECLINED") {
     return (
       <div className="sub-status-progress sub-declined-progress">
@@ -323,9 +360,10 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
   const proofAtt    = liveReport.media_attachments?.[1];
   const originalUrl = !imgErr1 ? mediaUrl(originalAtt) : null;
   const proofUrl    = !imgErr2 ? mediaUrl(proofAtt)    : null;
-  const isResolved  = liveReport.status === "RESOLVED";
-  const canEdit     = liveReport.status === "PENDING" || liveReport.status === "DECLINED";
-  const canDelete   = liveReport.status === "PENDING" || liveReport.status === "DECLINED";
+  const liveStatus  = normalizeStatus(liveReport.status);
+  const isResolved  = liveStatus === "RESOLVED";
+  const canEdit     = liveStatus === "PENDING" || liveStatus === "DECLINED";
+  const canDelete   = liveStatus === "PENDING" || liveStatus === "DECLINED";
 
   const startEdit = () => {
     setEditForm({
@@ -358,12 +396,13 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
       setEditError(res.error ?? "Failed to save changes.");
       return;
     }
-    // Backend returns status lowercase; this page's UI logic expects the
-    // uppercase form used everywhere else (canEdit/canDelete/labels/progress).
+    // Normalize casing so it matches everywhere else this page compares or
+    // displays status (canEdit/canDelete/labels/progress) — see
+    // src/utils/normalizeStatus.js.
     const updated = {
       ...liveReport,
       ...res.data,
-      status: (res.data?.status ?? liveReport.status)?.toUpperCase?.() ?? liveReport.status,
+      status: normalizeStatus(res.data?.status ?? liveReport.status),
     };
     setLiveReport(updated);
     setIsEditing(false);
@@ -454,8 +493,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
               </p>
             </div>
             <div className="sub-modal-header-right">
-              <span className={`badge badge-${toClass(liveReport.status ?? "")}`}>
-                {STATUS_LABEL[liveReport.status] ?? liveReport.status ?? "—"}
+              <span className={`badge badge-${toClass(liveStatus ?? "")}`}>
+                {STATUS_LABEL[liveStatus] ?? liveStatus ?? "—"}
               </span>
               <div className="sub-modal-actions-row">
                 {canEdit && !isEditing && (
@@ -486,7 +525,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
             </div>
           )}
 
-          <StatusProgress status={liveReport.status} />
+          <StatusProgress status={liveStatus} />
 
           <div className="sub-modal-tabs" role="tablist">
             {TABS.map(({ id, label, Icon, badge }) => (
@@ -606,7 +645,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
 
                 <AITooltip report={liveReport} />
 
-                {liveReport.status === "DECLINED" && liveReport.decline_reason && (
+                {liveStatus === "DECLINED" && liveReport.decline_reason && (
                   <div className="sub-decline-reason" role="alert">
                     <ShieldX size={16} aria-hidden="true" />
                     <div><strong>Decline Reason:</strong> {liveReport.decline_reason}</div>
@@ -780,6 +819,7 @@ function ReportCard({ report, onView }) {
   const [imgError, setImgError] = useState(false);
   const att      = report.media_attachments?.[0];
   const thumbUrl = !imgError ? mediaUrl(att) : null;
+  const status   = normalizeStatus(report.status);
 
   return (
     <div
@@ -802,8 +842,8 @@ function ReportCard({ report, onView }) {
       <div className="sub-card-body">
         <div className="sub-card-top">
           <span className="sub-card-id">#{report.id}</span>
-          <span className={`badge badge-${toClass(report.status ?? "")}`}>
-            {STATUS_LABEL[report.status] ?? "—"}
+          <span className={`badge badge-${toClass(status ?? "")}`}>
+            {STATUS_LABEL[status] ?? "—"}
           </span>
         </div>
         <p className="sub-card-location">{report.barangay ?? report.street_name ?? "—"}</p>
@@ -830,6 +870,7 @@ function TableRow({ report, onView }) {
   const [imgError, setImgError] = useState(false);
   const att      = report.media_attachments?.[0];
   const thumbUrl = !imgError ? mediaUrl(att) : null;
+  const status   = normalizeStatus(report.status);
 
   return (
     <tr
@@ -860,8 +901,8 @@ function TableRow({ report, onView }) {
         </span>
       </td>
       <td>
-        <span className={`badge badge-${toClass(report.status ?? "")}`}>
-          {STATUS_LABEL[report.status] ?? "—"}
+        <span className={`badge badge-${toClass(status ?? "")}`}>
+          {STATUS_LABEL[status] ?? "—"}
         </span>
       </td>
       <td style={{ color: "var(--text-muted)", fontSize: "0.83rem" }}>
@@ -1100,6 +1141,12 @@ function MySubmissions() {
     return arr;
   }, [reports, search, typeFilter, sevFilter, sortBy]);
 
+  // Reports from `processed` that have valid coordinates — used by the map view.
+  const mappable = useMemo(
+    () => processed.filter((r) => r.latitude && r.longitude),
+    [processed]
+  );
+
   const handleStatusChange = useCallback((val) => { setStatusFilter(val); setPage(1); }, [setPage]);
 
   const handleReset = () => {
@@ -1111,11 +1158,11 @@ function MySubmissions() {
 
   const stats = useMemo(() => ({
     total:      reports.length,
-    pending:    reports.filter((r) => r.status === "PENDING").length,
-    verified:   reports.filter((r) => r.status === "VERIFIED").length,
-    inProgress: reports.filter((r) => r.status === "IN_PROGRESS").length,
-    resolved:   reports.filter((r) => r.status === "RESOLVED").length,
-    declined:   reports.filter((r) => r.status === "DECLINED").length,
+    pending:    reports.filter((r) => normalizeStatus(r.status) === "PENDING").length,
+    verified:   reports.filter((r) => normalizeStatus(r.status) === "VERIFIED").length,
+    inProgress: reports.filter((r) => normalizeStatus(r.status) === "IN_PROGRESS").length,
+    resolved:   reports.filter((r) => normalizeStatus(r.status) === "RESOLVED").length,
+    declined:   reports.filter((r) => normalizeStatus(r.status) === "DECLINED").length,
   }), [reports]);
 
   // Called after AISummaryCard successfully generates a summary. We don't
@@ -1239,12 +1286,69 @@ function MySubmissions() {
           )}
 
           {viewMode === "map" && (
-            <div className="sub-map-placeholder">
-              <Map size={42} aria-hidden="true" />
-              <p>Map view coming soon — your reports will appear here as pins.</p>
-              <button className="sub-empty-action" onClick={() => setViewMode("list")}>
-                <LayoutList size={14} /> Back to List
-              </button>
+            <div className="sub-map-view">
+              {loading ? (
+                <div className="sub-map-placeholder">
+                  <div className="skeleton-row" style={{ width: "100%", height: "100%" }} />
+                </div>
+              ) : mappable.length === 0 ? (
+                <div className="sub-map-placeholder">
+                  <Map size={42} aria-hidden="true" />
+                  <p>
+                    {processed.length === 0
+                      ? "No reports match your current filters."
+                      : "None of your reports have location data yet."}
+                  </p>
+                  <button className="sub-empty-action" onClick={() => setViewMode("list")}>
+                    <LayoutList size={14} /> Back to List
+                  </button>
+                </div>
+              ) : (
+                <div className="sub-map-container">
+                  <MapContainer
+                    center={SUB_MAP_CENTER}
+                    zoom={13}
+                    minZoom={11}
+                    zoomControl={false}
+                    className="sub-map-leaflet"
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
+                    />
+                    <ZoomControl position="bottomright" />
+                    {mappable.map((r) => (
+                      <Marker
+                        key={r.id}
+                        position={[parseFloat(r.latitude), parseFloat(r.longitude)]}
+                        icon={getSubMapIcon(r)}
+                      >
+                        <Popup>
+                          <div className="sub-map-popup">
+                            <div className="sub-map-popup-head">
+                              <span>#{r.id}</span>
+                              <span className={`sub-badge sub-badge--${toClass(normalizeStatus(r.status))}`}>
+                                {STATUS_LABEL[normalizeStatus(r.status)] || r.status}
+                              </span>
+                            </div>
+                            <p className="sub-map-popup-type">
+                              {r.ai_damage_type ? r.ai_damage_type.replace(/_/g, " ") : "Unclassified"}
+                              {r.barangay ? ` · ${r.barangay}` : ""}
+                            </p>
+                            <p className="sub-map-popup-date">{fmtDate(r.created_at)}</p>
+                            <button
+                              className="sub-map-popup-btn"
+                              onClick={() => setSelectedReport(r)}
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    ))}
+                  </MapContainer>
+                </div>
+              )}
             </div>
           )}
 

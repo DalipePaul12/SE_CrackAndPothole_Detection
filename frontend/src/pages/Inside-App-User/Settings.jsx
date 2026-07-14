@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Settings.css";
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
 import { useUser } from "../../hooks/useUser";
 import { useTheme } from "../Contexts/ThemeContext";
+import { useAuthContext } from "../Contexts/AuthContext.jsx";
+import { deleteMyAccount } from "../../api/users";
 import {
   Bell,
   Shield,
@@ -75,6 +78,8 @@ function SettingRow({ icon, title, desc, children, danger }) {
 function Settings() {
   const { updatePassword } = useUser();
   const { theme, setTheme } = useTheme();
+  const { logout } = useAuthContext();
+  const navigate = useNavigate();
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
@@ -149,10 +154,18 @@ function Settings() {
     setShowConfirm(true);
   };
 
-  const confirmDelete = () => {
-    showToast("Account deletion request submitted.", "info");
+  const confirmDelete = async () => {
+    const res = await deleteMyAccount();
+    if (!res.success) {
+      showToast(res.error || "Failed to delete account. Please try again.", "error");
+      setShowConfirm(false);
+      setConfirmAction(null);
+      return;
+    }
     setShowConfirm(false);
     setConfirmAction(null);
+    await logout();
+    navigate("/", { replace: true });
   };
 
   useEffect(() => {
@@ -504,7 +517,12 @@ function Settings() {
               ? handleChangePassword
               : confirmAction === "delete"
               ? confirmDelete
-              : () => { showToast("Logged out successfully.", "info"); setShowConfirm(false); }
+              : async () => {
+                  setShowConfirm(false);
+                  setConfirmAction(null);
+                  await logout();
+                  navigate("/", { replace: true });
+                }
           }
         />
       )}

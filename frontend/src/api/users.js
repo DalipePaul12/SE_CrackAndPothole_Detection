@@ -32,3 +32,13 @@ export const changePassword = async (current_password, new_password) => {
     error: res?.error ?? null,
   };
 };
+
+export const deleteMyAccount = async () => {
+  const res = await api.delete("/users/me");
+
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};

@@ -27,6 +27,7 @@ import { MdOutlineLocationOn } from "react-icons/md";
 import { useUser } from "../../hooks/useUser";
 import { analyzeMedia, analyzeVideo } from "../../api/ml";
 import { createReport, uploadMedia } from "../../api/reports";
+import { useOfflineQueue, enqueueOfflineReport } from "../../hooks/useOfflineQueue";
 import PhotoCaptureGuide from "../../components/PhotoCaptureGuide";
 import DetectionOverlay from "../../components/DetectionOverlay";
 
@@ -479,6 +480,10 @@ function CreateReport({ onClose }) {
 
   const [requiresReview, setRequiresReview] = useState(false);
   const [reviewReason,   setReviewReason]   = useState(null);
+  // ── Manual-review fallback: unlocked after MAX_ANALYSIS_RETRIES failed
+  // retries, lets the user bypass the AI-analysis requirement instead of
+  // being stuck unable to submit at all when the AI/YOLO service is down.
+  const [manualReviewOverride, setManualReviewOverride] = useState(false);
   const [isHybrid,        setIsHybrid]        = useState(false);
   const [secondaryDamage, setSecondaryDamage] = useState(null);
   const [detectionNote,   setDetectionNote]   = useState(null);
@@ -496,6 +501,33 @@ function CreateReport({ onClose }) {
   const [submitSuccess,     setSubmitSuccess]     = useState(false);
   const [showDiscardModal,  setShowDiscardModal]  = useState(false);
   const [showSubmitModal,   setShowSubmitModal]   = useState(false);
+
+  // ── Offline queue toasts ─────────────────────────────────────────────────
+  const [offlineToasts, setOfflineToasts] = useState([]);
+  const pushOfflineToast = useCallback((toast) => {
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setOfflineToasts((prev) => [...prev, { id, ...toast }]);
+    setTimeout(() => {
+      setOfflineToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 6000);
+  }, []);
+
+  const { isOnline } = useOfflineQueue({
+    onResult: ({ success, error, reportId, partial }) => {
+      if (success) {
+        pushOfflineToast({ type: "success", message: `Queued report #${reportId} submitted successfully.` });
+      } else if (partial) {
+        // Report was created, but its photo/video still needs to upload —
+        // distinct from a full submission failure.
+        pushOfflineToast({
+          type: "warning",
+          message: `Report #${reportId} was submitted, but the photo/video upload failed. It will keep retrying — the report itself is saved.`,
+        });
+      } else {
+        pushOfflineToast({ type: "error", message: error || "A queued report failed to submit." });
+      }
+    },
+  });
 
   // ── Refs ────────────────────────────────────────────────────────────────────
   const fileRef          = useRef();
@@ -933,6 +965,7 @@ if (ai_validation && typeof ai_validation === "object") {
     const f = e.target.files?.[0];
     if (!f) return;
     setRetryCount(0);
+    setManualReviewOverride(false);
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setFormError("");
@@ -946,25 +979,31 @@ if (ai_validation && typeof ai_validation === "object") {
     setPreview(null);
     setDisclaimerAccepted(false);
     setRetryCount(0);
+    setManualReviewOverride(false);
     resetAnalysis();
     if (fileRef.current) fileRef.current.value = "";
     stopCamera(); // ← FIX: ensure camera stream is killed
   }, [resetAnalysis, stopCamera]);
 
-  // ── Form validation (UNCHANGED) ───────────────────────────────────────────
+  // ── Form validation ────────────────────────────────────────────────────────
+  // manualReviewOverride (unlocked after MAX_ANALYSIS_RETRIES failed retries)
+  // bypasses the AI-analysis requirement so a down AI/YOLO service can't
+  // block the core "submit a report" action entirely.
   const validateForm = useCallback(() => {
     if (!file)        { setFormError("Evidence required: Please upload or capture a photo/video."); return; }
     if (isAnalyzing)  { setFormError("Please wait for AI analysis to complete."); return; }
-    if (analysisComplete && (hfStatus === "error" || imageType === null))
-      { setFormError("AI authenticity check failed or is inconclusive. Please re-upload."); return; }
-    if (analysisComplete && damageType === null)
-      { setFormError("No damage detected. Please upload a clear photo/video of road damage."); return; }
+    if (!manualReviewOverride) {
+      if (analysisComplete && (hfStatus === "error" || imageType === null))
+        { setFormError("AI authenticity check failed or is inconclusive. Please re-upload."); return; }
+      if (analysisComplete && damageType === null)
+        { setFormError("No damage detected. Please upload a clear photo/video of road damage."); return; }
+    }
     if (!barangay)    { setFormError("Please select a Barangay."); return; }
     if (!coords)      { setFormError("GPS coordinates required. Please allow location access."); return; }
     if (!disclaimerAccepted) { setFormError("Please accept the legal disclaimer to proceed."); return; }
     setFormError("");
     setShowSubmitModal(true);
-  }, [file, isAnalyzing, analysisComplete, hfStatus, imageType, damageType, barangay, coords, disclaimerAccepted]);
+  }, [file, isAnalyzing, analysisComplete, hfStatus, imageType, damageType, barangay, coords, disclaimerAccepted, manualReviewOverride]);
 
   // ── Submit (UNCHANGED) ────────────────────────────────────────────────────
   const handleSubmitConfirm = useCallback(async () => {
@@ -972,10 +1011,11 @@ if (ai_validation && typeof ai_validation === "object") {
     setShowSubmitModal(false);
     setIsSubmitting(true);
     setFormError("");
+    let reportPayload = null;
     try {
       const is_flagged = imageType === "AI-GENERATED";
       const isVideo    = file && isVideoFile(file);
-      const reportPayload = {
+      reportPayload = {
         user_id: userId, reporter_name: reporterName,
         latitude: coords.lat, longitude: coords.lng,
         barangay, street_name: streetName || null,
@@ -1002,6 +1042,18 @@ if (ai_validation && typeof ai_validation === "object") {
           distance_method:         "bbox_area_estimation",
         },
       };
+      if (!isOnline) {
+        // ── Offline: queue instead of failing silently ─────────────────────
+        await enqueueOfflineReport(reportPayload, file);
+        pushOfflineToast({
+          type: "info",
+          message: "You're offline — report saved and will submit automatically once you're back online.",
+        });
+        setSubmitSuccess(true);
+        setTimeout(() => onClose(), 2000);
+        return;
+      }
+
       const reportRes = await createReport(reportPayload);
       if (!reportRes.success) throw new Error(reportRes.error);
       const reportId = reportRes.data?.id ?? reportRes.data?.report_id;
@@ -1013,6 +1065,21 @@ if (ai_validation && typeof ai_validation === "object") {
       setSubmitSuccess(true);
       setTimeout(() => onClose(), 2000);
     } catch (err) {
+      // ── Network dropped mid-submit: fall back to the offline queue ────────
+      if (!navigator.onLine && reportPayload) {
+        try {
+          await enqueueOfflineReport(reportPayload, file);
+          pushOfflineToast({
+            type: "info",
+            message: "Connection lost — report saved and will submit automatically once you're back online.",
+          });
+          setSubmitSuccess(true);
+          setTimeout(() => onClose(), 2000);
+          return;
+        } catch {
+          // fall through to generic error handling below
+        }
+      }
       setFormError(err.message || "Submission failed. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -1022,7 +1089,7 @@ if (ai_validation && typeof ai_validation === "object") {
     damageType, severity, aiConfidence, hfConfidence, hfStatus, hfModel,
     requiresReview, reviewReason, isHybrid, secondaryDamage, detectionNote,
     file, onClose, phoneAngle, angleValid, predictionResult,
-    disclaimerAccepted, reporterName, userId,
+    disclaimerAccepted, reporterName, userId, isOnline, pushOfflineToast,
   ]);
 
   // ── Derived values ─────────────────────────────────────────────────────────
@@ -1080,6 +1147,24 @@ const showMask = analysisComplete &&
           aria-label="Close report form">
           <FaTimes />
         </button>
+
+        {!isOnline && (
+          <div className="offline-banner" role="status">
+            <FaExclamationTriangle aria-hidden="true" />
+            <span>You're offline — submitting will save this report and send it automatically once you're back online.</span>
+          </div>
+        )}
+
+        {offlineToasts.length > 0 && (
+          <div className="offline-toast-stack" role="status" aria-live="polite">
+            {offlineToasts.map((t) => (
+              <div key={t.id} className={`offline-toast offline-toast--${t.type}`}>
+                {t.type === "success" ? <FaCheckCircle aria-hidden="true" /> : <FaExclamationTriangle aria-hidden="true" />}
+                <span>{t.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ══ LEFT PANEL ══ */}
         <div className="snap-left">
@@ -1407,11 +1492,35 @@ const showMask = analysisComplete &&
                     </span>
                   </button>
                 ) : file && retryCount >= MAX_ANALYSIS_RETRIES ? (
-                  <p className="retry-exhausted-msg" role="alert">
-                    <FaExclamationCircle aria-hidden="true" style={{ marginRight: 4 }} />
-                    Analysis failed after {MAX_ANALYSIS_RETRIES} retries. Please retake the photo
-                    with better lighting or a clearer angle, then upload again.
-                  </p>
+                  <div className="retry-exhausted-block">
+                    <p className="retry-exhausted-msg" role="alert">
+                      <FaExclamationCircle aria-hidden="true" style={{ marginRight: 4 }} />
+                      Analysis failed after {MAX_ANALYSIS_RETRIES} retries. Please retake the photo
+                      with better lighting or a clearer angle, then upload again.
+                    </p>
+                    {!manualReviewOverride ? (
+                      <button
+                        className="btn-manual-review"
+                        type="button"
+                        onClick={() => {
+                          setManualReviewOverride(true);
+                          setRequiresReview(true);
+                          setReviewReason(
+                            reviewReason ||
+                              "AI analysis unavailable after repeated retries — submitted for manual review"
+                          );
+                          setFormError("");
+                        }}
+                      >
+                        Submit for Manual Review Instead
+                      </button>
+                    ) : (
+                      <p className="manual-review-note" role="status">
+                        Manual review unlocked — an admin will verify this report by hand. You can
+                        now press Submit.
+                      </p>
+                    )}
+                  </div>
                 ) : null}
               </div>
             )}

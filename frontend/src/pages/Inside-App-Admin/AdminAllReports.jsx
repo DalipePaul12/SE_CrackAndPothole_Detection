@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "./AdminAllReports.css";
 import { getReports, updateReport, deleteReport, addComment } from "../../api/reports";
 import { sendNotification } from "../../api/notifications";
+import { REPORT_STATUS } from "../../constants/reportStatus";
+import { getDashboardSummary, getSeverityStats } from "../../api/analytics";
 import {
   Search, X, Download, Check, XCircle, Trash2, Settings, MapPin, ArrowUpRight,
   Loader2, ChevronFirst, ChevronLeft, ChevronRight, ChevronLast, User,
@@ -15,29 +17,29 @@ import {
 const BASE_URL    = import.meta.env.VITE_API_URL || "";
 const PAGE_SIZE   = 20;
 const TYPE_OPTIONS   = ["All", "Crack", "Pothole"];
-const STATUS_OPTIONS = ["All", "PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED", "DECLINED"];
+const STATUS_OPTIONS = ["All", REPORT_STATUS.PENDING, REPORT_STATUS.VERIFIED, REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.RESOLVED, REPORT_STATUS.DECLINED];
 const TEAM_OPTIONS   = ["Unassigned", "Road Team A", "Road Team B", "Maintenance Unit", "Emergency Response"];
 const STATUS_LABELS  = {
-  PENDING:     "Pending",
-  VERIFIED:    "Verified",
-  IN_PROGRESS: "In Progress",
-  RESOLVED:    "Resolved",
-  DECLINED:    "Declined",
+  [REPORT_STATUS.PENDING]:     "Pending",
+  [REPORT_STATUS.VERIFIED]:    "Verified",
+  [REPORT_STATUS.IN_PROGRESS]: "In Progress",
+  [REPORT_STATUS.RESOLVED]:    "Resolved",
+  [REPORT_STATUS.DECLINED]:    "Declined",
 };
 const STATUS_TRANSITIONS = {
-  PENDING:     ["VERIFIED", "DECLINED"],
-  VERIFIED:    ["IN_PROGRESS", "DECLINED"],
-  IN_PROGRESS: ["RESOLVED"],
-  RESOLVED:    [],
-  DECLINED:    [],
+  [REPORT_STATUS.PENDING]:     [REPORT_STATUS.VERIFIED, REPORT_STATUS.DECLINED],
+  [REPORT_STATUS.VERIFIED]:    [REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.DECLINED],
+  [REPORT_STATUS.IN_PROGRESS]: [REPORT_STATUS.RESOLVED],
+  [REPORT_STATUS.RESOLVED]:    [],
+  [REPORT_STATUS.DECLINED]:    [],
 };
-const STATUS_FLOW_ORDER = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
+const STATUS_FLOW_ORDER = [REPORT_STATUS.PENDING, REPORT_STATUS.VERIFIED, REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.RESOLVED];
 
 const NOTIF_TEMPLATES = {
-  VERIFIED:    (r) => ({ title: "Your report has been verified",       message: `Report ${padId(r.id)} at ${location(r)} has been verified by our team.`,                  type: "success" }),
-  IN_PROGRESS: (r) => ({ title: "Repairs are underway",               message: `Work has started on the road damage at ${location(r)} that you reported.`,                type: "info"    }),
-  RESOLVED:    (r) => ({ title: "Your report has been resolved",       message: `The road damage at ${location(r)} has been fully repaired. Thank you for reporting!`,     type: "success" }),
-  DECLINED:    (r, reason) => ({ title: "Your report has been declined",  message: reason ? `Your report was declined: ${reason}` : "Your report was reviewed and declined.", type: "warning" }),
+  [REPORT_STATUS.VERIFIED]:    (r) => ({ title: "Your report has been verified",       message: `Report ${padId(r.id)} at ${location(r)} has been verified by our team.`,                  type: "success" }),
+  [REPORT_STATUS.IN_PROGRESS]: (r) => ({ title: "Repairs are underway",               message: `Work has started on the road damage at ${location(r)} that you reported.`,                type: "info"    }),
+  [REPORT_STATUS.RESOLVED]:    (r) => ({ title: "Your report has been resolved",       message: `The road damage at ${location(r)} has been fully repaired. Thank you for reporting!`,     type: "success" }),
+  [REPORT_STATUS.DECLINED]:    (r, reason) => ({ title: "Your report has been declined",  message: reason ? `Your report was declined: ${reason}` : "Your report was reviewed and declined.", type: "warning" }),
 };
 
 const toClass  = (s = "") => s.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
@@ -66,7 +68,7 @@ const sevWeight = (r) => {
   return map[severity(r).toLowerCase()] ?? 99;
 };
 
-function exportCSV(rows) {
+function exportCSV(rows, label = "page") {
   const headers = ["ID", "Type", "Severity", "AI Conf", "Status", "Location", "Street", "Barangay", "Reporter", "Date"];
   const escape  = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines   = [
@@ -88,7 +90,7 @@ function exportCSV(rows) {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href = url;
-  a.download = `reports_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `reports_${label}_${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -119,6 +121,8 @@ export default function AdminAllReports() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [showFilters,    setShowFilters]    = useState(true);
   const [toast,          setToast]          = useState(null);
+  const [statsData,      setStatsData]      = useState({ critical: 0, pending: 0, resolved: 0 });
+  const [exportAllLoading, setExportAllLoading] = useState(false);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -134,7 +138,8 @@ export default function AdminAllReports() {
     setLoading(true);
     setError(null);
     const params = { page, page_size: PAGE_SIZE };
-    if (filters.status !== "All") params.status = filters.status;
+    if (filters.status   !== "All") params.status   = filters.status;
+    if (filters.barangay !== "All") params.barangay = filters.barangay;
 
     const res = await getReports(params);
     if (!res.success) {
@@ -147,12 +152,17 @@ export default function AdminAllReports() {
     setTotal(res.data?.total ?? 0);
     setRawReports(data);
 
-    const bSet = new Set(["All"]);
-    data.forEach((r) => { if (r.barangay) bSet.add(r.barangay); });
-    setBarangays([...bSet]);
+    // Only rebuild the barangay option list when no barangay filter is active.
+    // This preserves all dropdown options after the user selects one, so they
+    // can still switch to a different barangay without going back to "All" first.
+    if (filters.barangay === "All") {
+      const bSet = new Set(["All"]);
+      data.forEach((r) => { if (r.barangay) bSet.add(r.barangay); });
+      setBarangays([...bSet]);
+    }
 
     setLoading(false);
-  }, [page, filters.status]);
+  }, [page, filters.status, filters.barangay]);
 
   useEffect(() => {
     let data = [...rawReports];
@@ -163,8 +173,7 @@ export default function AdminAllReports() {
       data = data.filter((r) => severity(r).toLowerCase() === filters.severity.toLowerCase());
     if (criticalOnly)
       data = data.filter((r) => severity(r).toLowerCase() === "critical");
-    if (filters.barangay !== "All")
-      data = data.filter((r) => r.barangay === filters.barangay);
+    // barangay is now filtered server-side — removed from client-side pass
     if (filters.dateFrom) {
       const from = new Date(filters.dateFrom);
       data = data.filter((r) => r.created_at && new Date(r.created_at) >= from);
@@ -195,7 +204,7 @@ export default function AdminAllReports() {
       else if (field === "severity")   { av = sevWeight(a);     bv = sevWeight(b);     }
       else if (field === "confidence") { av = confVal(a) ?? -1; bv = confVal(b) ?? -1; }
       else if (field === "status") {
-        const o = { PENDING: 0, VERIFIED: 1, IN_PROGRESS: 2, RESOLVED: 3, DECLINED: 4 };
+        const o = { [REPORT_STATUS.PENDING]: 0, [REPORT_STATUS.VERIFIED]: 1, [REPORT_STATUS.IN_PROGRESS]: 2, [REPORT_STATUS.RESOLVED]: 3, [REPORT_STATUS.DECLINED]: 4 };
         av = o[a.status] ?? 99; bv = o[b.status] ?? 99;
       } else { av = a[field] ?? ""; bv = b[field] ?? ""; }
       if (av < bv) return dir === "asc" ? -1 : 1;
@@ -207,6 +216,92 @@ export default function AdminAllReports() {
   }, [rawReports, filters, dSearch, sort, criticalOnly]);
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
+
+  // ── Global summary stats (from analytics endpoints, not the current page) ──
+  const fetchStats = useCallback(async () => {
+    const [summary, sev] = await Promise.all([getDashboardSummary(), getSeverityStats()]);
+    if (summary.success && sev.success) {
+      setStatsData({
+        critical: sev.data?.critical    ?? 0,
+        pending:  summary.data?.pending  ?? 0,
+        resolved: summary.data?.resolved ?? 0,
+      });
+    }
+  }, []);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  // ── Export All: fetches every page of the active server-side filters ──────
+  const exportAll = useCallback(async () => {
+    setExportAllLoading(true);
+    try {
+      const params = {};
+      if (filters.status   !== "All") params.status   = filters.status;
+      if (filters.barangay !== "All") params.barangay = filters.barangay;
+
+      // First page at max server page_size (100) to get the total count
+      const first = await getReports({ ...params, page: 1, page_size: 100 });
+      if (!first.success) {
+        showToast("Export failed: " + (first.error ?? "Unknown error"), "error");
+        return;
+      }
+
+      const serverTotal = first.data?.total ?? 0;
+      const allRows = [...(first.data?.results ?? [])];
+
+      // Fetch remaining pages in parallel (backend max page_size is 100)
+      if (serverTotal > 100) {
+        const pageCount = Math.ceil(serverTotal / 100);
+        const pages = await Promise.all(
+          Array.from({ length: pageCount - 1 }, (_, i) =>
+            getReports({ ...params, page: i + 2, page_size: 100 })
+          )
+        );
+        pages.forEach((r) => {
+          if (r.success) allRows.push(...(r.data?.results ?? []));
+        });
+      }
+
+      // Apply active client-side filters so the export matches what the admin sees
+      let filtered = allRows;
+      if (filters.type !== "All")
+        filtered = filtered.filter((r) => damageType(r).toLowerCase() === filters.type.toLowerCase());
+      if (filters.severity !== "All")
+        filtered = filtered.filter((r) => severity(r).toLowerCase() === filters.severity.toLowerCase());
+      if (criticalOnly)
+        filtered = filtered.filter((r) => severity(r).toLowerCase() === "critical");
+      if (filters.dateFrom) {
+        const from = new Date(filters.dateFrom);
+        filtered = filtered.filter((r) => r.created_at && new Date(r.created_at) >= from);
+      }
+      if (filters.dateTo) {
+        const to = new Date(filters.dateTo);
+        to.setHours(23, 59, 59);
+        filtered = filtered.filter((r) => r.created_at && new Date(r.created_at) <= to);
+      }
+      filtered = filtered.filter((r) => {
+        const c = confVal(r);
+        return c === null || (c >= filters.confMin && c <= filters.confMax);
+      });
+      if (dSearch) {
+        const q = dSearch.toLowerCase();
+        filtered = filtered.filter((r) =>
+          padId(r.id).toLowerCase().includes(q) ||
+          (r.street_name ?? "").toLowerCase().includes(q) ||
+          (r.barangay ?? "").toLowerCase().includes(q) ||
+          location(r).toLowerCase().includes(q) ||
+          (r.owner?.full_name ?? "").toLowerCase().includes(q)
+        );
+      }
+
+      exportCSV(filtered, "all");
+      showToast(`Exported ${filtered.length} report${filtered.length !== 1 ? "s" : ""}`);
+    } catch {
+      showToast("Export failed.", "error");
+    } finally {
+      setExportAllLoading(false);
+    }
+  }, [filters, criticalOnly, dSearch]);
 
   const toggleSort = (field) =>
     setSort((p) => p.field === field
@@ -229,7 +324,7 @@ export default function AdminAllReports() {
     setActionLoading((p) => ({ ...p, [reportId]: true }));
 
     const payload = { status: newStatus };
-    if (newStatus === "DECLINED" && declineReason) payload.decline_reason = declineReason;
+    if (newStatus === REPORT_STATUS.DECLINED && declineReason) payload.decline_reason = declineReason;
 
     const res = await updateReport(reportId, payload);
     if (res.success) {
@@ -247,7 +342,7 @@ export default function AdminAllReports() {
       if (report?.owner?.id) {
         const tmplFn = NOTIF_TEMPLATES[newStatus];
         if (tmplFn) {
-          const notif = newStatus === "DECLINED"
+          const notif = newStatus === REPORT_STATUS.DECLINED
             ? tmplFn(report, declineReason)
             : tmplFn(report);
           await sendNotification({ user_id: report.owner.id, report_id: reportId, ...notif });
@@ -296,11 +391,13 @@ export default function AdminAllReports() {
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   })();
 
+  // Stats come from the analytics endpoints (global totals), not the current page.
+  // `total` is still from the API response and reflects active status/barangay filters.
   const stats = {
     total:    total,
-    critical: rawReports.filter((r) => severity(r).toLowerCase() === "critical").length,
-    pending:  rawReports.filter((r) => r.status === "PENDING").length,
-    resolved: rawReports.filter((r) => r.status === "RESOLVED").length,
+    critical: statsData.critical,
+    pending:  statsData.pending,
+    resolved: statsData.resolved,
   };
 
   return (
@@ -356,8 +453,17 @@ export default function AdminAllReports() {
             <button className="btn-filter-toggle" onClick={() => setShowFilters((p) => !p)}>
               <Settings size={16} /> Filters {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
-            <button className="btn-export" onClick={() => exportCSV(reports)}>
-              <Download size={16} /> Export CSV
+            <button className="btn-export" onClick={() => exportCSV(reports, "page")}>
+              <Download size={16} /> Export Page
+            </button>
+            <button
+              className="btn-export btn-export--all"
+              onClick={exportAll}
+              disabled={exportAllLoading}
+            >
+              {exportAllLoading
+                ? <><Loader2 size={16} className="spin" /> Exporting…</>
+                : <><Download size={16} /> Export All</>}
             </button>
           </div>
         </div>
@@ -438,10 +544,10 @@ export default function AdminAllReports() {
           <div className="aar-bulk-bar">
             <span className="bulk-count"><strong>{selectedIds.size}</strong> selected</span>
             <div className="bulk-actions">
-              <button onClick={() => bulkAction("VERIFIED")}    disabled={bulkLoading} className="bulk-btn bulk-verify"><Check size={16} /> Verify</button>
-              <button onClick={() => bulkAction("IN_PROGRESS")} disabled={bulkLoading} className="bulk-btn bulk-progress"><Wrench size={16} /> In Progress</button>
-              <button onClick={() => bulkAction("RESOLVED")}    disabled={bulkLoading} className="bulk-btn bulk-resolve"><CheckCircle size={16} /> Resolve</button>
-              <button onClick={() => bulkAction("DECLINED")}    disabled={bulkLoading} className="bulk-btn bulk-decline"><XCircle size={16} /> Decline</button>
+              <button onClick={() => bulkAction(REPORT_STATUS.VERIFIED)}    disabled={bulkLoading} className="bulk-btn bulk-verify"><Check size={16} /> Verify</button>
+              <button onClick={() => bulkAction(REPORT_STATUS.IN_PROGRESS)} disabled={bulkLoading} className="bulk-btn bulk-progress"><Wrench size={16} /> In Progress</button>
+              <button onClick={() => bulkAction(REPORT_STATUS.RESOLVED)}    disabled={bulkLoading} className="bulk-btn bulk-resolve"><CheckCircle size={16} /> Resolve</button>
+              <button onClick={() => bulkAction(REPORT_STATUS.DECLINED)}    disabled={bulkLoading} className="bulk-btn bulk-decline"><XCircle size={16} /> Decline</button>
               <button onClick={() => bulkAction("delete")}      disabled={bulkLoading} className="bulk-btn bulk-delete"><Trash2 size={16} /> Delete</button>
             </div>
             <button className="bulk-cancel" onClick={() => setSelectedIds(new Set())}><X size={16} /> Cancel</button>
@@ -727,7 +833,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   }, [r.id]);
 
   const doStatusChange = async (newStatus) => {
-    if (newStatus === "DECLINED" && !declineReason.trim()) {
+    if (newStatus === REPORT_STATUS.DECLINED && !declineReason.trim()) {
       alert("A decline reason is required before declining a report.");
       return;
     }
@@ -902,7 +1008,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                 </div>
               )}
 
-              {r.status === "DECLINED" && r.decline_reason && (
+              {r.status === REPORT_STATUS.DECLINED && r.decline_reason && (
                 <div className="decline-notice">
                   <Ban size={16} />
                   <strong>Decline Reason:</strong> {r.decline_reason}
@@ -944,7 +1050,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                   {attachments.map((att, i) => {
                     const url   = imgErrors[i] ? null : mediaUrl(att);
                     const label = i === 0 ? <><Camera size={14} /> Damage Photo</>
-                      : (i === 1 && r.status === "RESOLVED") ? <><CheckCircle size={14} /> Repair Proof</>
+                      : (i === 1 && r.status === REPORT_STATUS.RESOLVED) ? <><CheckCircle size={14} /> Repair Proof</>
                       : <><Paperclip size={14} /> Attachment {i + 1}</>;
                     return (
                       <div key={i} className="media-item-card">
@@ -1028,7 +1134,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                     );
                   })}
                 </div>
-                {r.status === "DECLINED" && (
+                {r.status === REPORT_STATUS.DECLINED && (
                   <div className="workflow-declined-badge"><Ban size={16} /> This report was declined</div>
                 )}
               </div>
@@ -1039,7 +1145,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                   <p className="action-note">
                     <Mail size={16} /> The reporter will receive an in-app notification for every status change.
                   </p>
-                  {transitions.includes("DECLINED") && (
+                  {transitions.includes(REPORT_STATUS.DECLINED) && (
                     <div className="decline-reason-input">
                       <label>Decline Reason <span className="required">*</span></label>
                       <input
@@ -1056,7 +1162,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                         key={t}
                         className={`status-action-btn action-${toClass(t)}`}
                         onClick={() => doStatusChange(t)}
-                        disabled={submitting || (t === "DECLINED" && !declineReason.trim())}
+                        disabled={submitting || (t === REPORT_STATUS.DECLINED && !declineReason.trim())}
                       >
                         {submitting ? "Updating…" : STATUS_LABELS[t]}
                       </button>

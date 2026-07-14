@@ -15,7 +15,9 @@ export default function AdminHeader() {
   const { isDark, toggle } = useDarkMode();
 
   function handleLogout() {
-    // clear session / auth tokens here
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    sessionStorage.clear();
     navigate("/login");
   }
 

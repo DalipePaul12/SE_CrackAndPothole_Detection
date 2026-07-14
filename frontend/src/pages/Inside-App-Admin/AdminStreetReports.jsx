@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import "./AdminStreetReports.css";
 import { getReports } from "../../api/reports";
 import { ChevronRight, MapPin, X } from "lucide-react";
+import { REPORT_STATUS } from "../../constants/reportStatus";
 
 function isCoordinateString(str) {
   if (!str) return false;
@@ -21,11 +22,11 @@ function groupByLocation(reports) {
 }
 
 const STATUS_LABEL = {
-  pending: "Pending",
-  verified: "Verified",
-  in_progress: "In Progress",
-  resolved: "Resolved",
-  declined: "Declined",
+  [REPORT_STATUS.PENDING]:     "Pending",
+  [REPORT_STATUS.VERIFIED]:    "Verified",
+  [REPORT_STATUS.IN_PROGRESS]: "In Progress",
+  [REPORT_STATUS.RESOLVED]:    "Resolved",
+  [REPORT_STATUS.DECLINED]:    "Declined",
 };
 
 function AdminStreetReports() {

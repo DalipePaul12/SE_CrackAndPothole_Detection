@@ -972,6 +972,48 @@ body.dark {
   margin: 0;
 }
 
+.retry-exhausted-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.btn-manual-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #b45309;
+  color: #fff;
+  border: none;
+  padding: 7px 13px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  touch-action: manipulation;
+  transition: background 0.15s;
+  align-self: flex-start;
+}
+.btn-manual-review:hover  { background: #92400e; }
+.btn-manual-review:active { background: #78350f; }
+
+.manual-review-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #b45309;
+  background: rgba(180,83,9,0.08);
+  border: 1px solid rgba(180,83,9,0.22);
+  border-radius: 7px;
+  padding: 7px 9px;
+  line-height: 1.4;
+  text-align: left;
+  margin: 0;
+}
+
 .analyze-error {
   display: flex;
   align-items: flex-start;
@@ -3072,5 +3114,120 @@ body.dark .error-message-left {
   .error-message-left {
     font-size: 9px;
     padding: 6px 8px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   OFFLINE BANNER + TOASTS — offline queue support
+══════════════════════════════════════════════════════════════ */
+
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  margin: 0 16px 8px;
+  line-height: 1.4;
+}
+
+.offline-banner svg {
+  flex-shrink: 0;
+  color: #f59e0b;
+}
+
+body.dark .offline-banner {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+
+.offline-toast-stack {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.offline-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  animation: offlineToastIn 0.2s ease-out;
+}
+
+@keyframes offlineToastIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.offline-toast--info {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
+.offline-toast--success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.offline-toast--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.offline-toast--warning {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #b45309;
+}
+
+body.dark .offline-toast--info {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+body.dark .offline-toast--success {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+body.dark .offline-toast--error {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+body.dark .offline-toast--warning {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+
+@media (max-width: 600px) {
+  .offline-toast-stack {
+    left: 12px;
+    right: 12px;
+    max-width: none;
   }
 }

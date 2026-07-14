@@ -84,6 +84,15 @@ export default function useUploadMedia() {
       return null;
     }
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      // Uploading requires a live connection — surface a clear reason
+      // instead of letting the request fail with a generic network error.
+      // Callers that support offline queueing (see useOfflineQueue.js)
+      // should hold onto the file and retry once back online.
+      setError("You're offline. This will be uploaded automatically once your connection is restored.");
+      return null;
+    }
+
     const fileKind = classifyFile(file);
 
     if (!fileKind) {

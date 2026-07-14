@@ -8,6 +8,7 @@ import {
   addComment,
 } from "../../api/reports";
 import "./AdminManageReports.css";
+import { REPORT_STATUS } from "../../constants/reportStatus";
 
 function isCoordinateString(str) {
   if (!str) return false;
@@ -19,14 +20,14 @@ function isCoordinateString(str) {
 // Old: pending → verified → assigned → in_progress → resolved
 // New: pending → verified → in_progress → resolved
 // ═══════════════════════════════════════════════════════════════════════════
-const STATUS_FLOW   = ["pending", "verified", "in_progress", "resolved", "rejected", "cancelled"];
+const STATUS_FLOW   = [REPORT_STATUS.PENDING, REPORT_STATUS.VERIFIED, REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.RESOLVED, REPORT_STATUS.REJECTED, REPORT_STATUS.CANCELLED];
 const STATUS_LABELS = {
-  pending:     "Pending",
-  verified:    "Verified",
-  in_progress: "In Progress",
-  resolved:    "Resolved",
-  rejected:    "Rejected",
-  cancelled:   "Cancelled",
+  [REPORT_STATUS.PENDING]:     "Pending",
+  [REPORT_STATUS.VERIFIED]:    "Verified",
+  [REPORT_STATUS.IN_PROGRESS]: "In Progress",
+  [REPORT_STATUS.RESOLVED]:    "Resolved",
+  [REPORT_STATUS.REJECTED]:    "Rejected",
+  [REPORT_STATUS.CANCELLED]:   "Cancelled",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -229,14 +230,14 @@ function StatsCards({ reports }) {
       value: reports.filter(r => (r.ai_severity ?? r.severity ?? "").toLowerCase() === "critical").length,
       icon:  <IcoAlert size={18} />,     className: "sc-critical"   },
     { label: "Pending",
-      value: reports.filter(r => r.status?.toLowerCase() === "pending").length,
+      value: reports.filter(r => r.status?.toLowerCase() === REPORT_STATUS.PENDING).length,
       icon:  <IcoClock size={18} />,     className: "sc-pending"    },
     { label: "In Progress",
-      value: reports.filter(r => r.status?.toLowerCase() === "in_progress").length,
+      value: reports.filter(r => r.status?.toLowerCase() === REPORT_STATUS.IN_PROGRESS).length,
       icon:  <IcoWrench size={18} />,    className: "sc-inprogress" },
     { label: "Resolved Today",
       value: reports.filter(r =>
-        r.status?.toLowerCase() === "resolved" &&
+        r.status?.toLowerCase() === REPORT_STATUS.RESOLVED &&
         r.updated_at &&
         new Date(r.updated_at).toDateString() === today
       ).length,
@@ -262,8 +263,8 @@ function StatsCards({ reports }) {
 // REFACTORED TIMELINE — Removed "assigned" step
 // ═══════════════════════════════════════════════════════════════════════════
 function StatusTimeline({ currentStatus }) {
-  const steps = ["pending", "verified", "in_progress", "resolved"];
-  const isRej = currentStatus === "rejected" || currentStatus === "cancelled";
+  const steps = [REPORT_STATUS.PENDING, REPORT_STATUS.VERIFIED, REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.RESOLVED];
+  const isRej = currentStatus === REPORT_STATUS.REJECTED || currentStatus === REPORT_STATUS.CANCELLED;
   const idx   = steps.indexOf(currentStatus);
 
   return (
@@ -285,7 +286,7 @@ function StatusTimeline({ currentStatus }) {
       })}
       {isRej && (
         <span className="tl-rejected-badge">
-          {currentStatus === "cancelled" ? "Cancelled" : "Rejected"}
+          {currentStatus === REPORT_STATUS.CANCELLED ? "Cancelled" : "Rejected"}
         </span>
       )}
     </div>
@@ -315,22 +316,22 @@ function ActionButtons({ r, onVerify, onStart, onComplete, onCancel, isPatching 
   const st = r.status?.toLowerCase();
   return (
     <div className="action-btns">
-      {st === "pending"  && (
+      {st === REPORT_STATUS.PENDING  && (
         <button disabled={isPatching} className="action-btn ab-verify" onClick={e => { e.stopPropagation(); onVerify(); }}>
           <IcoShield size={11}/> Verify
         </button>
       )}
-      {st === "verified" && (
+      {st === REPORT_STATUS.VERIFIED && (
         <button disabled={isPatching} className="action-btn ab-start" onClick={e => { e.stopPropagation(); onStart(); }}>
           <IcoWrench size={11}/> Start
         </button>
       )}
-      {(st === "verified" || st === "in_progress") && (
+      {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) && (
         <button disabled={isPatching} className="action-btn ab-complete" onClick={e => { e.stopPropagation(); onComplete(); }}>
           <IcoCheck size={11}/> Complete
         </button>
       )}
-      {!["resolved", "rejected", "cancelled"].includes(st) && (
+      {![REPORT_STATUS.RESOLVED, REPORT_STATUS.REJECTED, REPORT_STATUS.CANCELLED].includes(st) && (
         <button disabled={isPatching} className="action-btn ab-reject" onClick={e => { e.stopPropagation(); onCancel(); }}>
           <IcoBan size={11}/> Cancel
         </button>
@@ -418,8 +419,8 @@ function AdminManageReports() {
   // ═════════════════════════════════════════════════════════════════
   // REFACTORED STATUS HANDLERS — No more assign handler
   // ═════════════════════════════════════════════════════════════════
-  const handleVerify  = useCallback((id) => patchStatus(id, "verified"),    [patchStatus]);
-  const handleStart   = useCallback((id) => patchStatus(id, "in_progress"), [patchStatus]);
+  const handleVerify  = useCallback((id) => patchStatus(id, REPORT_STATUS.VERIFIED),    [patchStatus]);
+  const handleStart   = useCallback((id) => patchStatus(id, REPORT_STATUS.IN_PROGRESS), [patchStatus]);
 
   // ═════════════════════════════════════════════════════════════════
   // COMMENTED OUT: handleAssign — moved to next version
@@ -439,13 +440,13 @@ function AdminManageReports() {
   // ═════════════════════════════════════════════════════════════════
 
   const handleCancel = useCallback(async (id, reason) => {
-    const success = await patchStatus(id, "cancelled", { decline_reason: reason });
+    const success = await patchStatus(id, REPORT_STATUS.CANCELLED, { decline_reason: reason });
     if (success) setCancelReport(null);
     return success;
   }, [patchStatus]);
 
   const handleCompleteSuccess = useCallback((id) => {
-    setReports(prev => prev.map(r => r.id === id ? { ...r, status: "resolved" } : r));
+    setReports(prev => prev.map(r => r.id === id ? { ...r, status: REPORT_STATUS.RESOLVED } : r));
     setCompleteReport(null);
   }, []);
 
@@ -648,12 +649,12 @@ function AdminManageReports() {
       {selected.size > 0 && (
         <BulkBar
           count={selected.size}
-          onComplete={() => bulkPatch("resolved")}
+          onComplete={() => bulkPatch(REPORT_STATUS.RESOLVED)}
           // ═════════════════════════════════════════════════════════
           // COMMENTED OUT: onAssign — moved to next version
           // onAssign={() => setBulkMode("assign")}
           // ═════════════════════════════════════════════════════════
-          onCancel={() => bulkPatch("cancelled")}
+          onCancel={() => bulkPatch(REPORT_STATUS.CANCELLED)}
           onClear={() => setSelected(new Set())}
         />
       )}
@@ -823,8 +824,8 @@ function AdminManageReports() {
           // onAssign={r       => { setAssignReport(r);   setViewReport(null); }}
           // ═════════════════════════════════════════════════════════════
           onCancel={r       => { setCancelReport(r);   setViewReport(null); }}
-          onVerify={id      => { handleVerify(id); setViewReport(p => p ? { ...p, status: "verified" } : null); }}
-          onStart={id       => { handleStart(id); setViewReport(p => p ? { ...p, status: "in_progress" } : null); }}
+          onVerify={id      => { handleVerify(id); setViewReport(p => p ? { ...p, status: REPORT_STATUS.VERIFIED } : null); }}
+          onStart={id       => { handleStart(id); setViewReport(p => p ? { ...p, status: REPORT_STATUS.IN_PROGRESS } : null); }}
         />,
         document.body
       )}
@@ -962,22 +963,22 @@ function ViewModal({ report: r, onClose, onMarkComplete, onCancel, onVerify, onS
           </div>
 
           <div className="modal-actions">
-            {st === "pending"     && (
+            {st === REPORT_STATUS.PENDING     && (
               <button className="action-btn wide ab-verify" onClick={() => onVerify(r.id)}>
                 <IcoShield size={14} /> Verify Report
               </button>
             )}
-            {st === "verified"    && (
+            {st === REPORT_STATUS.VERIFIED    && (
               <button className="action-btn wide ab-start" onClick={() => onStart(r.id)}>
                 <IcoWrench size={14} /> Start Repair
               </button>
             )}
-            {(st === "verified" || st === "in_progress") && (
+            {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) && (
               <button className="action-btn wide ab-complete" onClick={() => onMarkComplete(r)}>
                 <IcoCheck size={14} /> Mark as Completed
               </button>
             )}
-            {!["resolved", "rejected", "cancelled"].includes(st) && (
+            {![REPORT_STATUS.RESOLVED, REPORT_STATUS.REJECTED, REPORT_STATUS.CANCELLED].includes(st) && (
               <button className="action-btn wide ab-reject" onClick={() => onCancel(r)}>
                 <IcoBan size={14} /> Cancel Report
               </button>
@@ -1044,7 +1045,7 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
       const cm = await addComment(r.id, comment.trim());
       if (!cm.success) { setErr("Comment failed: " + (cm.error ?? "Unknown")); setSaving(false); return; }
     }
-    const res = await updateReport(r.id, { status: "resolved" });
+    const res = await updateReport(r.id, { status: REPORT_STATUS.RESOLVED });
     if (!res.success) { setErr("Could not resolve: " + (res.error ?? "Unknown")); setSaving(false); return; }
     setSaving(false);
     onSuccess(r.id);

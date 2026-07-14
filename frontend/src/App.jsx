@@ -36,6 +36,9 @@ import AdminManageRequests from "./pages/Inside-App-Admin/AdminManageRequests.js
 import AdminManageReports  from "./pages/Inside-App-Admin/AdminManageReports.jsx";
 import AdminStreetReports  from "./pages/Inside-App-Admin/AdminStreetReports.jsx";
 import AdminSettings       from "./pages/Inside-App-Admin/AdminSettings.jsx";
+
+// Errors
+import NotFound from "./pages/NotFound.jsx";
 // ─── Route guards ─────────────────────────────────────────────────────────────
 
 function PrivateRoute({ children }) {
@@ -124,8 +127,9 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
             <Route path="/adminpanel/settings"      element={<AdminSettings />} />
           </Route>
 
-          {/* ── Fallback ───────────────────────────────────────────────── */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* ── Fallback — must stay last so it never shadows the routes
+                 above (including the role-gated user/admin routes) ─────── */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </NotificationProvider>
     </>
