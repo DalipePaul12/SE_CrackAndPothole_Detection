@@ -1883,3 +1883,102 @@
     .modal-overlay { padding-bottom: env(safe-area-inset-bottom); }
   }
 }
+
+/* ── Bulk Decline reason modal ────────────────────────────────────────────── */
+.bdr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+  animation: bdrOverlayIn 0.18s ease;
+}
+@keyframes bdrOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+
+.bdr-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 28px 24px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  animation: bdrBoxIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes bdrBoxIn {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+.bdr-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.bdr-icon { color: var(--danger); flex-shrink: 0; }
+.bdr-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.bdr-desc {
+  font-size: 0.84rem;
+  color: var(--subtext);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.bdr-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.88rem;
+  padding: 10px 12px;
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.bdr-textarea:focus { border-color: var(--primary); }
+.bdr-textarea::placeholder { color: var(--subtext); opacity: 0.7; }
+
+.bdr-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.bdr-cancel-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bdr-cancel-btn:hover { background: var(--hover); }
+
+.bdr-confirm-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.bdr-confirm-btn:hover { opacity: 0.88; }

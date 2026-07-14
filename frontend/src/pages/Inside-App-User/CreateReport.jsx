@@ -493,6 +493,7 @@ function CreateReport({ onClose }) {
   const [barangay,        setBarangay]        = useState("");
   const [streetName,      setStreetName]      = useState("");
   const [locationLoading, setLocationLoading] = useState(false);
+  const [locationWarning, setLocationWarning] = useState("");
 
   const [additionalInfo,    setAdditionalInfo]    = useState("");
   const [disclaimerAccepted,setDisclaimerAccepted]= useState(false);
@@ -863,44 +864,54 @@ if (ai_validation && typeof ai_validation === "object") {
   const startRecording = useCallback(() => {
     if (!streamRef.current) return;
     chunksRef.current = [];
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
-      ? "video/webm;codecs=vp8,opus"
-      : MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "video/mp4";
-    const mr = new MediaRecorder(streamRef.current, { mimeType });
-    mediaRecorderRef.current = mr;
-    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    mr.onstop = async () => {
-      if (mr._discard) return;
-      clearInterval(recordTimerRef.current);
-      setIsRecording(false);
-      setRetryCount(0);
-      const blob     = new Blob(chunksRef.current, { type: "video/webm" });
-      const captured = new File([blob], "snap_video.webm", { type: "video/webm" });
-      setFile(captured);
-      setPreview(URL.createObjectURL(blob));
-      clearInterval(detectionLoopRef.current);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      if (videoRef.current) videoRef.current.srcObject = null;
-      setCameraActive(false);
-      setShowCamera(false);
-      setLiveDetection({ detected: false, label: null, confidence: 0, bbox: null, distance: null, status: "idle" });
-      await runFullAnalysis(captured);
-    };
-    mr.start(100);
-    setIsRecording(true);
-    setRecordingTime(0);
-    recordTimerRef.current = setInterval(() => {
-      setRecordingTime((t) => {
-        const next = t + 1;
-        if (next >= MAX_REC_SECS) {
-          clearInterval(recordTimerRef.current);
-          if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    try {
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+        ? "video/webm;codecs=vp8,opus"
+        : MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "video/mp4";
+      const mr = new MediaRecorder(streamRef.current, { mimeType });
+      mediaRecorderRef.current = mr;
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        if (mr._discard) return;
+        clearInterval(recordTimerRef.current);
+        setIsRecording(false);
+        setRetryCount(0);
+        const blob     = new Blob(chunksRef.current, { type: "video/webm" });
+        const captured = new File([blob], "snap_video.webm", { type: "video/webm" });
+        setFile(captured);
+        setPreview(URL.createObjectURL(blob));
+        clearInterval(detectionLoopRef.current);
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        if (videoRef.current) videoRef.current.srcObject = null;
+        setCameraActive(false);
+        setShowCamera(false);
+        setLiveDetection({ detected: false, label: null, confidence: 0, bbox: null, distance: null, status: "idle" });
+        await runFullAnalysis(captured);
+      };
+      mr.start(100);
+      setIsRecording(true);
+      setRecordingTime(0);
+      recordTimerRef.current = setInterval(() => {
+        setRecordingTime((t) => {
+          const next = t + 1;
+          if (next >= MAX_REC_SECS) {
+            clearInterval(recordTimerRef.current);
+            if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+            return next;
+          }
           return next;
-        }
-        return next;
-      });
-    }, 1000);
+        });
+      }, 1000);
+    } catch (err) {
+      const msg =
+        err.name === "NotAllowedError" || err.name === "SecurityError"
+          ? "Camera or microphone permission was denied. Please allow access in your browser settings (usually the camera icon in the address bar), then try again."
+          : err.name === "NotSupportedError"
+          ? "Your browser or device doesn't support video recording. Try using Chrome or Edge and make sure your camera is connected."
+          : "Could not start recording — your camera may have been disconnected or permissions were revoked. Please refresh and allow camera access.";
+      setCameraError(msg);
+    }
   }, [runFullAnalysis]);
 
   const stopRecordingEarly = useCallback(() => {
@@ -952,7 +963,11 @@ if (ai_validation && typeof ai_validation === "object") {
       },
       () => {
         setCity(DEFAULT_CITY);
-        setBarangay(DEFAULT_BARANGAY);
+        setBarangay("");
+        setLocationWarning(
+          "Location access was denied or unavailable — your barangay could not be detected automatically. " +
+          "Please select your barangay manually before submitting."
+        );
         setLocationLoading(false);
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 }
@@ -1452,10 +1467,10 @@ const showMask = analysisComplete &&
               </label>
             )}
             <div className="classification-buttons" role="group" aria-labelledby="image-type-label">
-              <button className={`class-btn ${imageTypeBadge === "REAL" ? "active-real" : ""} ${imageTypeBadge === "HF-ERROR" ? "active-hf-error" : ""}`}
-                disabled aria-pressed={imageType === "REAL"}>REAL</button>
-              <button className={`class-btn ${imageTypeBadge === "AI-GENERATED" ? "active-ai" : ""}`}
-                disabled aria-pressed={imageType === "AI-GENERATED"}>AI-GENERATED</button>
+              <span className={`class-btn ${imageTypeBadge === "REAL" ? "active-real" : ""} ${imageTypeBadge === "HF-ERROR" ? "active-hf-error" : ""}`}
+                aria-current={imageType === "REAL" ? "true" : undefined}>REAL</span>
+              <span className={`class-btn ${imageTypeBadge === "AI-GENERATED" ? "active-ai" : ""}`}
+                aria-current={imageType === "AI-GENERATED" ? "true" : undefined}>AI-GENERATED</span>
             </div>
             {imageType === "AI-GENERATED" && (
               <p className="flagged-note" role="alert">
@@ -1558,10 +1573,10 @@ const showMask = analysisComplete &&
                 {isAnalyzing && <FaSpinner className="spin-icon" aria-hidden="true" style={{ marginLeft: 5 }} />}
               </label>
               <div className="classification-buttons" role="group" aria-labelledby="damage-type-label">
-                <button className={`class-btn ${damageType === "POTHOLE" ? "active-pothole" : ""}`}
-                  disabled aria-pressed={damageType === "POTHOLE"}>POTHOLE</button>
-                <button className={`class-btn ${damageType === "CRACK" ? "active-crack" : ""}`}
-                  disabled aria-pressed={damageType === "CRACK"}>CRACK</button>
+                <span className={`class-btn ${damageType === "POTHOLE" ? "active-pothole" : ""}`}
+                  aria-current={damageType === "POTHOLE" ? "true" : undefined}>POTHOLE</span>
+                <span className={`class-btn ${damageType === "CRACK" ? "active-crack" : ""}`}
+                  aria-current={damageType === "CRACK" ? "true" : undefined}>CRACK</span>
               </div>
             </div>
             <div className="class-group">
@@ -1570,9 +1585,10 @@ const showMask = analysisComplete &&
                 {isAnalyzing && <FaSpinner className="spin-icon" aria-hidden="true" style={{ marginLeft: 5 }} />}
               </label>
               <div className="classification-buttons" role="group" aria-labelledby="severity-label">
-              <button className={`class-btn ${severity === "NON_CRITICAL" ? "active-non-critical" : ""}`}                  disabled aria-pressed={severity === "NON_CRITICAL"}>NON_CRITICAL</button>
-                <button className={`class-btn ${severity === "CRITICAL" ? "active-critical" : ""}`}
-                  disabled aria-pressed={severity === "CRITICAL"}>CRITICAL</button>
+                <span className={`class-btn ${severity === "NON_CRITICAL" ? "active-non-critical" : ""}`}
+                  aria-current={severity === "NON_CRITICAL" ? "true" : undefined}>NON_CRITICAL</span>
+                <span className={`class-btn ${severity === "CRITICAL" ? "active-critical" : ""}`}
+                  aria-current={severity === "CRITICAL" ? "true" : undefined}>CRITICAL</span>
               </div>
             </div>
           </div>
@@ -1634,7 +1650,7 @@ const showMask = analysisComplete &&
                 BARANGAY <span style={{ color: "red" }} aria-hidden="true">*</span>
               </label>
               <select id="barangay-select" value={barangay}
-                onChange={(e) => setBarangay(e.target.value)}
+                onChange={(e) => { setBarangay(e.target.value); setLocationWarning(""); }}
                 className={!barangay ? "placeholder" : ""}
                 disabled={isSubmitting} required>
                 <option value="" disabled>Select Barangay</option>
@@ -1642,6 +1658,17 @@ const showMask = analysisComplete &&
                   <option key={b} value={b}>{b}</option>
                 ))}
               </select>
+              {locationWarning && (
+                <div className="location-warning-banner" role="alert" style={{
+                  display: "flex", alignItems: "flex-start", gap: "8px",
+                  marginTop: "8px", padding: "10px 12px",
+                  background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.5)",
+                  borderRadius: "8px", color: "#b45309", fontSize: "0.8rem", lineHeight: 1.4,
+                }}>
+                  <FaExclamationTriangle style={{ flexShrink: 0, marginTop: 2, color: "#d97706" }} aria-hidden="true" />
+                  <span>{locationWarning}</span>
+                </div>
+              )}
             </div>
           </div>
 

@@ -300,6 +300,9 @@ function MyProfile() {
 
   const [showConfirm, setShowConfirm]   = useState(false);
   const [activeTab, setActiveTab]       = useState("feed");
+  const [isDirty, setIsDirty]               = useState(false);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [pendingTab, setPendingTab]         = useState(null);
 
   const [reportFilter, setReportFilter] = useState("all");
   const [sortOption, setSortOption]     = useState("newest");
@@ -354,6 +357,29 @@ function MyProfile() {
   };
   const removeToast = (id) =>
     setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  /* ─── Dirty-state tab switching ─── */
+  const performTabSwitch = (tab) => {
+    if (tab === "settings") {
+      setFormData({
+        full_name: profile?.full_name || "",
+        barangay:  profile?.barangay  || "",
+        city:      profile?.city      || "",
+      });
+      setFormErrors({});
+    }
+    setIsDirty(false);
+    setActiveTab(tab);
+  };
+
+  const handleTabSwitch = (tab) => {
+    if (activeTab === "settings" && tab !== "settings" && isDirty) {
+      setPendingTab(tab);
+      setShowDiscardDialog(true);
+      return;
+    }
+    performTabSwitch(tab);
+  };
 
   /* Derived report list */
   const filteredReports = (() => {
@@ -439,6 +465,7 @@ function MyProfile() {
         city:      formData.city,
       });
       setShowConfirm(false);
+      setIsDirty(false);
       showToast("Profile updated successfully!", "success");
       setActiveTab("feed");
     } catch {
@@ -548,21 +575,13 @@ function MyProfile() {
         <div className="profile-tabs">
           <button
             className={activeTab === "feed" ? "active" : ""}
-            onClick={() => setActiveTab("feed")}
+            onClick={() => handleTabSwitch("feed")}
           >
             Reports Feed
           </button>
           <button
             className={activeTab === "settings" ? "active" : ""}
-            onClick={() => {
-              setFormData({
-                full_name: profile?.full_name || "",
-                barangay:  profile?.barangay  || "",
-                city:      profile?.city      || "",
-              });
-              setFormErrors({});
-              setActiveTab("settings");
-            }}
+            onClick={() => handleTabSwitch("settings")}
           >
             Profile Settings
           </button>
@@ -764,6 +783,7 @@ function MyProfile() {
                   onChange={(e) => {
                     setFormData({ ...formData, full_name: e.target.value });
                     setFormErrors({ ...formErrors, full_name: "" });
+                    setIsDirty(true);
                   }}
                   placeholder="Full Name"
                   className={formErrors.full_name ? "input-error" : ""}
@@ -782,6 +802,7 @@ function MyProfile() {
                   onChange={(e) => {
                     setFormData({ ...formData, barangay: e.target.value });
                     setFormErrors({ ...formErrors, barangay: "" });
+                    setIsDirty(true);
                   }}
                   placeholder="Barangay"
                   className={formErrors.barangay ? "input-error" : ""}
@@ -800,6 +821,7 @@ function MyProfile() {
                   onChange={(e) => {
                     setFormData({ ...formData, city: e.target.value });
                     setFormErrors({ ...formErrors, city: "" });
+                    setIsDirty(true);
                   }}
                   placeholder="City"
                   className={formErrors.city ? "input-error" : ""}
@@ -813,7 +835,7 @@ function MyProfile() {
             {saveError && <p className="save-error">{saveError}</p>}
 
             <div className="settings-actions">
-              <button className="discard" onClick={() => setActiveTab("feed")}>
+              <button className="discard" onClick={() => { setIsDirty(false); setActiveTab("feed"); }}>
                 Discard
               </button>
               <button
@@ -922,6 +944,22 @@ function MyProfile() {
             confirmText="Save"
             onCancel={() => setShowConfirm(false)}
             onConfirm={confirmSave}
+          />
+        )}
+
+        {showDiscardDialog && (
+          <ConfirmChangesModal
+            title="Discard unsaved changes?"
+            message="You have unsaved changes — discard them and leave this tab?"
+            confirmText="Discard"
+            variant="danger"
+            onCancel={() => { setShowDiscardDialog(false); setPendingTab(null); }}
+            onConfirm={() => {
+              const tab = pendingTab;
+              setShowDiscardDialog(false);
+              setPendingTab(null);
+              performTabSwitch(tab);
+            }}
           />
         )}
 

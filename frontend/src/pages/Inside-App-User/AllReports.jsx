@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle, ChevronLeft, ChevronRight, X,
-  ChevronDown, ImageOff, MapPin, Calendar,
-  Activity, Shield, TrendingUp, Database,
+  ChevronDown, ChevronUp, ImageOff, MapPin, Calendar,
+  Activity, Shield, TrendingUp, Database, Search,
 } from "lucide-react";
 import "./AllReports.css";
 import { useReports } from "../../hooks/useReports";
+import { SkeletonTableRow } from "../../components/SkeletonRow";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
@@ -189,11 +190,21 @@ function ReportModal({ report, onClose }) {
   );
 }
 
+function SortIcon({ field, sortField, sortDir }) {
+  if (sortField !== field) return <ChevronUp size={11} style={{ opacity: 0.25 }} />;
+  return sortDir === "asc"
+    ? <ChevronUp   size={11} style={{ color: "var(--primary)" }} />
+    : <ChevronDown size={11} style={{ color: "var(--primary)" }} />;
+}
+
 function AllReports() {
   const [filters, setFilters]           = useState({ type: "All", severity: "All", status: "All" });
   const [activeFilters, setActiveFilters] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
   const [drawerOpen, setDrawerOpen]     = useState(false);
+  const [search,    setSearch]          = useState("");
+  const [sortField, setSortField]       = useState("id");
+  const [sortDir,   setSortDir]         = useState("desc");
 
   const { reports, loading, error, page, setPage, total, pageSize, refetch } = useReports({
     mine:        false,
@@ -202,6 +213,45 @@ function AllReports() {
     damage_type: activeFilters.type        ?? null,
     severity:    activeFilters.severity    ?? null,
   });
+
+  // ── Client-side search + sort (operates on the current page only) ──────────
+  const displayReports = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = q
+      ? reports.filter((r) =>
+          String(r.id).includes(q) ||
+          (r.barangay    ?? "").toLowerCase().includes(q) ||
+          (r.street_name ?? "").toLowerCase().includes(q) ||
+          (r.description ?? "").toLowerCase().includes(q)
+        )
+      : reports;
+
+    const FIELD_MAP = {
+      id:         (r) => r.id,
+      type:       (r) => r.ai_damage_type ?? "",
+      severity:   (r) => r.ai_severity    ?? "",
+      status:     (r) => r.status         ?? "",
+      created_at: (r) => r.created_at     ?? "",
+    };
+    const getValue = FIELD_MAP[sortField] ?? FIELD_MAP.id;
+
+    return [...filtered].sort((a, b) => {
+      const av = getValue(a);
+      const bv = getValue(b);
+      const cmp = typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av).localeCompare(String(bv), undefined, { numeric: true });
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [reports, search, sortField, sortDir]);
+
+  const handleSort = useCallback((field) => {
+    setSortField((prev) => {
+      if (prev === field) { setSortDir((d) => d === "asc" ? "desc" : "asc"); return field; }
+      setSortDir("asc");
+      return field;
+    });
+  }, []);
 
   const applyFilters = useCallback(() => {
     setActiveFilters({
@@ -231,6 +281,24 @@ function AllReports() {
           <Database size={18} style={{ color: "var(--primary)", flexShrink: 0 }} />
           <h2>All Reports</h2>
           <span className="report-count">{total} total</span>
+        </div>
+        <div className="allreports-search-row">
+          <div className="allreports-search-wrap">
+            <Search size={14} className="allreports-search-icon" aria-hidden="true" />
+            <input
+              type="search"
+              className="allreports-search-input"
+              placeholder="Search this page by ID, street, or barangay…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search current page"
+            />
+          </div>
+          {search && (
+            <span className="allreports-search-note" role="status" aria-live="polite">
+              {displayReports.length} match{displayReports.length !== 1 ? "es" : ""} on this page
+            </span>
+          )}
         </div>
         <button
           className="filter-toggle-btn"
@@ -310,41 +378,45 @@ function AllReports() {
 
       <div className="allreports-table-container">
         {loading ? (
-          <div className="table-skeleton">
+          <div className="sk-table-wrap">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="skeleton-row" />
+              <SkeletonTableRow key={i} cols={[3, 2, 1.5, 1.5, 1.5]} />
             ))}
           </div>
         ) : (
           <table className="allreports-table" aria-label="All reports">
             <thead>
               <tr>
-                <th scope="col">
+                <th scope="col" className="th-sortable" onClick={() => handleSort("id")} aria-sort={sortField === "id" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <Activity size={13} /> Report
+                    <Activity size={13} /> Report <SortIcon field="id" sortField={sortField} sortDir={sortDir} />
                   </span>
                 </th>
-                <th scope="col">Type</th>
-                <th scope="col">
+                <th scope="col" className="th-sortable" onClick={() => handleSort("type")} aria-sort={sortField === "type" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <TrendingUp size={13} /> Severity
+                    Type <SortIcon field="type" sortField={sortField} sortDir={sortDir} />
                   </span>
                 </th>
-                <th scope="col">
+                <th scope="col" className="th-sortable" onClick={() => handleSort("severity")} aria-sort={sortField === "severity" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <Shield size={13} /> Status
+                    <TrendingUp size={13} /> Severity <SortIcon field="severity" sortField={sortField} sortDir={sortDir} />
                   </span>
                 </th>
-                <th scope="col">
+                <th scope="col" className="th-sortable" onClick={() => handleSort("status")} aria-sort={sortField === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <Calendar size={13} /> Date
+                    <Shield size={13} /> Status <SortIcon field="status" sortField={sortField} sortDir={sortDir} />
+                  </span>
+                </th>
+                <th scope="col" className="th-sortable" onClick={() => handleSort("created_at")} aria-sort={sortField === "created_at" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Calendar size={13} /> Date <SortIcon field="created_at" sortField={sortField} sortDir={sortDir} />
                   </span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {reports.length > 0 ? (
-                reports.map((report) => (
+              {displayReports.length > 0 ? (
+                displayReports.map((report) => (
                   <tr
                     key={report.id}
                     onClick={() => handleRowClick(report)}

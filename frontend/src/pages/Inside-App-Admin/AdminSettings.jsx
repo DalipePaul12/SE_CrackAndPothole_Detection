@@ -17,6 +17,8 @@ import "./AdminSettings.css";
 const AdminSettings = () => {
   const [activeTab, setActiveTab] = useState("general");
   const [saved, setSaved] = useState(false);
+  const [resetDialog, setResetDialog] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState("");
   const [settings, setSettings] = useState({
     orgName: "Snap2Fix",
     municipality: "Panghulo",
@@ -49,6 +51,13 @@ const AdminSettings = () => {
   const handleChange = (field, value) => {
     setSettings((prev) => ({ ...prev, [field]: value }));
     setSaved(false);
+  };
+
+  const handleResetAllStatuses = () => {
+    if (resetConfirmText !== "RESET") return;
+    // TODO: wire to backend once POST /api/v1/admin/reports/reset-statuses exists
+    setResetDialog(false);
+    setResetConfirmText("");
   };
 
   const handleSave = () => {
@@ -242,7 +251,15 @@ const AdminSettings = () => {
                       Irreversible.
                     </p>
                   </div>
-                  <button className="adm-btn adm-btn-danger">Reset All</button>
+                  <button
+                    className="adm-btn adm-btn-danger"
+                    onClick={() => {
+                      setResetConfirmText("");
+                      setResetDialog(true);
+                    }}
+                  >
+                    Reset All
+                  </button>
                 </div>
               </div>
             </section>
@@ -552,6 +569,46 @@ const AdminSettings = () => {
           )}
         </main>
       </div>
+      {/* Reset confirmation dialog */}
+      {resetDialog && (
+        <div className="modal-overlay" onClick={() => setResetDialog(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title danger">
+              <ShieldAlert size={18} strokeWidth={2} /> Confirm Status Reset
+            </h3>
+            <p className="modal-body">
+              This will mark <strong>every in-progress report</strong> as
+              pending. This action is <strong>irreversible</strong>.
+            </p>
+            <p className="modal-body">
+              Type <strong>RESET</strong> to confirm:
+            </p>
+            <input
+              className="adm-input"
+              type="text"
+              value={resetConfirmText}
+              onChange={(e) => setResetConfirmText(e.target.value)}
+              placeholder="Type RESET here"
+              autoFocus
+            />
+            <div className="modal-actions">
+              <button
+                className="adm-btn adm-btn-ghost"
+                onClick={() => setResetDialog(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="adm-btn adm-btn-danger"
+                disabled={resetConfirmText !== "RESET"}
+                onClick={handleResetAllStatuses}
+              >
+                Reset All Statuses
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

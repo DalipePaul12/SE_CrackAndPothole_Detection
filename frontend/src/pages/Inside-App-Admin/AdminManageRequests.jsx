@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import "./AdminManageRequests.css";
 import { getReports, updateReport } from "../../api/reports";
 import { REPORT_STATUS } from "../../constants/reportStatus";
@@ -28,6 +29,7 @@ const mediaCount = (r) => r.media_attachments?.length ?? 0;
 const aiConfidence = (r) => r.ai_confidence ?? r.confidence ?? null;
 
 export default function AdminManageRequests() {
+  const navigate = useNavigate();
   const [filters, setFilters] = useState({ type: "All", severity: "All" });
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,7 @@ export default function AdminManageRequests() {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [declineDialog, setDeclineDialog] = useState(null);
   const [messageDialog, setMessageDialog] = useState(null);
-  const [actionLoading, setActionLoading] = useState(null);
+  const [actionLoading, setActionLoading] = useState(new Set());
   const [toast,         setToast]         = useState(null);
 
   const showToast = (msg, type = "success") => {
@@ -70,7 +72,7 @@ export default function AdminManageRequests() {
   });
 
   const handleConfirm = async (id) => {
-    setActionLoading(id + "-confirm");
+    setActionLoading(prev => new Set(prev).add(id + "-confirm"));
     const res = await updateReport(id, { status: REPORT_STATUS.VERIFIED });
     if (res.success) {
       setReports(prev => prev.filter(r => r.id !== id));
@@ -79,12 +81,12 @@ export default function AdminManageRequests() {
     } else {
       showToast(res.error || "Failed to confirm report.", "error");
     }
-    setActionLoading(null);
+    setActionLoading(prev => { const n = new Set(prev); n.delete(id + "-confirm"); return n; });
     setConfirmDialog(null);
   };
 
   const handleDecline = async (id, reason) => {
-    setActionLoading(id + "-decline");
+    setActionLoading(prev => new Set(prev).add(id + "-decline"));
     const res = await updateReport(id, {
       status:         REPORT_STATUS.DECLINED,
       decline_reason: reason.trim(),
@@ -96,7 +98,7 @@ export default function AdminManageRequests() {
     } else {
       showToast(res.error || "Failed to decline report.", "error");
     }
-    setActionLoading(null);
+    setActionLoading(prev => { const n = new Set(prev); n.delete(id + "-decline"); return n; });
     setDeclineDialog(null);
   };
 
@@ -225,7 +227,7 @@ export default function AdminManageRequests() {
                         <div className="admin-action-buttons">
                           <button
                             className="admin-confirm-btn"
-                            disabled={!!actionLoading}
+                            disabled={actionLoading.has(r.id + "-confirm") || actionLoading.has(r.id + "-decline")}
                             onClick={() =>
                               setConfirmDialog({
                                 id:   r.id,
@@ -235,7 +237,7 @@ export default function AdminManageRequests() {
                           >Confirm</button>
                           <button
                             className="admin-decline-btn"
-                            disabled={!!actionLoading}
+                            disabled={actionLoading.has(r.id + "-confirm") || actionLoading.has(r.id + "-decline")}
                             onClick={() =>
                               setDeclineDialog({
                                 id:   r.id,
@@ -280,7 +282,10 @@ export default function AdminManageRequests() {
           }}
           onMessage={(r) => { setSelected(null); setMessageDialog(r); }}
           onAssign={handleAssign}
-          actionLoading={actionLoading}
+          actionLoading={
+            actionLoading.has(selectedReport?.id + "-confirm") ||
+            actionLoading.has(selectedReport?.id + "-decline")
+          }
         />
       )}
 
@@ -292,7 +297,7 @@ export default function AdminManageRequests() {
           confirmClass="amr-dialog-confirm"
           onConfirm={() => handleConfirm(confirmDialog.id)}
           onCancel={() => setConfirmDialog(null)}
-          loading={actionLoading === confirmDialog.id + "-confirm"}
+          loading={actionLoading.has(confirmDialog.id + "-confirm")}
         />
       )}
 
@@ -301,7 +306,7 @@ export default function AdminManageRequests() {
           name={declineDialog.name}
           onDecline={(reason) => handleDecline(declineDialog.id, reason)}
           onCancel={() => setDeclineDialog(null)}
-          loading={actionLoading === declineDialog.id + "-decline"}
+          loading={actionLoading.has(declineDialog.id + "-decline")}
         />
       )}
 
@@ -488,7 +493,20 @@ function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessag
               </div>
 
               <div className="amr-full-width amr-map-btn-wrap">
-                <button className="amr-map-btn">
+                <button
+                  className="amr-map-btn"
+                  onClick={() =>
+                    navigate("/adminpanel/map", {
+                      state: {
+                        focusReport: {
+                          id:  r.id,
+                          lat: r.latitude,
+                          lng: r.longitude,
+                        },
+                      },
+                    })
+                  }
+                >
                   <Navigation size={16} />
                   View on Map
                 </button>

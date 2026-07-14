@@ -1088,6 +1088,9 @@ body.dark {
 .classification-buttons { display: flex; gap: 5px; }
 .class-btn {
   flex: 1;
+  display: block;
+  box-sizing: border-box;
+  text-align: center;
   padding: 7px 0;
   border-radius: var(--cr-radius-badge);
   border: 1.5px solid var(--cr-border);
@@ -1098,6 +1101,7 @@ body.dark {
   letter-spacing: 0.04em;
   transition: all 0.3s ease;
   pointer-events: none;
+  cursor: default;
   font-family: 'Inter', sans-serif;
   white-space: nowrap;
   overflow: hidden;

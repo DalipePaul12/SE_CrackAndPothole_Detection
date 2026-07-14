@@ -550,9 +550,13 @@ export default function AdminPanel() {
               <Radio size={13} color="#1565c0" />
             </span>
             Live Activity Feed
-            <button className="ap-panel-link" onClick={() => goTo("/adminpanel/audit-log")}>
+            <span
+              className="ap-panel-link ap-panel-link-disabled"
+              title="Audit log page coming soon"
+              aria-disabled="true"
+            >
               Full log →
-            </button>
+            </span>
           </div>
           {loadingMain
             ? [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} h={28} style={{ marginBottom: 8 }} />)

@@ -1547,3 +1547,89 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
 .ico-flex-shrink {
   flex-shrink: 0;
 }
+
+/* ── Bulk action confirmation dialog ─────────────────────────────────────── */
+.bmr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+  animation: bmrOverlayIn 0.18s ease;
+}
+@keyframes bmrOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+
+.bmr-box {
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 14px;
+  padding: 28px 28px 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  animation: bmrBoxIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes bmrBoxIn {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+.bmr-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.bmr-icon           { flex-shrink: 0; }
+.bmr-icon--danger   { color: var(--danger, #ef4444); }
+.bmr-icon--success  { color: var(--success, #22c55e); }
+
+.bmr-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text, #111);
+  margin: 0;
+}
+
+.bmr-desc {
+  font-size: 0.86rem;
+  color: var(--subtext, #64748b);
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+
+.bmr-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.bmr-cancel-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: transparent;
+  color: var(--text, #111);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bmr-cancel-btn:hover { background: var(--hover, #f1f5f9); }
+
+.bmr-confirm-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--primary, #3b82f6);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.bmr-confirm-btn:hover               { opacity: 0.88; }
+.bmr-confirm-btn--danger             { background: var(--danger, #ef4444); }
+.bmr-confirm-btn--danger:hover       { opacity: 0.88; }

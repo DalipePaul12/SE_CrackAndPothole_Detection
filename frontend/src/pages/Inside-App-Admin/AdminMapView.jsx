@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import "./AdminMapView.css";
 
 import {
@@ -497,6 +498,7 @@ function ReportStrip({ reports, onSelect }) {
 
 function AdminMapView() {
   const isDark = useIsDark();
+  const location = useLocation();
 
   const [allReports,  setAllReports ] = useState([]);
   const [loading,     setLoading    ] = useState(true);
@@ -547,6 +549,14 @@ function AdminMapView() {
   }, []);
 
   useEffect(() => { loadReports(); }, [loadReports]);
+
+  // If navigated here with a focusReport in location.state, fly to it on mount
+  useEffect(() => {
+    const focus = location.state?.focusReport;
+    if (focus?.lat != null && focus?.lng != null) {
+      setFlyTo([parseFloat(focus.lat), parseFloat(focus.lng)]);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const id = setInterval(() => loadReports(true), REFRESH_INTERVAL);
     return () => clearInterval(id);

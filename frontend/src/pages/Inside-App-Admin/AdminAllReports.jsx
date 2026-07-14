@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import "./AdminAllReports.css";
 import { getReports, updateReport, deleteReport, addComment } from "../../api/reports";
 import { sendNotification } from "../../api/notifications";
@@ -97,6 +97,7 @@ function exportCSV(rows, label = "page") {
 
 export default function AdminAllReports() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [search,       setSearch]       = useState("");
   const [dSearch,      setDSearch]      = useState("");
@@ -106,6 +107,25 @@ export default function AdminAllReports() {
   });
   const [sort,         setSort]         = useState({ field: "created_at", dir: "desc" });
   const [criticalOnly, setCriticalOnly] = useState(false);
+
+  // Pre-set filters from URL params emitted by the AdminPanel priority links
+  useEffect(() => {
+    const filter = searchParams.get("filter");
+    if (!filter) return;
+    if (filter === "urgent") {
+      setCriticalOnly(true);
+    } else if (filter === "stale") {
+      // Pending reports submitted more than 3 days ago
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      setFilters((f) => ({ ...f, status: "pending", dateTo: threeDaysAgo }));
+    } else if (filter === "low_confidence") {
+      setFilters((f) => ({ ...f, confMax: 60 }));
+    } else if (filter === "overdue") {
+      setFilters((f) => ({ ...f, status: "in_progress" }));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [page,         setPage]         = useState(1);
 
   const [rawReports,  setRawReports]  = useState([]);
@@ -115,9 +135,11 @@ export default function AdminAllReports() {
   const [error,       setError]       = useState(null);
   const [barangays,   setBarangays]   = useState(["All"]);
 
-  const [selectedIds,    setSelectedIds]    = useState(new Set());
-  const [bulkLoading,    setBulkLoading]    = useState(false);
-  const [actionLoading,  setActionLoading]  = useState({});
+  const [selectedIds,      setSelectedIds]      = useState(new Set());
+  const [bulkLoading,      setBulkLoading]      = useState(false);
+  const [actionLoading,    setActionLoading]    = useState({});
+  const [bulkDeclineOpen,  setBulkDeclineOpen]  = useState(false);
+  const [bulkDeclineReason, setBulkDeclineReason] = useState("");
   const [selectedReport, setSelectedReport] = useState(null);
   const [showFilters,    setShowFilters]    = useState(true);
   const [toast,          setToast]          = useState(null);
@@ -364,6 +386,12 @@ export default function AdminAllReports() {
     setSelectedIds(selectedIds.size === reports.length ? new Set() : new Set(reports.map((r) => r.id)));
 
   const bulkAction = async (action) => {
+    if (action === REPORT_STATUS.DECLINED) {
+      // Show reason modal instead of running immediately
+      setBulkDeclineReason("");
+      setBulkDeclineOpen(true);
+      return;
+    }
     if (action === "delete" && !window.confirm(`Permanently delete ${selectedIds.size} report(s)?`)) return;
     setBulkLoading(true);
     const ids = [...selectedIds];
@@ -376,6 +404,18 @@ export default function AdminAllReports() {
     await fetchReports();
     setBulkLoading(false);
     showToast(`Bulk action applied to ${ids.length} report(s)`);
+  };
+
+  const executeBulkDecline = async () => {
+    setBulkDeclineOpen(false);
+    setBulkLoading(true);
+    const ids    = [...selectedIds];
+    const reason = bulkDeclineReason.trim();
+    await Promise.all(ids.map((id) => handleStatusChange(id, REPORT_STATUS.DECLINED, reason)));
+    setSelectedIds(new Set());
+    await fetchReports();
+    setBulkLoading(false);
+    showToast(`Declined ${ids.length} report(s)`);
   };
 
   const pageCount   = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -552,6 +592,43 @@ export default function AdminAllReports() {
             </div>
             <button className="bulk-cancel" onClick={() => setSelectedIds(new Set())}><X size={16} /> Cancel</button>
             {bulkLoading && <span className="bulk-spinner">Processing…</span>}
+          </div>
+        )}
+
+        {/* ── Bulk Decline reason modal ─────────────────────────────────────── */}
+        {bulkDeclineOpen && (
+          <div className="bdr-overlay" onClick={(e) => { if (e.target === e.currentTarget) setBulkDeclineOpen(false); }}>
+            <div className="bdr-box" role="dialog" aria-modal="true" aria-labelledby="bdr-title">
+              <div className="bdr-header">
+                <XCircle size={20} className="bdr-icon" />
+                <h3 id="bdr-title" className="bdr-title">
+                  Decline {selectedIds.size} report{selectedIds.size !== 1 ? "s" : ""}
+                </h3>
+              </div>
+              <p className="bdr-desc">
+                Provide a shared decline reason. The same reason will be sent to all
+                {" "}{selectedIds.size} reporter{selectedIds.size !== 1 ? "s" : ""} as a notification.
+              </p>
+              <textarea
+                className="bdr-textarea"
+                rows={4}
+                placeholder="e.g. Duplicate report, insufficient evidence…"
+                value={bulkDeclineReason}
+                onChange={(e) => setBulkDeclineReason(e.target.value)}
+                autoFocus
+              />
+              <div className="bdr-footer">
+                <button className="bdr-cancel-btn" onClick={() => setBulkDeclineOpen(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="bdr-confirm-btn"
+                  onClick={executeBulkDecline}
+                >
+                  Decline {selectedIds.size} report{selectedIds.size !== 1 ? "s" : ""}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

@@ -365,6 +365,7 @@ function AdminManageReports() {
   // ═════════════════════════════════════════════════════════════════
   const [cancelReport,   setCancelReport]   = useState(null);
   const [bulkMode,       setBulkMode]       = useState(null);
+  const [bulkConfirm,    setBulkConfirm]    = useState(null); // { status, label, verb, danger }
 
   const [countdown, setCountdown] = useState(30);
   const timerRef = useRef(null);
@@ -649,14 +650,47 @@ function AdminManageReports() {
       {selected.size > 0 && (
         <BulkBar
           count={selected.size}
-          onComplete={() => bulkPatch(REPORT_STATUS.RESOLVED)}
+          onComplete={() => setBulkConfirm({ status: REPORT_STATUS.RESOLVED,  label: "Mark as Resolved", verb: "resolve",  danger: false })}
           // ═════════════════════════════════════════════════════════
           // COMMENTED OUT: onAssign — moved to next version
           // onAssign={() => setBulkMode("assign")}
           // ═════════════════════════════════════════════════════════
-          onCancel={() => bulkPatch(REPORT_STATUS.CANCELLED)}
+          onCancel={() => setBulkConfirm({ status: REPORT_STATUS.CANCELLED, label: "Cancel",           verb: "cancel",   danger: true  })}
           onClear={() => setSelected(new Set())}
         />
+      )}
+
+      {/* ── Bulk action confirmation dialog ──────────────────────────────── */}
+      {bulkConfirm && (
+        <div
+          className="bmr-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setBulkConfirm(null); }}
+        >
+          <div className="bmr-box" role="dialog" aria-modal="true" aria-labelledby="bmr-title">
+            <div className="bmr-header">
+              {bulkConfirm.danger ? <IcoBan size={20} className="bmr-icon bmr-icon--danger" /> : <IcoCheck size={20} className="bmr-icon bmr-icon--success" />}
+              <h3 id="bmr-title" className="bmr-title">
+                {bulkConfirm.label} {selected.size} report{selected.size !== 1 ? "s" : ""}?
+              </h3>
+            </div>
+            <p className="bmr-desc">
+              This will {bulkConfirm.verb}{" "}
+              <strong>{selected.size} report{selected.size !== 1 ? "s" : ""}</strong> at once.
+              This action cannot be undone.
+            </p>
+            <div className="bmr-footer">
+              <button className="bmr-cancel-btn" onClick={() => setBulkConfirm(null)}>
+                Go back
+              </button>
+              <button
+                className={`bmr-confirm-btn${bulkConfirm.danger ? " bmr-confirm-btn--danger" : ""}`}
+                onClick={() => { setBulkConfirm(null); bulkPatch(bulkConfirm.status); }}
+              >
+                {bulkConfirm.label}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="manage-table-container">

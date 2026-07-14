@@ -359,6 +359,32 @@ body.dark .ap-pill-purple { background: rgba(186, 104, 200, 0.15); }
 }
 .ap-panel-link:hover { color: var(--primary-hover); }
 
+.ap-panel-link-disabled {
+  color: var(--subtext);
+  cursor: default;
+  font-size: inherit;
+  font-weight: inherit;
+  opacity: 0.55;
+  position: relative;
+}
+
+.ap-panel-link-disabled:hover::after {
+  content: attr(title);
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  pointer-events: none;
+  z-index: 10;
+}
+
 .ap-badge-pill {
   margin-left: 4px;
   background: var(--success-bg);
