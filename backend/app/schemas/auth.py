@@ -15,8 +15,9 @@ class UserCreate(AppBaseModel):
     @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters.")
+        # Length is NOT checked here — it is enforced at the endpoint layer
+        # after reading admin_settings.password_min_length from the DB.
+        # Complexity rules (char-class requirements) are validated here.
         if not re.search(r"[A-Z]", v):
             raise ValueError("Password must contain at least one uppercase letter.")
         if not re.search(r"[a-z]", v):

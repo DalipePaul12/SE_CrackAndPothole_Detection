@@ -568,17 +568,24 @@ async def delete_report(
                 ),
             )
 
-    # ── Fetch admin IDs before the row is deleted (needed for notifications) ─
+    # ── Fetch admin IDs + emails before the row is deleted ───────────────────
     # Only relevant for citizen withdrawals; admin deletes don't notify peers.
+    # Emails are fetched here in a single batched query so that each
+    # notify_background() call below can skip its own per-call SELECT (N+1
+    # avoided by passing email= to the background task).
     admin_ids: list[int] = []
+    admin_email_map: dict[int, str] = {}
     if not is_privileged:
         admin_result = await db.execute(
-            select(User.id).where(
+            select(User.id, User.email).where(
                 User.role.in_([UserRole.admin, UserRole.superadmin]),
                 User.is_active.is_(True),
             )
         )
-        admin_ids = [row[0] for row in admin_result.all()]
+        for row in admin_result.all():
+            admin_ids.append(row[0])
+            if row[1]:
+                admin_email_map[row[0]] = row[1]
 
         # ── Audit log: citizen self-withdraw ──────────────────────────────────
         db.add(AuditLog(
@@ -599,6 +606,9 @@ async def delete_report(
     # ── Notify all admins of the citizen withdrawal ───────────────────────────
     # Done after commit so the notification never blocks or rolls back the delete.
     if admin_ids:
+        # Emails were batch-loaded above (select User.id, User.email) so each
+        # background task receives the address directly and skips its own
+        # per-call SELECT — avoids an N+1 across all notified admins.
         for admin_id in admin_ids:
             background_tasks.add_task(
                 notify_background,
@@ -610,6 +620,7 @@ async def delete_report(
                 ),
                 type=NotificationType.warning,
                 report_id=None,   # row is gone; don't link a dead FK
+                email=admin_email_map.get(admin_id),  # pre-fetched; no extra SELECT
             )
         logger.info(
             "Citizen withdrawal: report=%d user=%d notified %d admin(s)",

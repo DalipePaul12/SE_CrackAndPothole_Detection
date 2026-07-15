@@ -34,7 +34,7 @@ function useIsDark() {
   return isDark;
 }
 
-import { getReports, updateReport, uploadReportMedia as uploadReportImage } from "../../api/reports";
+import { getReports, getReport, updateReport, uploadReportMedia as uploadReportImage } from "../../api/reports";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -385,6 +385,45 @@ function DrawSelectTool({ active, onBoundsSelected }) {
   );
 }
 
+function MapBoundsWatcher({ onBoundsChange }) {
+  const map = useMap();
+  useEffect(() => { onBoundsChange(map.getBounds()); }, [map, onBoundsChange]);
+  useMapEvents({
+    moveend(e) { onBoundsChange(e.target.getBounds()); },
+    zoomend(e) { onBoundsChange(e.target.getBounds()); },
+  });
+  return null;
+}
+
+function ConfirmStatusDialog({ pending, onConfirm, onCancel, loading }) {
+  if (!pending) return null;
+  const ACTION_META = {
+    in_progress: { label: "Mark as In Progress", color: "#60a5fa", btnClass: "amv-dialog-btn--progress", icon: <Wrench size={22} /> },
+    resolved:    { label: "Mark as Resolved",    color: "#52b788", btnClass: "amv-dialog-btn--resolve",  icon: <Check  size={22} /> },
+    rejected:    { label: "Reject Report",       color: "#ef4444", btnClass: "amv-dialog-btn--reject",   icon: <X      size={22} /> },
+  };
+  const meta = ACTION_META[pending.newStatus] ?? { label: pending.newStatus, color: "#6b7280", btnClass: "amv-dialog-btn--default", icon: null };
+  return (
+    <div className="amv-dialog-overlay" onClick={onCancel}>
+      <div className="amv-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="amv-dialog-icon" style={{ color: meta.color }}>{meta.icon}</div>
+        <h3 className="amv-dialog-title">{meta.label}</h3>
+        <p className="amv-dialog-msg">
+          Change status of <strong>Report #{pending.id}</strong> to{" "}
+          <strong>{STATUS_CONFIG[pending.newStatus]?.label ?? pending.newStatus}</strong>?
+          <br />This will notify the reporter.
+        </p>
+        <div className="amv-dialog-actions">
+          <button className="amv-dialog-cancel" onClick={onCancel} disabled={loading}>Cancel</button>
+          <button className={`amv-dialog-confirm ${meta.btnClass}`} onClick={onConfirm} disabled={loading}>
+            {loading ? "Updating…" : "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ImageLightbox({ src, onClose }) {
   useEffect(() => {
     const fn = (e) => { if (e.key === "Escape") onClose(); };
@@ -531,6 +570,12 @@ function AdminMapView() {
   const [boundsReports,   setBoundsReports  ] = useState([]);
   const [showBoundsPanel, setShowBoundsPanel] = useState(false);
 
+  const [mapBounds,      setMapBounds     ] = useState(null);
+  const [totalCount,     setTotalCount    ] = useState(0);
+  const [fetchingMore,   setFetchingMore  ] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(null); // { id, newStatus }
+  const loadingStateRef = useRef({ loadedPages: 0, totalCount: 0 });
+
   const layerDropRef = useRef(null);
   const filterRef    = useRef(null);
   useClickOutside(layerDropRef, () => setLayerPanelOpen(false));
@@ -538,14 +583,36 @@ function AdminMapView() {
 
   const loadReports = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
-    const res = await getReports({ page_size: 500 });
+    const res = await getReports({ page_size: 100, page: 1 });
     if (res.success) {
-      const withCoords = (res.data?.results ?? []).filter((r) => r.latitude && r.longitude);
+      const data  = res.data?.results ?? [];
+      const total = res.data?.total   ?? data.length;
+      const withCoords = data.filter((r) => r.latitude && r.longitude);
       setAllReports(withCoords);
+      setTotalCount(total);
+      loadingStateRef.current = { loadedPages: 1, totalCount: total };
       setLastRefresh(new Date());
     } else { setError(res.error); }
     setLoading(false);
     setRefreshing(false);
+  }, []);
+
+  // Fetch the next page and append — called when the viewport pans to new areas
+  const loadMorePages = useCallback(async () => {
+    const { loadedPages, totalCount: knownTotal } = loadingStateRef.current;
+    if (loadedPages === 0 || loadedPages * 100 >= knownTotal) return;
+    setFetchingMore(true);
+    const nextPage = loadedPages + 1;
+    const res = await getReports({ page_size: 100, page: nextPage });
+    if (res.success) {
+      const data = (res.data?.results ?? []).filter((r) => r.latitude && r.longitude);
+      setAllReports((prev) => {
+        const ids = new Set(prev.map((r) => r.id));
+        return [...prev, ...data.filter((r) => !ids.has(r.id))];
+      });
+      loadingStateRef.current = { loadedPages: nextPage, totalCount: knownTotal };
+    }
+    setFetchingMore(false);
   }, []);
 
   useEffect(() => { loadReports(); }, [loadReports]);
@@ -561,6 +628,11 @@ function AdminMapView() {
     const id = setInterval(() => loadReports(true), REFRESH_INTERVAL);
     return () => clearInterval(id);
   }, [loadReports]);
+
+  // When the map viewport changes, try to load the next page if more exist
+  useEffect(() => {
+    if (mapBounds) loadMorePages();
+  }, [mapBounds, loadMorePages]);
 
   const q = search.toLowerCase();
   const filteredReports = allReports.filter((r) => {
@@ -586,14 +658,37 @@ function AdminMapView() {
   const inProgressCount = allReports.filter(r => (r.status ?? "").toLowerCase() === "in_progress").length;
   const activeFilters   = [filterType, filterSeverity, filterStatus, filterDate].filter(f => f !== "all").length;
 
+  // Only render pins within the current viewport — stats + strip still use the full filtered set
+  const mapVisibleReports = mapBounds
+    ? filteredReports.filter((r) => {
+        try { return mapBounds.contains(L.latLng(parseFloat(r.latitude), parseFloat(r.longitude))); }
+        catch { return false; }
+      })
+    : filteredReports;
+
   async function handleAction(reportId, newStatus) {
     setActionLoading(true);
     const res = await updateReport(reportId, { status: newStatus });
     if (res.success) {
+      // Optimistic update — instant feedback on chips, popup, and map pins
       setAllReports((prev) => prev.map((r) => r.id === reportId ? { ...r, status: newStatus } : r));
       setSelectedReport((prev) => prev ? { ...prev, status: newStatus } : prev);
+      // Server-confirmed sync — re-fetch the single report so pins/panels show authoritative data
+      getReport(reportId).then((fresh) => {
+        if (fresh.success && fresh.data) {
+          setAllReports((prev) =>
+            prev.map((r) =>
+              r.id === reportId
+                ? { ...fresh.data, latitude: fresh.data.latitude ?? r.latitude, longitude: fresh.data.longitude ?? r.longitude }
+                : r
+            )
+          );
+          setSelectedReport((prev) => (prev?.id === reportId ? fresh.data : prev));
+        }
+      });
     }
     setActionLoading(false);
+    setConfirmPending(null);
   }
 
   function handleImageChange(reportId, newUrl) {
@@ -741,7 +836,12 @@ function AdminMapView() {
 
               <div className="amv-controls-right">
                 <span className="amv-result-count">
-                  <strong>{filteredReports.length}</strong> {filteredReports.length !== 1 ? "reports" : "report"}
+                  <strong>{filteredReports.length}</strong>{" "}
+                  {filteredReports.length !== 1 ? "reports" : "report"}
+                  {fetchingMore && <span className="amv-loading-more"> · loading…</span>}
+                  {!fetchingMore && totalCount > allReports.length && (
+                    <span className="amv-loading-more"> · {allReports.length}/{totalCount}</span>
+                  )}
                 </span>
 
                 <button
@@ -855,13 +955,14 @@ function AdminMapView() {
                 <MapContainer center={MAP_CENTER} zoom={MAP_ZOOM} style={{ height: "100%", width: "100%" }} zoomControl={false}>
                   <TileLayer key={tileUrl} url={tileUrl} attribution={tileAttr} />
                   <MapController flyTo={flyTo} />
-                  {viewMode === "heat"    && <HeatmapLayer reports={filteredReports} enabled={true} />}
-                  {viewMode === "density" && <DensityLayer reports={filteredReports} />}
+                  <MapBoundsWatcher onBoundsChange={setMapBounds} />
+                  {viewMode === "heat"    && <HeatmapLayer reports={mapVisibleReports} enabled={true} />}
+                  {viewMode === "density" && <DensityLayer reports={mapVisibleReports} />}
                   <DrawSelectTool active={drawMode} onBoundsSelected={handleBoundsSelected} />
                   {viewMode === "markers" && (
                     clusterEnabled
-                      ? <ClusterLayer  reports={filteredReports} onMarkerClick={openPanel} />
-                      : <PlainMarkers  reports={filteredReports} onMarkerClick={openPanel} />
+                      ? <ClusterLayer  reports={mapVisibleReports} onMarkerClick={openPanel} />
+                      : <PlainMarkers  reports={mapVisibleReports} onMarkerClick={openPanel} />
                   )}
                 </MapContainer>
               )}
@@ -994,11 +1095,11 @@ function AdminMapView() {
                           <p className="amv-action-hint"><Clock size={12} /> Pending — assign to begin work</p>
                           <div className="amv-action-row">
                             <button className="amv-action-btn amv-action-progress" disabled={actionLoading}
-                              onClick={() => handleAction(selectedReport.id, "in_progress")}>
+                              onClick={() => setConfirmPending({ id: selectedReport.id, newStatus: "in_progress" })}>
                               <Wrench size={13} /> In Progress
                             </button>
                             <button className="amv-action-btn amv-action-reject" disabled={actionLoading}
-                              onClick={() => handleAction(selectedReport.id, "rejected")}>
+                              onClick={() => setConfirmPending({ id: selectedReport.id, newStatus: "rejected" })}>
                               <X size={13} /> Reject
                             </button>
                           </div>
@@ -1009,7 +1110,7 @@ function AdminMapView() {
                           <p className="amv-action-hint amv-action-hint--progress"><Wrench size={12} /> In Progress — mark resolved once done</p>
                           <div className="amv-action-row">
                             <button className="amv-action-btn amv-action-resolve amv-action-btn--full" disabled={actionLoading}
-                              onClick={() => handleAction(selectedReport.id, "resolved")}>
+                              onClick={() => setConfirmPending({ id: selectedReport.id, newStatus: "resolved" })}>
                               <Check size={13} /> Mark as Resolved
                             </button>
                           </div>
@@ -1080,6 +1181,12 @@ function AdminMapView() {
           </div>
         </div>
       )}
+      <ConfirmStatusDialog
+        pending={confirmPending}
+        onConfirm={() => handleAction(confirmPending.id, confirmPending.newStatus)}
+        onCancel={() => setConfirmPending(null)}
+        loading={actionLoading}
+      />
     </>
   );
 }

@@ -1,4 +1,6 @@
-from fastapi import Depends, HTTPException, status
+import logging
+
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +10,8 @@ from app.db.session import get_db
 from app.models.enums import UserRole
 from app.models.revoked_token import RevokedToken
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -69,13 +73,42 @@ async def get_current_user(
 
 
 async def require_admin(
+    request: Request,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     if current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to perform this action.",
         )
+
+    # ── Enforce allowed_admin_ips ─────────────────────────────────────────────
+    # If the setting is non-empty, only listed IPs may access admin routes.
+    from app.models.admin_settings import AdminSettings
+    result = await db.execute(select(AdminSettings).where(AdminSettings.id == 1))
+    cfg = result.scalar_one_or_none()
+    if cfg:
+        allowed_str = (cfg.allowed_admin_ips or "").strip()
+        if allowed_str:
+            allowed_ips = {ip.strip() for ip in allowed_str.split(",") if ip.strip()}
+            if allowed_ips:
+                forwarded = request.headers.get("X-Forwarded-For", "")
+                client_ip = (
+                    forwarded.split(",")[0].strip()
+                    if forwarded
+                    else (request.client.host if request.client else "")
+                )
+                if client_ip not in allowed_ips:
+                    logger.warning(
+                        "Admin access denied: ip=%s not in allowlist | user_id=%d",
+                        client_ip, current_user.id,
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Access denied: your IP address is not permitted for admin access.",
+                    )
+
     return current_user
 
 

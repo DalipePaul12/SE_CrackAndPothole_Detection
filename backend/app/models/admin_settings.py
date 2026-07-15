@@ -4,7 +4,7 @@ system settings. The row is created with defaults on first GET if absent.
 """
 import secrets
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Float, Integer, String, Text
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -17,6 +17,12 @@ def _default_api_key() -> str:
 
 class AdminSettings(Base):
     __tablename__ = "admin_settings"
+
+    # Only one row (id=1) is ever allowed.  The CHECK constraint is the DB-level
+    # guard; _get_or_create() in settings.py is the application-level guard.
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_admin_settings_singleton"),
+    )
 
     id = Column(Integer, primary_key=True, default=1)
 

@@ -11,9 +11,13 @@ from app.schemas.base import AppBaseModel
 
 # ── Validators ────────────────────────────────────────────────────────────────
 
-def validate_password(v: str) -> str:
-    if len(v) < 8:
-        raise ValueError("Password must be at least 8 characters.")
+def validate_password(v: str, *, min_length: int = 1) -> str:
+    # Length floor is enforced here only as a hard safety floor (min_length=1
+    # by default).  The real DB-driven minimum is checked at the endpoint layer
+    # after reading admin_settings.password_min_length — do not add a
+    # hardcoded value here that would diverge from the DB setting.
+    if len(v) < min_length:
+        raise ValueError(f"Password must be at least {min_length} characters.")
     if not re.search(r"[A-Z]", v):
         raise ValueError("Password must contain at least one uppercase letter.")
     if not re.search(r"[0-9]", v):
@@ -27,7 +31,9 @@ def validate_password(v: str) -> str:
 
 class UserCreate(AppBaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=8)
+    # min_length=1: bare-minimum Pydantic floor only.  The real policy minimum
+    # (admin_settings.password_min_length) is enforced at the endpoint layer.
+    password: str = Field(..., min_length=1)
     full_name: str = Field(..., min_length=2, max_length=100)
     contact_number: Optional[str] = Field(None, max_length=20)
     city: Optional[str] = Field(None, max_length=100)

@@ -43,7 +43,8 @@ class AdminSettingsResponse(BaseModel):
     maintenance_mode:    bool
     maintenance_message: str
     allowed_admin_ips:   str
-    api_key:             str
+    # api_key is intentionally excluded — it must never travel over the wire in
+    # plaintext.  It is stored in the DB and used server-side only.
 
     model_config = {"from_attributes": True}
 
@@ -87,4 +88,4 @@ class AdminSettingsUpdate(BaseModel):
     maintenance_mode:    Optional[bool] = None
     maintenance_message: Optional[str]  = None
     allowed_admin_ips:   Optional[str]  = None
-    api_key:             Optional[str]  = None
+    # api_key is not settable through this endpoint — rotate it server-side only.

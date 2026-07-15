@@ -41,11 +41,15 @@ function AdminStreetReports() {
     status: "All",
     searchQuery: "",
   });
+  const [totalCount,  setTotalCount ] = useState(0);
+  const [hasMore,     setHasMore    ] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await getReports({ page_size: 500 });
+    const res = await getReports({ page_size: 100, page: 1 });
 
     if (!res.success) {
       setError(res.error);
@@ -53,8 +57,12 @@ function AdminStreetReports() {
       return;
     }
 
+    const total = res.data?.total ?? 0;
     let reportsData = res.data?.results ?? [];
     setAllReports(reportsData);
+    setTotalCount(total);
+    setCurrentPage(1);
+    setHasMore(reportsData.length < total);
     setLoading(false);
 
     const GEO_CACHE_KEY = "asr_geo_cache";
@@ -116,6 +124,21 @@ function AdminStreetReports() {
       setAllReports([...updated]);
     }
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const nextPage = currentPage + 1;
+    const res = await getReports({ page_size: 100, page: nextPage });
+    if (res.success) {
+      const newData = res.data?.results ?? [];
+      const total   = res.data?.total   ?? 0;
+      setAllReports((prev) => [...prev, ...newData]);
+      setCurrentPage(nextPage);
+      setHasMore(nextPage * 100 < total);
+    }
+    setLoadingMore(false);
+  }, [loadingMore, hasMore, currentPage]);
 
   useEffect(() => {
     fetchAll();
@@ -422,6 +445,20 @@ function AdminStreetReports() {
           </tbody>
         </table>
       </div>
+
+      {hasMore && (
+        <div className="asr-load-more">
+          <button
+            className="asr-load-more-btn"
+            onClick={loadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore
+              ? "Loading…"
+              : `Load more — showing ${allReports.length} of ${totalCount}`}
+          </button>
+        </div>
+      )}
 
       {selectedReport && (
         <StreetReportModal

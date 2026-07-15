@@ -42,10 +42,21 @@ def verify_password(plain: str, hashed: str) -> bool:
     return _passlib_verify(plain, hashed)
 
 
-def create_access_token(user_public_id: UUID, role: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+def create_access_token(
+    user_public_id: UUID,
+    role: str,
+    expire_minutes: int | None = None,
+) -> str:
+    """
+    Create a signed JWT access token.
+
+    ``expire_minutes`` — when supplied (read from admin_settings.session_timeout)
+    this overrides the static ACCESS_TOKEN_EXPIRE_MINUTES env-var so the
+    DB-configured session timeout is honoured.  Pass None to fall back to the
+    env/config default.
+    """
+    minutes = expire_minutes if expire_minutes is not None else settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
     payload = {
         "sub": str(user_public_id),
         "role": role,

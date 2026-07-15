@@ -26,6 +26,7 @@ from app.schemas.auth import (
 from app.services import auth_service
 from app.services.email_service import send_otp_email
 from app.utils.logger import logger
+from app.schemas.user import UserResponse as _UserResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -36,6 +37,14 @@ def _get_client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+async def _load_admin_settings(db: AsyncSession):
+    """Return the singleton AdminSettings row, or None if the table is empty."""
+    from sqlalchemy import select as _select
+    from app.models.admin_settings import AdminSettings
+    result = await db.execute(_select(AdminSettings).where(AdminSettings.id == 1))
+    return result.scalar_one_or_none()
 
 
 def _mask_email(email: str) -> str:
@@ -57,6 +66,15 @@ async def register(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
+    # ── Enforce DB-configured password minimum length ─────────────────────────
+    admin_cfg = await _load_admin_settings(db)
+    min_len = (admin_cfg.password_min_length if admin_cfg else None) or 8
+    if len(user_data.password) < min_len:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Password must be at least {min_len} characters.",
+        )
+
     result = await db.execute(select(User).where(User.email == user_data.email))
     existing = result.scalar_one_or_none()
 
@@ -99,7 +117,7 @@ async def register(
     return {"message": "Registration successful.", "user_id": new_user.id}
 
 
-@router.post("/login", response_model=LoginStep1Response)
+@router.post("/login")   # response_model intentionally absent — shape varies by require_2fa setting
 @limiter.limit("5/minute")
 async def login(
     request: Request,
@@ -123,6 +141,38 @@ async def login(
             detail="Account is deactivated. Contact support.",
         )
 
+    # ── Read security settings from DB ────────────────────────────────────────
+    admin_cfg   = await _load_admin_settings(db)
+    require_2fa     = (admin_cfg.require_2fa     if admin_cfg else None)
+    session_timeout = (admin_cfg.session_timeout if admin_cfg else None)
+    # Default: require 2FA when the setting row is absent (safe-fail closed).
+    if require_2fa is None:
+        require_2fa = True
+
+    if not require_2fa:
+        # ── 2FA disabled: issue tokens immediately after password check ───────
+        user.last_login_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(user)
+        access_token = auth_service.create_access_token(
+            user.public_id, user.role.value, expire_minutes=session_timeout
+        )
+        refresh_token = await auth_service.create_refresh_token(
+            db,
+            user.id,
+            device_info=request.headers.get("User-Agent"),
+            ip_address=_get_client_ip(request),
+        )
+        logger.info("Login (2FA disabled) | user_id=%d | ip=%s", user.id, _get_client_ip(request))
+        return {
+            "otp_required": False,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": _UserResponse.model_validate(user),
+        }
+
+    # ── 2FA enabled: send OTP and return step-1 response ─────────────────────
     try:
         code = await auth_service.create_otp(db, user.email, OTPPurpose.two_factor, user.id)
         background_tasks.add_task(send_otp_email, user.email, code, "two_factor")
@@ -165,7 +215,11 @@ async def verify_login_otp(
     await db.commit()
     await db.refresh(user)
 
-    access_token = auth_service.create_access_token(user.public_id, user.role.value)
+    admin_cfg       = await _load_admin_settings(db)
+    session_timeout = (admin_cfg.session_timeout if admin_cfg else None)
+    access_token = auth_service.create_access_token(
+        user.public_id, user.role.value, expire_minutes=session_timeout
+    )
     refresh_token = await auth_service.create_refresh_token(
         db,
         user.id,
@@ -267,7 +321,11 @@ async def refresh_token(
             detail="Token reuse detected. Please log in again.",
         )
 
-    access_token = auth_service.create_access_token(user.public_id, user.role.value)
+    admin_cfg       = await _load_admin_settings(db)
+    session_timeout = (admin_cfg.session_timeout if admin_cfg else None)
+    access_token = auth_service.create_access_token(
+        user.public_id, user.role.value, expire_minutes=session_timeout
+    )
 
     logger.info("Token refreshed | user_id=%d | ip=%s", user.id, ip)
 
@@ -325,6 +383,15 @@ async def reset_password(
 
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    # ── Enforce DB-configured password minimum length ─────────────────────────
+    admin_cfg = await _load_admin_settings(db)
+    min_len = (admin_cfg.password_min_length if admin_cfg else None) or 8
+    if len(data.new_password) < min_len:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Password must be at least {min_len} characters.",
+        )
 
     user.hashed_password = get_password_hash(data.new_password)
     await db.commit()

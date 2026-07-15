@@ -50,6 +50,19 @@ async def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect.",
         )
+
+    # ── Enforce DB-configured password minimum length ─────────────────────────
+    from sqlalchemy import select as _select
+    from app.models.admin_settings import AdminSettings
+    cfg_result = await db.execute(_select(AdminSettings).where(AdminSettings.id == 1))
+    admin_cfg  = cfg_result.scalar_one_or_none()
+    min_len    = (admin_cfg.password_min_length if admin_cfg else None) or 8
+    if len(data.new_password) < min_len:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Password must be at least {min_len} characters.",
+        )
+
     current_user.hashed_password = auth_service.hash_password(data.new_password)
     await db.commit()
 

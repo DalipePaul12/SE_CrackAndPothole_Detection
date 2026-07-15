@@ -614,3 +614,28 @@
     padding: 20px;
   }
 }
+/* ── Load-more button ─────────────────────────────────────────── */
+.asr-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0 8px;
+}
+.asr-load-more-btn {
+  padding: 10px 28px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid var(--border, #d1d5db);
+  background: transparent;
+  color: var(--text, #374151);
+  transition: background 0.15s, border-color 0.15s;
+}
+.asr-load-more-btn:hover:not(:disabled) {
+  background: var(--bg-secondary, #f3f4f6);
+  border-color: var(--primary, #22c55e);
+}
+.asr-load-more-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

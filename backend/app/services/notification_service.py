@@ -16,6 +16,11 @@ async def notify(
     message: str,
     type: NotificationType = NotificationType.info,
     report_id: Optional[int] = None,
+    email: Optional[str] = None,
+    # ^^^ Pre-fetch the user's email with a single batched query (e.g.
+    # User.id.in_(ids)) and pass it here when calling notify() in a loop.
+    # If omitted, notify() issues its own SELECT per call, which becomes an
+    # N+1 if called in a loop.
 ) -> Notification:
     notif = Notification(
         user_id=user_id,
@@ -67,15 +72,20 @@ async def notify(
 
     # ── Send email notification (best-effort, never blocks) ───────────────────
     try:
-        from sqlalchemy import select
-        from app.models.user import User
         from app.services.email_service import send_notification_email
 
-        result = await db.execute(select(User.email).where(User.id == user_id))
-        email = result.scalar_one_or_none()
-        if email:
+        resolved_email = email
+        if resolved_email is None:
+            # Per-call SELECT — acceptable for single-user paths.  If this
+            # function is ever called in a loop, pre-fetch all emails with one
+            # User.id.in_(ids) query and pass email= to avoid N+1.
+            from sqlalchemy import select
+            from app.models.user import User
+            result = await db.execute(select(User.email).where(User.id == user_id))
+            resolved_email = result.scalar_one_or_none()
+        if resolved_email:
             await send_notification_email(
-                email=email,
+                email=resolved_email,
                 title=title,
                 message=message,
                 report_id=report_id,
@@ -93,6 +103,11 @@ async def notify_background(
     message: str,
     type: NotificationType = NotificationType.info,
     report_id: Optional[int] = None,
+    email: Optional[str] = None,
+    # ^^^ Pre-fetch the user's email with a single batched query (e.g.
+    # User.id.in_(ids)) and pass it here when scheduling notify_background()
+    # in a loop.  If omitted, this function issues its own SELECT per call,
+    # which becomes an N+1 if looped without batching.
 ) -> None:
     try:
         async with AsyncSessionLocal() as db:
@@ -110,15 +125,22 @@ async def notify_background(
 
             # ── Send email notification ─────────────────────────────────
             try:
-                from sqlalchemy import select
-                from app.models.user import User
                 from app.services.email_service import send_notification_email
 
-                result = await db.execute(select(User.email).where(User.id == user_id))
-                email = result.scalar_one_or_none()
-                if email:
+                resolved_email = email
+                if resolved_email is None:
+                    # Per-call SELECT — acceptable for single-user paths.  If
+                    # this task is ever scheduled in a loop, pre-fetch all
+                    # emails with one User.id.in_(ids) query and pass email=.
+                    from sqlalchemy import select
+                    from app.models.user import User
+                    result = await db.execute(
+                        select(User.email).where(User.id == user_id)
+                    )
+                    resolved_email = result.scalar_one_or_none()
+                if resolved_email:
                     await send_notification_email(
-                        email=email,
+                        email=resolved_email,
                         title=title,
                         message=message,
                         report_id=report_id,

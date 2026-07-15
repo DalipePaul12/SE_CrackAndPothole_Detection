@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "./AdminAllReports.css";
+import ConfirmChangesModal from "../PopUps/ConfirmChangesModal";
 import { getReports, updateReport, deleteReport, addComment } from "../../api/reports";
 import { sendNotification } from "../../api/notifications";
 import { REPORT_STATUS } from "../../constants/reportStatus";
@@ -135,11 +136,12 @@ export default function AdminAllReports() {
   const [error,       setError]       = useState(null);
   const [barangays,   setBarangays]   = useState(["All"]);
 
-  const [selectedIds,      setSelectedIds]      = useState(new Set());
-  const [bulkLoading,      setBulkLoading]      = useState(false);
-  const [actionLoading,    setActionLoading]    = useState({});
-  const [bulkDeclineOpen,  setBulkDeclineOpen]  = useState(false);
-  const [bulkDeclineReason, setBulkDeclineReason] = useState("");
+  const [selectedIds,        setSelectedIds]        = useState(new Set());
+  const [bulkLoading,        setBulkLoading]        = useState(false);
+  const [actionLoading,      setActionLoading]      = useState({});
+  const [bulkDeclineOpen,    setBulkDeclineOpen]    = useState(false);
+  const [bulkDeclineReason,  setBulkDeclineReason]  = useState("");
+  const [bulkDeleteConfirm,  setBulkDeleteConfirm]  = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [showFilters,    setShowFilters]    = useState(true);
   const [toast,          setToast]          = useState(null);
@@ -392,11 +394,11 @@ export default function AdminAllReports() {
       setBulkDeclineOpen(true);
       return;
     }
-    if (action === "delete" && !window.confirm(`Permanently delete ${selectedIds.size} report(s)?`)) return;
+    if (action === "delete") { setBulkDeleteConfirm(true); return; }
     setBulkLoading(true);
     const ids = [...selectedIds];
-    if (action === "delete") {
-      await Promise.all(ids.map((id) => deleteReport(id)));
+    if (false) {
+      // placeholder — delete path is handled by executeBulkDelete
     } else {
       await Promise.all(ids.map((id) => handleStatusChange(id, action)));
     }
@@ -404,6 +406,17 @@ export default function AdminAllReports() {
     await fetchReports();
     setBulkLoading(false);
     showToast(`Bulk action applied to ${ids.length} report(s)`);
+  };
+
+  const executeBulkDelete = async () => {
+    setBulkDeleteConfirm(false);
+    setBulkLoading(true);
+    const ids = [...selectedIds];
+    await Promise.all(ids.map((id) => deleteReport(id)));
+    setSelectedIds(new Set());
+    await fetchReports();
+    setBulkLoading(false);
+    showToast(`Deleted ${ids.length} report(s)`);
   };
 
   const executeBulkDecline = async () => {
@@ -855,6 +868,21 @@ export default function AdminAllReports() {
           <span className="page-size-info">Page {page} of {pageCount}</span>
         </div>
       </div>
+
+      {bulkDeleteConfirm && (
+        <ConfirmChangesModal
+          variant="danger"
+          title="Delete Reports"
+          message={
+            selectedIds.size === 1
+              ? `Permanently delete report ${padId([...selectedIds][0])}? This cannot be undone.`
+              : `Permanently delete ${selectedIds.size} reports (${[...selectedIds].map(padId).join(", ")})?  This cannot be undone.`
+          }
+          confirmText={`Delete ${selectedIds.size} report${selectedIds.size !== 1 ? "s" : ""}`}
+          onConfirm={executeBulkDelete}
+          onCancel={() => setBulkDeleteConfirm(false)}
+        />
+      )}
 
       {selectedReport && (
         <ReportModal

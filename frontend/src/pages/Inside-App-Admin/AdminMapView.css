@@ -960,3 +960,88 @@
 @media (min-width: 1400px) {
   :root { --amv-panel-w: 380px; }
 }
+/* ── Viewport-loading progress indicator ──────────────────────── */
+.amv-loading-more {
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+  font-weight: 400;
+}
+
+/* ── Confirm status dialog ────────────────────────────────────── */
+.amv-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(3px);
+}
+.amv-dialog {
+  background: var(--card, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 16px;
+  padding: 32px 28px 24px;
+  width: 340px;
+  max-width: 90vw;
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+  animation: amv-dialog-in 0.18s ease;
+}
+@keyframes amv-dialog-in {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+.amv-dialog-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.amv-dialog-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text, #111827);
+  margin: 0 0 8px;
+}
+.amv-dialog-msg {
+  font-size: 13px;
+  color: var(--text-muted, #6b7280);
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+.amv-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.amv-dialog-cancel {
+  padding: 9px 22px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1.5px solid var(--border, #d1d5db);
+  cursor: pointer;
+  background: transparent;
+  color: var(--text, #374151);
+  transition: background 0.15s;
+}
+.amv-dialog-cancel:hover:not(:disabled) {
+  background: var(--bg-secondary, #f3f4f6);
+}
+.amv-dialog-confirm {
+  padding: 9px 22px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  transition: opacity 0.15s;
+}
+.amv-dialog-confirm:disabled,
+.amv-dialog-cancel:disabled  { opacity: 0.5; cursor: not-allowed; }
+.amv-dialog-btn--progress { background: #3b82f6; }
+.amv-dialog-btn--resolve  { background: #22c55e; }
+.amv-dialog-btn--reject   { background: #ef4444; }
+.amv-dialog-btn--default  { background: #6b7280; }
