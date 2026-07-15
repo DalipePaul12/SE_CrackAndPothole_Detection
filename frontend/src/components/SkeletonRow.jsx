@@ -28,7 +28,6 @@ export function SkeletonTableRow({ cols = [3, 2, 1, 1, 1], hasThumb = false, hei
  *   lines – number of text-line placeholders in the body (default 3)
  */
 export function SkeletonCard({ lines = 3 }) {
-  // widths cycle through realistic-looking proportions
   const lineWidths = ["65%", "80%", "45%"];
 
   return (
