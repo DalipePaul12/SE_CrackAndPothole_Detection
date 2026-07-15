@@ -32,15 +32,19 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise _CREDENTIALS_EXCEPTION
 
+    # Fail closed: a token with no jti cannot be revoked, so we reject it
+    # outright rather than silently skipping the revocation check.
+    # create_access_token always embeds a jti; absence means a hand-crafted
+    # or legacy token — neither should be trusted.
     jti: str | None = payload.get("jti")
-    if jti:
-        # Only check revocation when the token carries a jti.
-        # Add jti to create_access_token when you want full JTI blacklisting.
-        revoked = await db.execute(
-            select(RevokedToken).where(RevokedToken.jti == jti)
-        )
-        if revoked.scalar_one_or_none():
-            raise _CREDENTIALS_EXCEPTION
+    if not jti:
+        raise _CREDENTIALS_EXCEPTION
+
+    revoked = await db.execute(
+        select(RevokedToken).where(RevokedToken.jti == jti)
+    )
+    if revoked.scalar_one_or_none():
+        raise _CREDENTIALS_EXCEPTION
 
     # sub = user.public_id (UUID string) set by auth_service.create_access_token
     public_id: str | None = payload.get("sub")

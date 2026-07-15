@@ -220,11 +220,11 @@ function Badge({ text, className }) {
   return <span className={`badge ${className || ""}`}>{text}</span>;
 }
 
-function StatsCards({ reports }) {
+function StatsCards({ reports, totalCount }) {
   const today = new Date().toDateString();
   const cards = [
     { label: "Total Reports",
-      value: reports.length,
+      value: totalCount,
       icon:  <IcoClipboard size={18} />, className: "sc-total"      },
     { label: "Critical",
       value: reports.filter(r => (r.ai_severity ?? r.severity ?? "").toLowerCase() === "critical").length,
@@ -340,10 +340,14 @@ function ActionButtons({ r, onVerify, onStart, onComplete, onCancel, isPatching 
   );
 }
 
+const PAGE_SIZE = 25;
+
 function AdminManageReports() {
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
+  const [reports,    setReports]    = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
+  const [page,       setPage]       = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   const [search,         setSearch]         = useState("");
   const [filterType,     setFilterType]     = useState("All");
@@ -464,12 +468,23 @@ function AdminManageReports() {
     });
   }, [patchStatus]);
 
-  const fetchAll = useCallback(async () => {
+  // fetchPage — always uses the current server-side filter state via closure.
+  // Call with a page number; server filters (status/damage_type/severity) are
+  // applied here so the backend returns only matching rows before pagination.
+  const fetchPage = useCallback(async (pg = 1) => {
     setLoading(true);
     setError(null);
     setCountdown(30);
 
-    const res = await getReports({ page_size: 200 });
+    const res = await getReports({
+      page:        pg,
+      page_size:   PAGE_SIZE,
+      // "All" is stripped by cleanParams inside getReports → buildQS
+      status:      filterStatus   !== "All" ? filterStatus   : undefined,
+      damage_type: filterType     !== "All" ? filterType     : undefined,
+      severity:    filterSeverity !== "All" ? filterSeverity : undefined,
+    });
+
     if (!res.success) {
       setError(res.error);
       setLoading(false);
@@ -478,24 +493,28 @@ function AdminManageReports() {
 
     const raw = res.data?.results ?? [];
     setReports(raw);
+    setTotalCount(res.data?.total ?? 0);
+    setPage(pg);
+    setSelected(new Set()); // clear row selections on page change
     setLoading(false);
 
-    reverseGeocodeAll(raw).then(geocoded => {
-      setReports(geocoded);
-    });
-  }, []);
+    reverseGeocodeAll(raw).then(geocoded => setReports(geocoded));
+  }, [filterStatus, filterType, filterSeverity]); // re-created when server filters change
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  // Re-fetch from page 1 whenever the server-side filter callback changes
+  // (i.e. whenever filterStatus / filterType / filterSeverity change).
+  useEffect(() => { fetchPage(1); }, [fetchPage]);
 
+  // Auto-refresh: tick down and refresh the *current* page with current filters.
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setCountdown(c => {
-        if (c <= 1) { fetchAll(); return 30; }
+        if (c <= 1) { fetchPage(page); return 30; }
         return c - 1;
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [fetchAll]);
+  }, [fetchPage, page]);
 
   const handleSort = (col) => {
     if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -504,16 +523,12 @@ function AdminManageReports() {
 
   const filtered = reports
     .filter(r => {
-      const dt  = damageType(r).toLowerCase();
-      const sev = severity(r).toLowerCase();
-      const st  = r.status?.toLowerCase() ?? "";
-      const q   = search.toLowerCase();
-      const bg  = barangay(r).toLowerCase();
-      const id  = String(r.id).padStart(3, "0");
+      // status, damage_type, severity are already filtered server-side.
+      // Only apply client-side predicates that the backend doesn't support.
+      const q  = search.toLowerCase();
+      const bg = barangay(r).toLowerCase();
+      const id = String(r.id).padStart(3, "0");
       if (search && !bg.includes(q) && !id.includes(q) && !street(r).toLowerCase().includes(q)) return false;
-      if (filterType     !== "All" && dt  !== filterType.toLowerCase())     return false;
-      if (filterSeverity !== "All" && sev !== filterSeverity.toLowerCase()) return false;
-      if (filterStatus   !== "All" && st  !== filterStatus.toLowerCase())   return false;
       if (filterDate !== "All" && r.created_at) {
         const d = new Date(r.created_at), now = new Date();
         if (filterDate === "Today" && d.toDateString() !== now.toDateString()) return false;
@@ -547,14 +562,14 @@ function AdminManageReports() {
 
   return (
     <div className="manage-container">
-      <StatsCards reports={reports} />
+      <StatsCards reports={reports} totalCount={totalCount} />
 
       <div className="manage-filters">
         <div className="filters-top-row">
           <h2 className="manage-title">Manage Reports</h2>
           <div className="refresh-area">
             <span className="refresh-countdown">Auto-refresh in {countdown}s</span>
-            <button className="refresh-btn" onClick={fetchAll}>
+            <button className="refresh-btn" onClick={() => fetchPage(page)}>
               <IcoRefresh size={12} /> Refresh
             </button>
           </div>
@@ -842,6 +857,41 @@ function AdminManageReports() {
             </tbody>
           </table>
         </div>
+
+        {/* ── Pagination bar ────────────────────────────────────────────── */}
+        {(() => {
+          const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+          const start      = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+          const end        = Math.min(page * PAGE_SIZE, totalCount);
+          return (
+            <div className="amr-pagination">
+              <span className="amr-page-info">
+                {totalCount === 0
+                  ? "No reports"
+                  : `Showing ${start}–${end} of ${totalCount} report${totalCount !== 1 ? "s" : ""}`}
+              </span>
+              <div className="amr-page-controls">
+                <button
+                  className="amr-page-btn"
+                  disabled={page <= 1 || loading}
+                  onClick={() => fetchPage(page - 1)}
+                >
+                  ← Previous
+                </button>
+                <span className="amr-page-numbers">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  className="amr-page-btn"
+                  disabled={page >= totalPages || loading}
+                  onClick={() => fetchPage(page + 1)}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════

@@ -3,7 +3,7 @@ import secrets
 import string
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import bcrypt
 from jose import jwt
@@ -51,6 +51,7 @@ def create_access_token(user_public_id: UUID, role: str) -> str:
         "role": role,
         "exp": expire,
         "type": "access",
+        "jti": str(uuid4()),  # unique token ID — required for revocation to work
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 

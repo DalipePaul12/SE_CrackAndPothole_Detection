@@ -184,6 +184,9 @@ class ReportResponse(AppBaseModel):
 
     media_attachments: List[MediaAttachmentResponse] = []
 
+    # ── Side-effect warnings (non-fatal, included when a background task fails)
+    warnings: Optional[List[str]] = None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LIST RESPONSE  (paginated)

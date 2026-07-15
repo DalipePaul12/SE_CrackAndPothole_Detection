@@ -15,6 +15,7 @@ CRITICAL FIXES:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -356,7 +357,9 @@ async def _require_admin_or_owner(
 
 
 @router.patch("/{report_id}", response_model=ReportResponse)
+@limiter.limit("30/minute")
 async def update_report(
+    request: Request,
     report_id: int,
     data: ReportUpdate,
     background_tasks: BackgroundTasks,
@@ -467,6 +470,7 @@ async def update_report(
         data.status = normalized_status
 
     # ── Handle status update ─────────────────────────────────────────────
+    _side_effect_warnings: list[str] = []
     if normalized_status:
         report.status = normalized_status
         report.updated_at = datetime.now(timezone.utc)
@@ -477,11 +481,14 @@ async def update_report(
             await report_service.update_report_status(db, report, data, current_user)
             logger.info("Service side-effects completed for report %d", report_id)
         except Exception as e:
-            logger.warning(
-                "Service side-effect failed for report %d (non-critical, continuing): %s",
-                report_id, str(e)
+            logger.error(
+                "Service side-effect failed for report %d: %s",
+                report_id, str(e), exc_info=True,
             )
-            # Non-critical: we already set report.status above, so continue
+            _side_effect_warnings.append(
+                "Status updated successfully, but a background side effect "
+                "(audit log or analytics cache) failed. Please verify manually."
+            )
 
     # ── Commit changes ───────────────────────────────────────────────────
     try:
@@ -489,10 +496,12 @@ async def update_report(
         await db.refresh(report)
         logger.info("Successfully committed update for report %d", report_id)
     except Exception as e:
-        logger.exception("Database commit failed for report %d: %s", report_id, str(e))
+        logger.error(
+            "Database commit failed for report %d: %s", report_id, str(e), exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save report update: {str(e)}",
+            detail="An internal error occurred while updating the report.",
         )
 
     # ── Send notification to report owner ──────────────────────────────────
@@ -521,13 +530,17 @@ async def update_report(
     updated = await _fetch_report_or_404(db, report_id)
     response = ReportResponse.model_validate(updated)
     response.upvote_count = await report_service.get_upvote_count(db, report_id)
+    if _side_effect_warnings:
+        response.warnings = _side_effect_warnings
 
     logger.info("PATCH report_id=%d completed successfully", report_id)
     return response
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 async def delete_report(
+    request: Request,
     report_id: int,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
@@ -629,7 +642,15 @@ async def upload_media(
     # Detect MIME
     detected_mime = _detect_mime_from_bytes(contents)
     declared_mime = (file.content_type or "").lower()
-    actual_mime   = detected_mime or declared_mime
+    if detected_mime is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Could not determine file type from content. "
+                "Ensure the file is a valid image (JPEG, PNG, WEBP) or video (MP4)."
+            ),
+        )
+    actual_mime = detected_mime
 
     logger.info(
         "Upload | report_id=%d | filename=%s | declared=%s | detected=%s",
@@ -939,6 +960,53 @@ async def get_nearby_cctv(
 
 # ── AI SUMMARY ────────────────────────────────────────────────────────────────
 
+_SUMMARY_DAILY_LIMIT = 5
+# In-process fallback counter when Redis is unavailable (resets on restart).
+_summary_mem_counts: dict[str, int] = {}
+
+
+async def _check_summary_daily_quota(user_id: int) -> None:
+    """
+    Increment per-user daily summary counter and raise HTTP 429 once the
+    limit is exceeded.  Uses Redis (INCR + 24-h TTL) when available;
+    falls back to an in-process dict so the endpoint never crashes on a
+    Redis outage (fail-open, not fail-closed).
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    redis_url = os.getenv("REDIS_URL")
+    count: int
+
+    if redis_url:
+        try:
+            import redis.asyncio as aioredis
+            async with aioredis.from_url(redis_url, decode_responses=True) as r:
+                key = f"summary_daily:{user_id}:{today}"
+                count = await r.incr(key)
+                if count == 1:
+                    await r.expire(key, 86400)  # 24-hour TTL
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Redis daily-quota check failed for user %d: %s — failing open",
+                user_id, exc,
+            )
+            return  # fail open: don't block the user on a Redis error
+    else:
+        mem_key = f"{user_id}:{today}"
+        _summary_mem_counts[mem_key] = _summary_mem_counts.get(mem_key, 0) + 1
+        count = _summary_mem_counts[mem_key]
+
+    if count > _SUMMARY_DAILY_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Daily AI summary limit reached ({_SUMMARY_DAILY_LIMIT} summaries/day per user). "
+                "Try again tomorrow."
+            ),
+        )
+
+
 @router.post("/{report_id}/summary", response_model=ReportResponse)
 @limiter.limit("10/minute")
 async def generate_summary(
@@ -962,6 +1030,11 @@ async def generate_summary(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to generate a summary for this report.",
         )
+
+    # Per-user daily cap — checked before the cached-result short-circuit so
+    # the counter only increments when we would actually call the external API.
+    if not report.ai_summary:
+        await _check_summary_daily_quota(current_user.id)
 
     if report.ai_summary:
         response = ReportResponse.model_validate(report)

@@ -313,3 +313,40 @@
     gap: 12px;
   }
 }
+/* ── Settings save-indicator variants ────────────────────────────────────── */
+.save-indicator--success {
+  color: var(--success, #16a34a);
+}
+
+.save-indicator--error {
+  color: var(--danger, #dc2626);
+  font-weight: 500;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Load-error alert banner ─────────────────────────────────────────────── */
+.adm-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 16px;
+}
+
+.adm-alert--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+/* ── Loading skeleton opacity on settings content ────────────────────────── */
+.settings-content--loading {
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}

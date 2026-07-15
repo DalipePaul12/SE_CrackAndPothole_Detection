@@ -69,6 +69,15 @@ async def get_user_public_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Only the profile owner or an admin/superadmin may view a profile.
+    _ADMIN_ROLES = (UserRole.admin, UserRole.superadmin)
+    is_own_profile = current_user.public_id == public_id
+    is_admin = current_user.role in _ADMIN_ROLES
+    if not is_own_profile and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view this profile.",
+        )
     user = await user_service.get_by_public_id(db, public_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")

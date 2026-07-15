@@ -28,12 +28,16 @@ const mediaUrl   = (r, base = "") => {
 const mediaCount = (r) => r.media_attachments?.length ?? 0;
 const aiConfidence = (r) => r.ai_confidence ?? r.confidence ?? null;
 
+const PAGE_SIZE = 25;
+
 export default function AdminManageRequests() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState({ type: "All", severity: "All" });
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
+  const [page,    setPage]    = useState(1);
+  const [total,   setTotal]   = useState(0);
   const [selectedReport, setSelected] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [declineDialog, setDeclineDialog] = useState(null);
@@ -41,27 +45,31 @@ export default function AdminManageRequests() {
   const [actionLoading, setActionLoading] = useState(new Set());
   const [toast,         setToast]         = useState(null);
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  const fetchPending = useCallback(async () => {
+  // Server always filters to status=pending — no client-side status filter needed.
+  const fetchPending = useCallback(async (pageNum = 1) => {
     setLoading(true);
     setError(null);
-    const res = await getReports({ page_size: 100 });
+    const res = await getReports({ status: "pending", page: pageNum, page_size: PAGE_SIZE });
     if (!res.success) {
       setError(res.error);
       setLoading(false);
       return;
     }
-    const all = res.data?.results ?? [];
-    setReports(all.filter((r) => r.status?.toLowerCase() === REPORT_STATUS.PENDING));
+    setReports(res.data?.results ?? []);
+    setTotal(res.data?.total ?? 0);
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchPending(); }, [fetchPending]);
+  useEffect(() => { fetchPending(page); }, [fetchPending, page]);
 
+  // type/severity are presentation filters within the current page only.
   const filtered = reports.filter((r) => {
     const dt  = damageType(r).toLowerCase();
     const sev = severity(r).toLowerCase();
@@ -191,6 +199,7 @@ export default function AdminManageRequests() {
                 <tr><td colSpan="6" className="no-data">Loading…</td></tr>
               ) : filtered.length > 0 ? (
                 filtered.map((r) => {
+
                   const thumb = mediaUrl(r, BASE_URL);
                   const mediaIsVideo = r.media_attachments?.[0]?.media_type === "video";
                   return (
@@ -264,6 +273,27 @@ export default function AdminManageRequests() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* ── Pagination controls ── */}
+        <div className="amr-pagination">
+          <button
+            className="amr-page-btn"
+            onClick={() => setPage((p) => p - 1)}
+            disabled={page <= 1 || loading}
+          >
+            ← Previous
+          </button>
+          <span className="amr-page-info">
+            Page {page} of {totalPages} · {total} pending
+          </span>
+          <button
+            className="amr-page-btn"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page >= totalPages || loading}
+          >
+            Next →
+          </button>
         </div>
       </div>
 

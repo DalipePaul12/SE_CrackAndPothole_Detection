@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Settings,
   ClipboardList,
@@ -11,46 +11,118 @@ import {
   ShieldAlert,
   Download,
   RefreshCw,
+  AlertCircle,
+  CheckCircle,
 } from "lucide-react";
 import "./AdminSettings.css";
+import { getSettings, updateSettings } from "../../api/settings";
+
+// ── snake_case (API) ↔ camelCase (component state) ───────────────────────────
+
+function fromApi(d) {
+  return {
+    orgName:                  d.org_name,
+    municipality:             d.municipality,
+    timezone:                 d.timezone,
+    contactEmail:             d.contact_email,
+    defaultSeverity:          d.default_severity,
+    autoAssign:               d.auto_assign,
+    responseTimeHours:        d.response_time_hours,
+    escalateAfterHours:       d.escalate_after_hours,
+    defaultLat:               d.default_lat,
+    defaultLng:               d.default_lng,
+    defaultZoom:              d.default_zoom,
+    mapProvider:              d.map_provider,
+    emailAlerts:              d.email_alerts,
+    smsAlerts:                d.sms_alerts,
+    pushAlerts:               d.push_alerts,
+    digestFrequency:          d.digest_frequency,
+    criticalAlertSound:       d.critical_alert_sound,
+    require2FA:               d.require_2fa,
+    passwordMinLength:        d.password_min_length,
+    sessionTimeout:           d.session_timeout,
+    dataRetentionDays:        d.data_retention_days,
+    allowPublicRegistration:  d.allow_public_registration,
+    maintenanceMode:          d.maintenance_mode,
+    maintenanceMessage:       d.maintenance_message,
+    allowedAdminIPs:          d.allowed_admin_ips,
+    apiKey:                   d.api_key,
+  };
+}
+
+function toApi(s) {
+  return {
+    org_name:                  s.orgName,
+    municipality:              s.municipality,
+    timezone:                  s.timezone,
+    contact_email:             s.contactEmail,
+    default_severity:          s.defaultSeverity,
+    auto_assign:               s.autoAssign,
+    response_time_hours:       s.responseTimeHours,
+    escalate_after_hours:      s.escalateAfterHours,
+    default_lat:               s.defaultLat,
+    default_lng:               s.defaultLng,
+    default_zoom:              s.defaultZoom,
+    map_provider:              s.mapProvider,
+    email_alerts:              s.emailAlerts,
+    sms_alerts:                s.smsAlerts,
+    push_alerts:               s.pushAlerts,
+    digest_frequency:          s.digestFrequency,
+    critical_alert_sound:      s.criticalAlertSound,
+    require_2fa:               s.require2FA,
+    password_min_length:       s.passwordMinLength,
+    session_timeout:           s.sessionTimeout,
+    data_retention_days:       s.dataRetentionDays,
+    allow_public_registration: s.allowPublicRegistration,
+    maintenance_mode:          s.maintenanceMode,
+    maintenance_message:       s.maintenanceMessage,
+    allowed_admin_ips:         s.allowedAdminIPs,
+    api_key:                   s.apiKey,
+  };
+}
+
+// ── Hard-coded defaults — shown while the GET is in flight ────────────────────
+const DEFAULTS = {
+  orgName: "Snap2Fix", municipality: "Panghulo", timezone: "Asia/Manila",
+  contactEmail: "admin@snap2fix.gov", defaultSeverity: "medium",
+  autoAssign: true, responseTimeHours: 24, escalateAfterHours: 72,
+  defaultLat: 14.5995, defaultLng: 120.9842, defaultZoom: 13,
+  mapProvider: "google", emailAlerts: true, smsAlerts: false,
+  pushAlerts: true, digestFrequency: "daily", criticalAlertSound: true,
+  require2FA: false, passwordMinLength: 8, sessionTimeout: 60,
+  dataRetentionDays: 365, allowPublicRegistration: false,
+  maintenanceMode: false,
+  maintenanceMessage: "System under maintenance. Please check back shortly.",
+  allowedAdminIPs: "", apiKey: "",
+};
 
 const AdminSettings = () => {
-  const [activeTab, setActiveTab] = useState("general");
-  const [saved, setSaved] = useState(false);
+  const [activeTab,   setActiveTab]   = useState("general");
+  const [settings,    setSettings]    = useState(DEFAULTS);
+  const [loading,     setLoading]     = useState(true);
+  const [loadError,   setLoadError]   = useState(null);
+  const [saving,      setSaving]      = useState(false);
+  const [saved,       setSaved]       = useState(false);
+  const [saveError,   setSaveError]   = useState(null);
   const [resetDialog, setResetDialog] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState("");
-  const [settings, setSettings] = useState({
-    orgName: "Snap2Fix",
-    municipality: "Panghulo",
-    timezone: "Asia/Manila",
-    contactEmail: "admin@snap2fix.gov",
-    defaultSeverity: "medium",
-    autoAssign: true,
-    responseTimeHours: 24,
-    escalateAfterHours: 72,
-    defaultLat: 14.5995,
-    defaultLng: 120.9842,
-    defaultZoom: 13,
-    mapProvider: "google",
-    emailAlerts: true,
-    smsAlerts: false,
-    pushAlerts: true,
-    digestFrequency: "daily",
-    criticalAlertSound: true,
-    require2FA: false,
-    passwordMinLength: 8,
-    sessionTimeout: 60,
-    dataRetentionDays: 365,
-    allowPublicRegistration: false,
-    maintenanceMode: false,
-    maintenanceMessage: "System under maintenance. Please check back shortly.",
-    allowedAdminIPs: "",
-    apiKey: "sk_live_••••••••••••••••",
-  });
+
+  // ── Load settings on mount ─────────────────────────────────────────────────
+  useEffect(() => {
+    getSettings().then((res) => {
+      if (res.success) {
+        setSettings(fromApi(res.data));
+      } else {
+        setLoadError(res.error);
+      }
+      setLoading(false);
+    });
+  }, []);
 
   const handleChange = (field, value) => {
     setSettings((prev) => ({ ...prev, [field]: value }));
     setSaved(false);
+    setSaveError(null);
   };
 
   const handleResetAllStatuses = () => {
@@ -60,19 +132,29 @@ const AdminSettings = () => {
     setResetConfirmText("");
   };
 
-  const handleSave = () => {
-    console.log("Saving settings:", settings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  // ── Persist to backend ────────────────────────────────────────────────────
+  const handleSave = async () => {
+    setSaving(true);
+    setSaved(false);
+    setSaveError(null);
+    const res = await updateSettings(toApi(settings));
+    if (res.success) {
+      setSettings(fromApi(res.data));   // sync with server-confirmed values
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3500);
+    } else {
+      setSaveError(res.error);
+    }
+    setSaving(false);
   };
 
   const tabs = [
-    { id: "general", label: "General", icon: Settings },
-    { id: "reports", label: "Reports & SLA", icon: ClipboardList },
-    { id: "map", label: "Map & Location", icon: Map },
-    { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "security", label: "Security & Privacy", icon: Lock },
-    { id: "maintenance", label: "System & Maintenance", icon: Wrench },
+    { id: "general",      label: "General",            icon: Settings     },
+    { id: "reports",      label: "Reports & SLA",      icon: ClipboardList },
+    { id: "map",          label: "Map & Location",     icon: Map          },
+    { id: "notifications",label: "Notifications",      icon: Bell         },
+    { id: "security",     label: "Security & Privacy", icon: Lock         },
+    { id: "maintenance",  label: "System & Maintenance",icon: Wrench      },
   ];
 
   return (
@@ -86,21 +168,40 @@ const AdminSettings = () => {
         </div>
         <div className="settings-actions">
           {saved && (
-            <span className="save-indicator">
-              <Save size={14} strokeWidth={2} /> Changes saved
+            <span className="save-indicator save-indicator--success">
+              <CheckCircle size={14} strokeWidth={2} /> Changes saved
+            </span>
+          )}
+          {saveError && (
+            <span className="save-indicator save-indicator--error">
+              <AlertCircle size={14} strokeWidth={2} /> {saveError}
             </span>
           )}
           <button
             className="adm-btn adm-btn-ghost"
             onClick={() => window.location.reload()}
+            disabled={saving}
           >
             <RotateCcw size={14} strokeWidth={2} /> Reset
           </button>
-          <button className="adm-btn adm-btn-primary" onClick={handleSave}>
-            <Save size={14} strokeWidth={2} /> Save Changes
+          <button
+            className="adm-btn adm-btn-primary"
+            onClick={handleSave}
+            disabled={saving || loading}
+          >
+            <Save size={14} strokeWidth={2} />
+            {saving ? "Saving…" : "Save Changes"}
           </button>
         </div>
       </div>
+
+      {/* Load error banner */}
+      {loadError && (
+        <div className="adm-alert adm-alert--error">
+          <AlertCircle size={16} />
+          <span>Could not load settings: {loadError} — showing defaults.</span>
+        </div>
+      )}
 
       <div className="settings-layout">
         <aside className="settings-sidebar">
@@ -118,7 +219,7 @@ const AdminSettings = () => {
           ))}
         </aside>
 
-        <main className="settings-content">
+        <main className={`settings-content${loading ? " settings-content--loading" : ""}`}>
           {/* GENERAL */}
           {activeTab === "general" && (
             <section className="adm-card settings-section">
@@ -131,6 +232,7 @@ const AdminSettings = () => {
                     type="text"
                     value={settings.orgName}
                     onChange={(e) => handleChange("orgName", e.target.value)}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group">
@@ -139,9 +241,8 @@ const AdminSettings = () => {
                     className="adm-input"
                     type="text"
                     value={settings.municipality}
-                    onChange={(e) =>
-                      handleChange("municipality", e.target.value)
-                    }
+                    onChange={(e) => handleChange("municipality", e.target.value)}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group">
@@ -150,6 +251,7 @@ const AdminSettings = () => {
                     className="adm-select"
                     value={settings.timezone}
                     onChange={(e) => handleChange("timezone", e.target.value)}
+                    disabled={loading}
                   >
                     <option value="Asia/Manila">Asia/Manila (GMT+8)</option>
                     <option value="Asia/Singapore">Asia/Singapore (GMT+8)</option>
@@ -162,9 +264,8 @@ const AdminSettings = () => {
                     className="adm-input"
                     type="email"
                     value={settings.contactEmail}
-                    onChange={(e) =>
-                      handleChange("contactEmail", e.target.value)
-                    }
+                    onChange={(e) => handleChange("contactEmail", e.target.value)}
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -174,16 +275,15 @@ const AdminSettings = () => {
           {/* REPORTS & SLA */}
           {activeTab === "reports" && (
             <section className="adm-card settings-section">
-              <h2>Reports & SLA Governance</h2>
+              <h2>Reports &amp; SLA Governance</h2>
               <div className="settings-grid">
                 <div className="form-group">
                   <label>Default Severity for New Reports</label>
                   <select
                     className="adm-select"
                     value={settings.defaultSeverity}
-                    onChange={(e) =>
-                      handleChange("defaultSeverity", e.target.value)
-                    }
+                    onChange={(e) => handleChange("defaultSeverity", e.target.value)}
+                    disabled={loading}
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -199,9 +299,8 @@ const AdminSettings = () => {
                     min="1"
                     max="168"
                     value={settings.responseTimeHours}
-                    onChange={(e) =>
-                      handleChange("responseTimeHours", Number(e.target.value))
-                    }
+                    onChange={(e) => handleChange("responseTimeHours", Number(e.target.value))}
+                    disabled={loading}
                   />
                   <span className="field-hint">
                     SLA clock starts when a report is submitted
@@ -215,9 +314,8 @@ const AdminSettings = () => {
                     min="1"
                     max="720"
                     value={settings.escalateAfterHours}
-                    onChange={(e) =>
-                      handleChange("escalateAfterHours", Number(e.target.value))
-                    }
+                    onChange={(e) => handleChange("escalateAfterHours", Number(e.target.value))}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group full-width">
@@ -225,16 +323,14 @@ const AdminSettings = () => {
                     <input
                       type="checkbox"
                       checked={settings.autoAssign}
-                      onChange={(e) =>
-                        handleChange("autoAssign", e.target.checked)
-                      }
+                      onChange={(e) => handleChange("autoAssign", e.target.checked)}
+                      disabled={loading}
                     />
                     <span className="toggle-slider"></span>
                     Enable Auto-Assignment by Street/Barangay
                   </label>
                   <span className="field-hint">
-                    Routes reports to the admin responsible for the reported
-                    location
+                    Routes reports to the admin responsible for the reported location
                   </span>
                 </div>
               </div>
@@ -253,10 +349,7 @@ const AdminSettings = () => {
                   </div>
                   <button
                     className="adm-btn adm-btn-danger"
-                    onClick={() => {
-                      setResetConfirmText("");
-                      setResetDialog(true);
-                    }}
+                    onClick={() => { setResetConfirmText(""); setResetDialog(true); }}
                   >
                     Reset All
                   </button>
@@ -268,7 +361,7 @@ const AdminSettings = () => {
           {/* MAP */}
           {activeTab === "map" && (
             <section className="adm-card settings-section">
-              <h2>Map & Geolocation</h2>
+              <h2>Map &amp; Geolocation</h2>
               <div className="settings-grid">
                 <div className="form-group">
                   <label>Default Latitude</label>
@@ -277,9 +370,8 @@ const AdminSettings = () => {
                     type="number"
                     step="0.0001"
                     value={settings.defaultLat}
-                    onChange={(e) =>
-                      handleChange("defaultLat", Number(e.target.value))
-                    }
+                    onChange={(e) => handleChange("defaultLat", Number(e.target.value))}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group">
@@ -289,9 +381,8 @@ const AdminSettings = () => {
                     type="number"
                     step="0.0001"
                     value={settings.defaultLng}
-                    onChange={(e) =>
-                      handleChange("defaultLng", Number(e.target.value))
-                    }
+                    onChange={(e) => handleChange("defaultLng", Number(e.target.value))}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group">
@@ -302,9 +393,8 @@ const AdminSettings = () => {
                     min="1"
                     max="20"
                     value={settings.defaultZoom}
-                    onChange={(e) =>
-                      handleChange("defaultZoom", Number(e.target.value))
-                    }
+                    onChange={(e) => handleChange("defaultZoom", Number(e.target.value))}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group">
@@ -312,9 +402,8 @@ const AdminSettings = () => {
                   <select
                     className="adm-select"
                     value={settings.mapProvider}
-                    onChange={(e) =>
-                      handleChange("mapProvider", e.target.value)
-                    }
+                    onChange={(e) => handleChange("mapProvider", e.target.value)}
+                    disabled={loading}
                   >
                     <option value="google">Google Maps</option>
                     <option value="osm">OpenStreetMap</option>
@@ -335,9 +424,8 @@ const AdminSettings = () => {
                     <input
                       type="checkbox"
                       checked={settings.emailAlerts}
-                      onChange={(e) =>
-                        handleChange("emailAlerts", e.target.checked)
-                      }
+                      onChange={(e) => handleChange("emailAlerts", e.target.checked)}
+                      disabled={loading}
                     />
                     <span className="toggle-slider"></span>
                     Email Alerts for Critical Reports
@@ -348,9 +436,8 @@ const AdminSettings = () => {
                     <input
                       type="checkbox"
                       checked={settings.smsAlerts}
-                      onChange={(e) =>
-                        handleChange("smsAlerts", e.target.checked)
-                      }
+                      onChange={(e) => handleChange("smsAlerts", e.target.checked)}
+                      disabled={loading}
                     />
                     <span className="toggle-slider"></span>
                     SMS Alerts for Overdue SLA
@@ -361,9 +448,8 @@ const AdminSettings = () => {
                     <input
                       type="checkbox"
                       checked={settings.pushAlerts}
-                      onChange={(e) =>
-                        handleChange("pushAlerts", e.target.checked)
-                      }
+                      onChange={(e) => handleChange("pushAlerts", e.target.checked)}
+                      disabled={loading}
                     />
                     <span className="toggle-slider"></span>
                     Browser Push Notifications
@@ -374,9 +460,8 @@ const AdminSettings = () => {
                     <input
                       type="checkbox"
                       checked={settings.criticalAlertSound}
-                      onChange={(e) =>
-                        handleChange("criticalAlertSound", e.target.checked)
-                      }
+                      onChange={(e) => handleChange("criticalAlertSound", e.target.checked)}
+                      disabled={loading}
                     />
                     <span className="toggle-slider"></span>
                     Play Sound for Urgent Actions
@@ -387,9 +472,8 @@ const AdminSettings = () => {
                   <select
                     className="adm-select"
                     value={settings.digestFrequency}
-                    onChange={(e) =>
-                      handleChange("digestFrequency", e.target.value)
-                    }
+                    onChange={(e) => handleChange("digestFrequency", e.target.value)}
+                    disabled={loading}
                   >
                     <option value="realtime">Real-time</option>
                     <option value="daily">Daily Summary</option>
@@ -403,16 +487,15 @@ const AdminSettings = () => {
           {/* SECURITY */}
           {activeTab === "security" && (
             <section className="adm-card settings-section">
-              <h2>Security & Data Privacy</h2>
+              <h2>Security &amp; Data Privacy</h2>
               <div className="settings-grid">
                 <div className="form-group full-width">
                   <label className="toggle-label">
                     <input
                       type="checkbox"
                       checked={settings.require2FA}
-                      onChange={(e) =>
-                        handleChange("require2FA", e.target.checked)
-                      }
+                      onChange={(e) => handleChange("require2FA", e.target.checked)}
+                      disabled={loading}
                     />
                     <span className="toggle-slider"></span>
                     Require 2FA for All Admin Accounts
@@ -426,9 +509,8 @@ const AdminSettings = () => {
                     min="6"
                     max="32"
                     value={settings.passwordMinLength}
-                    onChange={(e) =>
-                      handleChange("passwordMinLength", Number(e.target.value))
-                    }
+                    onChange={(e) => handleChange("passwordMinLength", Number(e.target.value))}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group">
@@ -439,9 +521,8 @@ const AdminSettings = () => {
                     min="5"
                     max="1440"
                     value={settings.sessionTimeout}
-                    onChange={(e) =>
-                      handleChange("sessionTimeout", Number(e.target.value))
-                    }
+                    onChange={(e) => handleChange("sessionTimeout", Number(e.target.value))}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group">
@@ -452,9 +533,8 @@ const AdminSettings = () => {
                     min="30"
                     max="2555"
                     value={settings.dataRetentionDays}
-                    onChange={(e) =>
-                      handleChange("dataRetentionDays", Number(e.target.value))
-                    }
+                    onChange={(e) => handleChange("dataRetentionDays", Number(e.target.value))}
+                    disabled={loading}
                   />
                   <span className="field-hint">
                     Resolved reports auto-purged after this period
@@ -465,12 +545,8 @@ const AdminSettings = () => {
                     <input
                       type="checkbox"
                       checked={settings.allowPublicRegistration}
-                      onChange={(e) =>
-                        handleChange(
-                          "allowPublicRegistration",
-                          e.target.checked
-                        )
-                      }
+                      onChange={(e) => handleChange("allowPublicRegistration", e.target.checked)}
+                      disabled={loading}
                     />
                     <span className="toggle-slider"></span>
                     Allow Public User Registration
@@ -496,23 +572,21 @@ const AdminSettings = () => {
           {/* MAINTENANCE */}
           {activeTab === "maintenance" && (
             <section className="adm-card settings-section">
-              <h2>System & Maintenance</h2>
+              <h2>System &amp; Maintenance</h2>
               <div className="settings-grid">
                 <div className="form-group full-width">
                   <label className="toggle-label">
                     <input
                       type="checkbox"
                       checked={settings.maintenanceMode}
-                      onChange={(e) =>
-                        handleChange("maintenanceMode", e.target.checked)
-                      }
+                      onChange={(e) => handleChange("maintenanceMode", e.target.checked)}
+                      disabled={loading}
                     />
                     <span className="toggle-slider"></span>
                     Enable Maintenance Mode
                   </label>
                   <span className="field-hint">
-                    Only admins can access the panel. Public reporting is
-                    paused.
+                    Only admins can access the panel. Public reporting is paused.
                   </span>
                 </div>
                 <div className="form-group full-width">
@@ -521,9 +595,8 @@ const AdminSettings = () => {
                     className="adm-input"
                     rows="3"
                     value={settings.maintenanceMessage}
-                    onChange={(e) =>
-                      handleChange("maintenanceMessage", e.target.value)
-                    }
+                    onChange={(e) => handleChange("maintenanceMessage", e.target.value)}
+                    disabled={loading}
                   />
                 </div>
                 <div className="form-group full-width">
@@ -533,9 +606,8 @@ const AdminSettings = () => {
                     type="text"
                     placeholder="e.g. 192.168.1.1, 10.0.0.5"
                     value={settings.allowedAdminIPs}
-                    onChange={(e) =>
-                      handleChange("allowedAdminIPs", e.target.value)
-                    }
+                    onChange={(e) => handleChange("allowedAdminIPs", e.target.value)}
+                    disabled={loading}
                   />
                   <span className="field-hint">
                     Comma-separated. Leave blank to allow all IPs.
@@ -552,23 +624,27 @@ const AdminSettings = () => {
                     />
                     <button
                       className="adm-btn adm-btn-ghost"
+                      disabled={loading || saving}
                       onClick={() =>
                         handleChange(
                           "apiKey",
-                          "sk_live_" +
-                            Math.random().toString(36).substr(2, 18)
+                          "sk_live_" + Math.random().toString(36).substr(2, 18)
                         )
                       }
                     >
                       <RefreshCw size={14} strokeWidth={2} /> Regenerate
                     </button>
                   </div>
+                  <span className="field-hint">
+                    Click Regenerate, then Save Changes to rotate the key.
+                  </span>
                 </div>
               </div>
             </section>
           )}
         </main>
       </div>
+
       {/* Reset confirmation dialog */}
       {resetDialog && (
         <div className="modal-overlay" onClick={() => setResetDialog(false)}>
