@@ -1,0 +1,27 @@
+/* ContractorProjects — uses only existing design-system variables */
+
+.c-projects {
+  padding: 32px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.c-projects-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.c-projects-sub {
+  font-size: 0.95rem;
+  color: var(--subtext);
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .c-projects {
+    padding: 20px 16px;
+  }
+}

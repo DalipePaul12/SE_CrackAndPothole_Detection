@@ -41,6 +41,16 @@ function deriveUserFromToken(token) {
   };
 }
 
+/**
+ * Returns the default home route for a given role.
+ * Used by ContractorRoute and any post-login redirect logic.
+ */
+export function getDefaultRoute(role) {
+  if (role === "admin" || role === "superadmin") return "/adminpanel";
+  if (role === "contractor")                     return "/contractorpanel/dashboard";
+  return "/dashboard";
+}
+
 export function useAuth() {
   const [user, setUser] = useState(() => {
     try {

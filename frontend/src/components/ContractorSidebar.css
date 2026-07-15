@@ -1,0 +1,353 @@
+/* ContractorSidebar — mirrors AdminSidebar.css exactly.
+   References --admin-* variables already defined globally by AdminSidebar.css. */
+
+.contractor-sidebar {
+  width: var(--admin-width);
+  height: 100vh;
+  background: linear-gradient(180deg, var(--admin-bg-from), var(--admin-bg-to));
+  color: var(--admin-text);
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  font-family: "Poppins", sans-serif;
+  border-right: 1px solid var(--admin-border);
+  border-radius: 0 20px 20px 0;
+  z-index: 1000;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.contractor-sidebar.collapsed {
+  width: var(--admin-collapsed);
+  padding: 16px 8px;
+}
+
+@media (max-width: 1023px) {
+  .contractor-sidebar {
+    left: calc(-1 * var(--admin-width));
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+  }
+  .contractor-sidebar.mobile-open {
+    left: 0;
+  }
+  .contractor-sidebar.collapsed {
+    width: var(--admin-width);
+    left: calc(-1 * var(--admin-width));
+  }
+  .contractor-sidebar.collapsed.mobile-open {
+    left: 0;
+  }
+}
+
+/* ── Header ── */
+.contractor-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--admin-border);
+  flex-shrink: 0;
+}
+
+.contractor-sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.3s, width 0.3s, transform 0.3s;
+  overflow: hidden;
+  flex: 1;
+  text-align: center;
+}
+
+.contractor-sidebar.collapsed .contractor-sidebar-brand,
+.contractor-sidebar-brand.hidden {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  flex: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.contractor-sidebar-logo-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  flex-shrink: 0;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.contractor-sidebar-logo-img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.contractor-sidebar.collapsed .contractor-sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.contractor-brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.contractor-brand-text h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* Contractor badge — uses existing primary/toggle-track green */
+.contractor-badge {
+  background: var(--admin-toggle-track);
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+  width: fit-content;
+}
+
+.contractor-collapse-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1.5px solid var(--admin-border);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--admin-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.contractor-collapse-btn:hover {
+  background: var(--admin-link-hover);
+  color: var(--admin-text);
+  border-color: var(--admin-divider);
+}
+
+/* ── Nav ── */
+.contractor-sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  justify-content: flex-start;
+}
+
+.contractor-nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.contractor-section-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--admin-text-muted);
+  padding: 0 12px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.contractor-section-spacer {
+  height: 8px;
+  flex-shrink: 0;
+}
+
+.contractor-nav-link,
+.contractor-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: var(--admin-text);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.25s;
+  position: relative;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.contractor-nav-link:hover,
+.contractor-footer-btn:hover {
+  background: var(--admin-link-hover);
+  color: var(--admin-text);
+}
+
+.contractor-nav-link.active,
+.contractor-footer-btn.active {
+  background: linear-gradient(135deg, var(--admin-active-from), var(--admin-active-to));
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.contractor-nav-link span.hidden,
+.contractor-footer-btn span.hidden {
+  display: none;
+}
+
+.contractor-active-dot {
+  position: absolute;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--admin-toggle-track);
+  box-shadow: 0 0 8px var(--admin-toggle-track);
+}
+
+.contractor-sidebar.collapsed .contractor-nav-link[title]:hover::after,
+.contractor-sidebar.collapsed .contractor-footer-btn[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--admin-text);
+  color: var(--admin-bg-from);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1001;
+}
+
+/* ── Footer ── */
+.contractor-sidebar-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--admin-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.contractor-toggle-pill {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: #555;
+  border: 1.5px solid rgba(0, 0, 0, 0.15);
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: all 0.3s;
+}
+
+.contractor-toggle-pill.on {
+  background: var(--admin-toggle-track);
+  border-color: var(--admin-toggle-track);
+}
+
+.contractor-toggle-knob {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--admin-toggle-thumb);
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+  transition: left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.contractor-toggle-pill.on .contractor-toggle-knob {
+  left: 17px;
+}
+
+.contractor-logout-btn {
+  color: #e63946;
+}
+
+.contractor-logout-btn:hover {
+  background: #e63946;
+  color: white;
+}
+
+/* ── Mobile Full Drawer ── */
+@media (max-width: 1023px) {
+  .contractor-sidebar.mobile-open {
+    width: var(--admin-width);
+    padding: 12px 10px;
+  }
+
+  .contractor-sidebar.mobile-open .contractor-sidebar-brand,
+  .contractor-sidebar.mobile-open .contractor-sidebar-brand.hidden {
+    opacity: 1;
+    width: auto;
+    height: auto;
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    pointer-events: auto;
+    overflow: visible;
+    display: flex;
+  }
+
+  .contractor-sidebar.mobile-open .contractor-nav-link span,
+  .contractor-sidebar.mobile-open .contractor-footer-btn span,
+  .contractor-sidebar.mobile-open .hidden {
+    display: inline !important;
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    pointer-events: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  .contractor-sidebar.mobile-open .contractor-nav-link {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+
+  .contractor-sidebar.mobile-open .contractor-footer-btn {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+
+  .contractor-sidebar.mobile-open .contractor-active-dot {
+    display: none;
+  }
+}

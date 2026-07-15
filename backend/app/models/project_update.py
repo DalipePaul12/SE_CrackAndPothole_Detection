@@ -35,6 +35,11 @@ class ProjectUpdate(Base):
     completion_percentage = Column(Float, nullable=True)
     note = Column(String, nullable=True)
 
+    # Contractor assignment audit — no FK enforcement so the log survives
+    # even if the referenced user is later deleted.
+    old_contractor_id = Column(Integer, nullable=True)
+    new_contractor_id = Column(Integer, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     # Relationships

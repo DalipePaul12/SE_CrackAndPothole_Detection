@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, DateTime,
-    Enum as SQLEnum, Float, ForeignKey, Integer, String,
+    Enum as SQLEnum, Float, ForeignKey, Integer, JSON, String,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -66,6 +66,10 @@ class Project(Base):
 
     completion_percentage = Column(Float, default=0.0, nullable=False)
     notes = Column(String, nullable=True)
+
+    # Array of {name, quantity, unit_cost} objects recorded at completion.
+    # Nullable so existing rows and non-completion flows are unaffected.
+    materials_used = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(

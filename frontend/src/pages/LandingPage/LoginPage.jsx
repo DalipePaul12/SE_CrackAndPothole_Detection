@@ -14,7 +14,8 @@ import { BsFillEyeFill, BsFillEyeSlashFill } from "react-icons/bs";
 
 import { login, verifyLoginOTP, resendLoginOTP } from "../../api/auth";
 import { api } from "../../api/client";
-import { useAuthContext } from "../Contexts/AuthContext.jsx";
+import { useAuthContext }  from "../Contexts/AuthContext.jsx";
+import { getDefaultRoute } from "../../hooks/useAuth.js";
 
 function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
   const navigate = useNavigate();
@@ -60,11 +61,7 @@ function LoginPage({ isOpen, onClose, onSwitchToSignUp }) {
     setStep("credentials");
     setResendKey(0);
     const role = data.user?.role;
-    if (role === "admin" || role === "superadmin") {
-      navigate("/adminpanel");
-    } else {
-      navigate("/dashboard");
-    }
+    navigate(getDefaultRoute(role));
   };
 
   const handleLoginSubmit = async (e) => {

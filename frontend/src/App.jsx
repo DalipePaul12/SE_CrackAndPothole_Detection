@@ -12,8 +12,9 @@ import { NotificationProvider } from "./pages/Contexts/NotificationContext.jsx";
 import { useAuthContext }        from "./pages/Contexts/AuthContext.jsx";
 
 // Layouts (NEW - import your layout components)
-import UserLayout  from "./components/UserLayout.jsx";
-import AdminLayout from "./components/AdminLayout.jsx";
+import UserLayout        from "./components/UserLayout.jsx";
+import AdminLayout       from "./components/AdminLayout.jsx";
+import ContractorLayout  from "./components/ContractorLayout.jsx";
 
 // Landing
 import HomePage  from "./pages/LandingPage/HomePage.jsx";
@@ -27,6 +28,11 @@ import MyProfile     from "./pages/Inside-App-User/MyProfile.jsx";
 import MySubmissions from "./pages/Inside-App-User/MySubmissions.jsx";
 import Notifications from "./pages/Inside-App-User/Notifications.jsx";
 import Settings      from "./pages/Inside-App-User/Settings.jsx";
+
+// Inside App — Contractor
+import ContractorDashboard         from "./pages/Inside-App-Contractor/ContractorDashboard.jsx";
+import ContractorAssignedProjects  from "./pages/Inside-App-Contractor/ContractorAssignedProjects.jsx";
+import ContractorCompletedProjects from "./pages/Inside-App-Contractor/ContractorCompletedProjects.jsx";
 
 // Inside App — Admin
 import AdminPanel          from "./pages/Inside-App-Admin/AdminPanel.jsx";
@@ -50,6 +56,13 @@ function AdminRoute({ children }) {
   const { isAuthenticated, user } = useAuthContext();
   if (!isAuthenticated)          return <Navigate to="/"          replace />;
   if (user?.role !== "admin" && user?.role !== "superadmin")    return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
+function ContractorRoute({ children }) {
+  const { isAuthenticated, user } = useAuthContext();
+  if (!isAuthenticated)             return <Navigate to="/"                        replace />;
+  if (user?.role !== "contractor")  return <Navigate to="/dashboard"               replace />;
   return children;
 }
 
@@ -77,14 +90,26 @@ function AdminLayoutGuard() {
   );
 }
 
+/** ContractorLayout with auth guard */
+function ContractorLayoutGuard() {
+  return (
+    <ContractorRoute>
+      <ContractorLayout>
+        <Outlet />
+      </ContractorLayout>
+    </ContractorRoute>
+  );
+}
+
 // ─── App shell ────────────────────────────────────────────────────────────────
 
 function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
   const location = useLocation();
 
   const hideNavbar =
-    location.pathname.startsWith("/dashboard") ||
-    location.pathname.startsWith("/adminpanel");
+    location.pathname.startsWith("/dashboard")      ||
+    location.pathname.startsWith("/adminpanel")     ||
+    location.pathname.startsWith("/contractorpanel");
 
   return (
     <>
@@ -125,6 +150,13 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
             <Route path="/adminpanel/managereports" element={<AdminManageReports />} />
             <Route path="/adminpanel/managestreets" element={<AdminStreetReports />} />
             <Route path="/adminpanel/settings"      element={<AdminSettings />} />
+          </Route>
+
+          {/* ── Contractor panel WITH sidebar layout ───────────────────── */}
+          <Route element={<ContractorLayoutGuard />}>
+            <Route path="/contractorpanel/dashboard" element={<ContractorDashboard />} />
+            <Route path="/contractorpanel/projects"  element={<ContractorAssignedProjects />} />
+            <Route path="/contractorpanel/completed" element={<ContractorCompletedProjects />} />
           </Route>
 
           {/* ── Fallback — must stay last so it never shadows the routes

@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,7 +18,7 @@ from app.db.session import get_db
 # check in auth_middleware.get_current_user was being bypassed.
 # Only import from auth_middleware — it is the correct, production-grade version.
 from app.middleware.auth_middleware import get_current_user, require_admin
-from app.models.enums import ProjectStatus, PriorityLevel, ReportStatus, UserRole
+from app.models.enums import NotificationType, ProjectStatus, PriorityLevel, ReportStatus, UserRole
 from app.models.project import Project
 from app.models.report import Report
 from app.models.user import User
@@ -37,6 +37,10 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     status: Optional[ProjectStatus] = None
     completion_percentage: Optional[float] = None
+
+
+class ContractorAssign(BaseModel):
+    contractor_id: int
 
 
 # --- HELPERS ---
@@ -141,6 +145,45 @@ async def update_project_status(
     return {"message": "Project updated", "status": project.status.value}
 
 
+@router.get("/available-contractors")
+async def get_available_contractors(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admin/superadmin: list all contractors with their active project count."""
+    if current_user.role not in (UserRole.admin, UserRole.superadmin):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    active_count_sq = (
+        select(func.count(Project.id))
+        .where(Project.contractor_id == User.id)
+        .where(
+            Project.status.notin_(
+                [ProjectStatus.COMPLETED, ProjectStatus.CANCELLED]
+            )
+        )
+        .correlate(User)
+        .scalar_subquery()
+    )
+
+    result = await db.execute(
+        select(User, active_count_sq.label("active_project_count"))
+        .where(User.role == UserRole.contractor)
+        .order_by(User.full_name)
+    )
+
+    rows = result.all()
+    return [
+        {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "active_project_count": count,
+        }
+        for user, count in rows
+    ]
+
+
 @router.get("/{project_id}")
 async def get_project_details(
     project_id: int,
@@ -148,6 +191,164 @@ async def get_project_details(
     current_user: User = Depends(get_current_user),
 ):
     return await _get_project_or_404(db, project_id)
+
+
+@router.put("/{project_id}")
+async def update_project(
+    project_id: int,
+    data: ProjectUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update project status and/or completion percentage."""
+    if current_user.role not in (UserRole.admin, UserRole.superadmin, UserRole.contractor):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    project = await _get_project_or_404(db, project_id)
+
+    if current_user.role == UserRole.contractor and project.contractor_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not assigned to this project")
+
+    if data.status is not None:
+        project.status = data.status
+    if data.completion_percentage is not None:
+        project.completion_percentage = data.completion_percentage
+
+    # Auto-complete when 100% or explicitly COMPLETED
+    is_completed = (
+        data.status == ProjectStatus.COMPLETED
+        or data.completion_percentage == 100.0
+    )
+    if is_completed:
+        project.status = ProjectStatus.COMPLETED
+        project.completion_percentage = 100.0
+        project.actual_completion_date = datetime.now(timezone.utc)
+
+        result = await db.execute(select(Report).where(Report.id == project.report_id))
+        report = result.scalar_one_or_none()
+        if report:
+            report.status = ReportStatus.RESOLVED
+
+    await db.commit()
+    return await _get_project_or_404(db, project_id)
+
+
+@router.patch("/{project_id}/assign")
+async def assign_contractor(
+    project_id: int,
+    data: ContractorAssign,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admin/superadmin: assign a contractor to a project."""
+    if current_user.role not in (UserRole.admin, UserRole.superadmin):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    project = await _get_project_or_404(db, project_id)
+
+    # Validate target user exists and is a contractor
+    contractor_result = await db.execute(
+        select(User).where(User.id == data.contractor_id)
+    )
+    contractor = contractor_result.scalar_one_or_none()
+    if not contractor:
+        raise HTTPException(status_code=404, detail="User not found")
+    if contractor.role != UserRole.contractor:
+        raise HTTPException(
+            status_code=400, detail="Assigned user must have role=contractor"
+        )
+
+    old_contractor_id = project.contractor_id
+    project.contractor_id = data.contractor_id
+
+    from app.models.project_update import ProjectUpdate as ProjectUpdateLog
+    log = ProjectUpdateLog(
+        project_id=project.id,
+        changed_by_id=current_user.id,
+        old_contractor_id=old_contractor_id,
+        new_contractor_id=data.contractor_id,
+        note=f"Contractor assigned: {contractor.full_name or contractor.email}",
+    )
+    db.add(log)
+    await db.commit()
+
+    # Notify the contractor
+    from app.services.notification_service import notify
+    await notify(
+        db,
+        user_id=contractor.id,
+        title="You have been assigned to a project",
+        message=f"You have been assigned to project #{project.id}.",
+        type=NotificationType.info,
+        report_id=project.report_id,
+        email=contractor.email,
+    )
+
+    return await _get_project_or_404(db, project_id)
+
+
+@router.get("/{project_id}/completion")
+async def get_project_completion(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return completion details for a project.
+    Accessible by: the report submitter, the assigned contractor, or any admin/superadmin.
+    """
+    from app.models.media_attachment import MediaAttachment
+    from app.models.report import Report
+
+    project = await _get_project_or_404(db, project_id)
+
+    is_admin = current_user.role in (UserRole.admin, UserRole.superadmin)
+    is_contractor = (
+        current_user.role == UserRole.contractor
+        and project.contractor_id == current_user.id
+    )
+
+    # Check if the caller is the report submitter
+    is_submitter = False
+    if not is_admin and not is_contractor:
+        report_result = await db.execute(
+            select(Report).where(Report.id == project.report_id)
+        )
+        report = report_result.scalar_one_or_none()
+        if report and report.owner_id == current_user.id:
+            is_submitter = True
+
+    if not (is_admin or is_contractor or is_submitter):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Fetch completion-proof photos
+    photos_result = await db.execute(
+        select(MediaAttachment).where(
+            MediaAttachment.report_id == project.report_id,
+            MediaAttachment.attachment_type == "completion_proof",
+        )
+    )
+    completion_photos = photos_result.scalars().all()
+
+    return {
+        "project_id": project.id,
+        "status": project.status,
+        "notes": project.notes,
+        "materials_used": project.materials_used,
+        "actual_cost": project.actual_cost,
+        "completion_percentage": project.completion_percentage,
+        "completed_at": project.actual_completion_date,
+        "completion_photos": [
+            {
+                "id": p.id,
+                "file_url": p.file_url,
+                "file_name": p.file_name,
+                "file_size_bytes": p.file_size_bytes,
+                "created_at": p.created_at,
+            }
+            for p in completion_photos
+        ],
+    }
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
