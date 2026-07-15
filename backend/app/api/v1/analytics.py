@@ -1,16 +1,20 @@
 """
 analytics.py — Dashboard analytics endpoints.
-All routes require admin or contractor role.
-In-process TTL cache (60s) to avoid hammering the DB on every poll.
+All routes require admin, superadmin, or contractor role.
+Redis-backed TTL cache (60 s) with graceful in-process fallback when Redis
+is unreachable, so the endpoints never crash due to cache unavailability.
 """
 
 import asyncio
+import json
 import logging
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import redis.asyncio as aioredis
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,18 +28,63 @@ from app.models.enums import DamageType, ReportStatus, SeverityLevel, UserRole
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
-_CACHE_TTL = 60
-_cache: dict[str, tuple[float, Any]] = {}
+# ── Cache configuration ────────────────────────────────────────────────────
+_CACHE_TTL = 60          # seconds
+_CACHE_PREFIX = "analytics:"
+
+# Module-level Redis client — lazily connected on first use.
+_redis_client: aioredis.Redis | None = None
 
 
-def _get(key: str) -> Any | None:
-    e = _cache.get(key)
-    return e[1] if e and (time.monotonic() - e[0]) < _CACHE_TTL else None
+def _get_redis() -> aioredis.Redis | None:
+    """Return a shared Redis client, or None if REDIS_URL is unset."""
+    global _redis_client
+    if _redis_client is None:
+        url = os.getenv("REDIS_URL")
+        if url:
+            _redis_client = aioredis.from_url(url, decode_responses=True)
+    return _redis_client
 
 
-def _set(key: str, val: Any) -> None:
-    _cache[key] = (time.monotonic(), val)
+async def _cache_get(key: str) -> Any | None:
+    """Return cached value for *key*, or None on miss / Redis error."""
+    r = _get_redis()
+    if r is None:
+        return None
+    try:
+        raw = await r.get(f"{_CACHE_PREFIX}{key}")
+        return json.loads(raw) if raw is not None else None
+    except Exception as exc:
+        logger.warning("Redis cache GET failed (key=%s): %s", key, exc)
+        return None
 
+
+async def _cache_set(key: str, val: Any) -> None:
+    """Store *val* under *key* with TTL; silently skip on Redis error."""
+    r = _get_redis()
+    if r is None:
+        return
+    try:
+        await r.set(f"{_CACHE_PREFIX}{key}", json.dumps(val), ex=_CACHE_TTL)
+    except Exception as exc:
+        logger.warning("Redis cache SET failed (key=%s): %s", key, exc)
+
+
+async def invalidate_analytics_cache() -> None:
+    """Delete all analytics cache keys. No-op if Redis is unreachable."""
+    r = _get_redis()
+    if r is None:
+        return
+    try:
+        keys = await r.keys(f"{_CACHE_PREFIX}*")
+        if keys:
+            await r.delete(*keys)
+        logger.debug("analytics cache cleared (%d keys)", len(keys))
+    except Exception as exc:
+        logger.warning("Redis cache CLEAR failed: %s", exc)
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────
 
 def _ok(data: Any) -> dict:
     return {"success": True, "data": data}
@@ -46,14 +95,17 @@ async def _scalar(db: AsyncSession, stmt) -> int:
 
 
 def _require_staff(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in (UserRole.admin, UserRole.contractor):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient privileges.")
+    """Allow admin, superadmin, and contractor — reject everyone else."""
+    if current_user.role not in (
+        UserRole.admin,
+        UserRole.superadmin,
+        UserRole.contractor,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient privileges.",
+        )
     return current_user
-
-
-def invalidate_analytics_cache() -> None:
-    _cache.clear()
-    logger.debug("analytics cache cleared")
 
 
 # ── /dashboard-summary ─────────────────────────────────────────────────────
@@ -64,7 +116,7 @@ async def get_dashboard_summary(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("dashboard_summary")) is not None:
+    if (c := await _cache_get("dashboard_summary")) is not None:
         return _ok(c)
 
     (total, pending, verified, in_progress, resolved, declined, active_users) = await asyncio.gather(
@@ -81,7 +133,7 @@ async def get_dashboard_summary(
         in_progress=in_progress, resolved=resolved, declined=declined,
         active_users=active_users,
     )
-    _set("dashboard_summary", data)
+    await _cache_set("dashboard_summary", data)
     return _ok(data)
 
 
@@ -93,14 +145,14 @@ async def get_damage_type_stats(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("damage_type_stats")) is not None:
+    if (c := await _cache_get("damage_type_stats")) is not None:
         return _ok(c)
 
     rows = (await db.execute(
         select(Report.ai_damage_type, func.count(Report.id)).group_by(Report.ai_damage_type)
     )).all()
     data = {(dt.value if dt else "unknown"): cnt for dt, cnt in rows}
-    _set("damage_type_stats", data)
+    await _cache_set("damage_type_stats", data)
     return _ok(data)
 
 
@@ -112,14 +164,14 @@ async def get_report_status_stats(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("report_status_stats")) is not None:
+    if (c := await _cache_get("report_status_stats")) is not None:
         return _ok(c)
 
     rows = (await db.execute(
         select(Report.status, func.count(Report.id)).group_by(Report.status)
     )).all()
     data = {s.value: cnt for s, cnt in rows}
-    _set("report_status_stats", data)
+    await _cache_set("report_status_stats", data)
     return _ok(data)
 
 
@@ -131,7 +183,7 @@ async def get_monthly_reports(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("monthly_reports")) is not None:
+    if (c := await _cache_get("monthly_reports")) is not None:
         return _ok(c)
 
     rows = (await db.execute(
@@ -143,7 +195,7 @@ async def get_monthly_reports(
         .order_by("month")
     )).all()
     data = [{"month": m, "count": cnt} for m, cnt in rows]
-    _set("monthly_reports", data)
+    await _cache_set("monthly_reports", data)
     return _ok(data)
 
 
@@ -155,20 +207,19 @@ async def get_severity_stats(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("severity_stats")) is not None:
+    if (c := await _cache_get("severity_stats")) is not None:
         return _ok(c)
 
     rows = (await db.execute(
         select(Report.ai_severity, func.count(Report.id)).group_by(Report.ai_severity)
     )).all()
     data = {(sev.value if sev else "unknown"): cnt for sev, cnt in rows}
-    # Normalise into flat keys expected by the frontend
     result = {
         "critical": data.get("critical", 0),
         "medium":   data.get("medium", 0),
         "low":      data.get("low", 0),
     }
-    _set("severity_stats", result)
+    await _cache_set("severity_stats", result)
     return _ok(result)
 
 
@@ -180,7 +231,7 @@ async def get_hotspots(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("hotspots")) is not None:
+    if (c := await _cache_get("hotspots")) is not None:
         return _ok(c)
 
     rows = (await db.execute(
@@ -190,7 +241,7 @@ async def get_hotspots(
         .limit(10)
     )).all()
     data = [{"barangay": bgy or "Unidentified", "count": cnt} for bgy, cnt in rows]
-    _set("hotspots", data)
+    await _cache_set("hotspots", data)
     return _ok(data)
 
 
@@ -202,13 +253,12 @@ async def get_sla_stats(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("sla_stats")) is not None:
+    if (c := await _cache_get("sla_stats")) is not None:
         return _ok(c)
 
     now = datetime.now(timezone.utc)
-    sla_days = 7  # SLA threshold
+    sla_days = 7
 
-    # Avg resolution days (resolved reports only)
     avg_res = (await db.execute(
         select(func.avg(
             func.extract("epoch", Report.updated_at - Report.created_at) / 86400.0
@@ -216,7 +266,6 @@ async def get_sla_stats(
     )).scalar_one_or_none()
 
     overdue_cutoff = now - timedelta(days=sla_days)
-
     overdue_count = await _scalar(
         db,
         select(func.count(Report.id)).where(
@@ -234,7 +283,6 @@ async def get_sla_stats(
         ),
     )
 
-    # On-time = resolved within SLA window
     total_resolved = await _scalar(db, select(func.count(Report.id)).where(Report.status == ReportStatus.RESOLVED))
     on_time = await _scalar(
         db,
@@ -251,7 +299,7 @@ async def get_sla_stats(
         pending_over_3days=pending_over_3days,
         on_time_rate_pct=on_time_rate,
     )
-    _set("sla_stats", data)
+    await _cache_set("sla_stats", data)
     return _ok(data)
 
 
@@ -263,7 +311,7 @@ async def get_ai_insights(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("ai_insights")) is not None:
+    if (c := await _cache_get("ai_insights")) is not None:
         return _ok(c)
 
     now = datetime.now(timezone.utc)
@@ -277,7 +325,6 @@ async def get_ai_insights(
     )
     low_conf_pct = round((low_conf / total * 100) if total else 0, 1)
 
-    # Crack change % this week vs previous week
     cracks_this_week = await _scalar(
         db,
         select(func.count(Report.id)).where(
@@ -298,7 +345,6 @@ async def get_ai_insights(
         if cracks_prev_week else 0
     )
 
-    # Duplicate locations (more than 2 reports from exact same lat/lng)
     dup_sub = (
         select(func.count(Report.id).label("cnt"))
         .group_by(Report.latitude, Report.longitude)
@@ -307,7 +353,6 @@ async def get_ai_insights(
     )
     dup_count = (await db.execute(select(func.count()).select_from(dup_sub))).scalar_one_or_none() or 0
 
-    # Avg model confidence as accuracy proxy
     avg_conf = (await db.execute(select(func.avg(Report.ai_confidence)))).scalar_one_or_none()
     avg_accuracy = round(float(avg_conf) * 100) if avg_conf else None
 
@@ -317,7 +362,7 @@ async def get_ai_insights(
         duplicate_count=dup_count,
         avg_model_accuracy=avg_accuracy,
     )
-    _set("ai_insights", data)
+    await _cache_set("ai_insights", data)
     return _ok(data)
 
 
@@ -326,18 +371,18 @@ async def get_ai_insights(
 @limiter.limit("30/minute")
 async def get_recent_reports(
     request: Request,
-    limit: int = 8,
+    limit: int = Query(default=8, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
     cache_key = f"recent_reports_{limit}"
-    if (c := _get(cache_key)) is not None:
+    if (c := await _cache_get(cache_key)) is not None:
         return _ok(c)
 
     rows = (await db.execute(
         select(Report)
         .order_by(Report.created_at.desc())
-        .limit(min(limit, 50))
+        .limit(limit)
     )).scalars().all()
 
     data = [
@@ -352,7 +397,7 @@ async def get_recent_reports(
         )
         for r in rows
     ]
-    _set(cache_key, data)
+    await _cache_set(cache_key, data)
     return _ok(data)
 
 
@@ -361,18 +406,18 @@ async def get_recent_reports(
 @limiter.limit("30/minute")
 async def get_activity_feed(
     request: Request,
-    limit: int = 8,
+    limit: int = Query(default=8, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
     cache_key = f"activity_feed_{limit}"
-    if (c := _get(cache_key)) is not None:
+    if (c := await _cache_get(cache_key)) is not None:
         return _ok(c)
 
     rows = (await db.execute(
         select(Report)
         .order_by(Report.updated_at.desc())
-        .limit(min(limit, 50))
+        .limit(limit)
     )).scalars().all()
 
     def _msg(r: Report) -> tuple[str, str]:
@@ -396,7 +441,7 @@ async def get_activity_feed(
         msg, kind = _msg(r)
         data.append(dict(message=msg, type=kind, timestamp=(r.updated_at or r.created_at).isoformat()))
 
-    _set(cache_key, data)
+    await _cache_set(cache_key, data)
     return _ok(data)
 
 
@@ -408,7 +453,7 @@ async def get_priority_flags(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    if (c := _get("priority_flags")) is not None:
+    if (c := await _cache_get("priority_flags")) is not None:
         return _ok(c)
 
     now = datetime.now(timezone.utc)
@@ -435,7 +480,6 @@ async def get_priority_flags(
         ),
     )
 
-    # Critical reports grouped by barangay
     crit_rows = (await db.execute(
         select(Report.barangay, func.count(Report.id).label("cnt"))
         .where(
@@ -454,5 +498,5 @@ async def get_priority_flags(
         low_confidence_count=low_conf_count,
         critical_by_barangay=critical_by_barangay,
     )
-    _set("priority_flags", data)
+    await _cache_set("priority_flags", data)
     return _ok(data)

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Outlet } from "react-router-dom";
 import AdminSidebar from "./AdminSidebar";
-import AppHeader from "./AppHeader"; // or AdminHeader
+import AdminHeader from "./AdminHeader";
 import "./AdminLayout.css";
 
 function AdminLayout() {
@@ -49,8 +49,8 @@ function AdminLayout() {
         onToggleCollapse={toggleCollapse}
       />
 
-      <AppHeader 
-        onMenuClick={toggleSidebar} 
+      <AdminHeader
+        onMenuClick={toggleSidebar}
         isCollapsed={isCollapsed}
       />
 

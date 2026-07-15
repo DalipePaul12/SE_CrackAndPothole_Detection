@@ -4,7 +4,7 @@ import { useDarkMode } from "../hooks/useDarkMode";
 import { useNotifications } from "../hooks/useNotifications";
 import "./AdminHeader.css";
 
-export default function AdminHeader({ title = "Admin Panel" }) {
+export default function AdminHeader({ title = "Admin Panel", onMenuClick, isCollapsed }) {
   const { isDark } = useDarkMode();
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
     useNotifications();
@@ -27,7 +27,7 @@ export default function AdminHeader({ title = "Admin Panel" }) {
   const recent = notifications.slice(0, 5);
 
   return (
-    <header className="admin-header">
+    <header className={`admin-header${isCollapsed ? " collapsed" : ""}`}>
       <div className="admin-header-left">
         <h2 className="admin-header-title">{title}</h2>
       </div>

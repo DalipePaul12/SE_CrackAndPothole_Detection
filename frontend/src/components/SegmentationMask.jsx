@@ -62,22 +62,34 @@ function buildPolygonPoints(detection, scaleX, scaleY, displayW, displayH) {
   // Use backend image dimensions if available (for resized images)
   const segScaleX = detection.image_width ? (displayW / detection.image_width) : scaleX;
   const segScaleY = detection.image_height ? (displayH / detection.image_height) : scaleY;
-  
-  // 1. Prefer absolute segment coordinates
-  if (detection.segments && detection.segments.length >= 3) {
-    return detection.segments
-      .map(([x, y]) => `${(x * segScaleX).toFixed(2)},${(y * segScaleY).toFixed(2)}`)
-      .join(" ");
-  }
 
-  // 2. Normalised segment coordinates
+  // 1. Normalised segment coordinates — PRIMARY source.
+  //    Always a flat list of [xn, yn] pairs in both code paths:
+  //      • Real seg-model output  → flat [[xn,yn], [xn,yn], …] (many points)
+  //      • 4-pt bounding-box fallback → flat [[xn,yn], …] (4 points)
+  //    Using this avoids the nesting ambiguity in the absolute `segments` field.
   if (detection.segments_norm && detection.segments_norm.length >= 3) {
     return detection.segments_norm
       .map(([xn, yn]) => `${(xn * displayW).toFixed(2)},${(yn * displayH).toFixed(2)}`)
       .join(" ");
   }
 
-  // 3. Fallback: draw rectangle from bounding box
+  // 2. Absolute segment coordinates — FALLBACK.
+  //    Two shapes arrive from the backend:
+  //      • Real seg-model: [[[x,y],[x,y],…]]  — outer array wraps ONE polygon list
+  //      • 4-pt fallback:  [[x,y],[x,y],…]    — flat list of 4 points
+  //    Unwrap one level of nesting when the first element is itself an array of arrays.
+  if (detection.segments) {
+    const raw = detection.segments;
+    const pts = (Array.isArray(raw[0]) && Array.isArray(raw[0][0])) ? raw[0] : raw;
+    if (pts.length >= 3) {
+      return pts
+        .map(([x, y]) => `${(x * segScaleX).toFixed(2)},${(y * segScaleY).toFixed(2)}`)
+        .join(" ");
+    }
+  }
+
+  // 3. Last resort: draw rectangle from bounding box
   const box = getBox(detection, scaleX, scaleY, displayW, displayH);
   if (!box) return null;
   const [x1, y1, x2, y2] = box;
@@ -86,12 +98,24 @@ function buildPolygonPoints(detection, scaleX, scaleY, displayW, displayH) {
 
 // ─── Resolve bounding box to display coordinates ───────────────────────────────
 function getBox(detection, scaleX, scaleY, displayW, displayH) {
+  // 1. Absolute pixel coordinates [x1, y1, x2, y2] — present on all YOLO detections.
+  //    Scaled by image_width/height (original image dims, set by _run_yolo_all_sync).
   if (detection.box && detection.box.length === 4) {
     const [x1, y1, x2, y2] = detection.box;
-    const boxScaleX = detection.image_width ? (displayW / detection.image_width) : scaleX;
+    const boxScaleX = detection.image_width  ? (displayW / detection.image_width)  : scaleX;
     const boxScaleY = detection.image_height ? (displayH / detection.image_height) : scaleY;
     return [x1 * boxScaleX, y1 * boxScaleY, x2 * boxScaleX, y2 * boxScaleY];
   }
+
+  // 2. norm_bbox: normalized [x1n, y1n, x2n, y2n] top-left→bottom-right.
+  //    Sent by /analyze/realtime (and /analyze) in every all_detections item.
+  //    Already 0–1 so multiply directly by display dimensions.
+  if (detection.norm_bbox && detection.norm_bbox.length === 4) {
+    const [x1n, y1n, x2n, y2n] = detection.norm_bbox;
+    return [x1n * displayW, y1n * displayH, x2n * displayW, y2n * displayH];
+  }
+
+  // 3. Flat normalized fields x_norm / w_norm (top-left + size convention).
   if (detection.x_norm != null && detection.w_norm != null) {
     return [
       detection.x_norm * displayW,
@@ -100,7 +124,8 @@ function getBox(detection, scaleX, scaleY, displayW, displayH) {
       (detection.y_norm + detection.h_norm) * displayH,
     ];
   }
-  // Support boxes field (array of box objects)
+
+  // 4. Nested boxes array — try both x_norm and norm_bbox shapes on the first item.
   if (detection.boxes && detection.boxes.length > 0) {
     const b = detection.boxes[0];
     if (b.x_norm !== undefined) {
@@ -111,7 +136,12 @@ function getBox(detection, scaleX, scaleY, displayW, displayH) {
         (b.y_norm + b.h_norm) * displayH,
       ];
     }
+    if (b.norm_bbox && b.norm_bbox.length === 4) {
+      const [x1n, y1n, x2n, y2n] = b.norm_bbox;
+      return [x1n * displayW, y1n * displayH, x2n * displayW, y2n * displayH];
+    }
   }
+
   return null;
 }
 

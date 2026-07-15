@@ -325,6 +325,35 @@ async def get_report(
 # review_reason) stays admin/contractor-only — no exceptions.
 _OWNER_EDITABLE_FIELDS = {"barangay", "street_name", "description"}
 
+# ── report-scoped RBAC dependency ─────────────────────────────────────────────
+
+_STAFF_ROLES = (UserRole.admin, UserRole.superadmin, UserRole.contractor)
+
+
+async def _require_admin_or_owner(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Defense-in-depth gate for PATCH /{report_id}.
+
+    Passes when the caller is admin / superadmin / contractor (privileged staff)
+    OR is the original submitter of this specific report.  Raises 403 before any
+    route body logic runs if neither condition holds.
+
+    The route body still checks ``is_privileged`` to decide which edit code path
+    to follow (full admin edit vs. tightly-scoped owner self-edit); that
+    branching logic is not a security check and belongs in the handler.
+    """
+    report = await _fetch_report_or_404(db, report_id)
+    if current_user.role not in _STAFF_ROLES and current_user.id != report.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to perform this action.",
+        )
+    return current_user
+
 
 @router.patch("/{report_id}", response_model=ReportResponse)
 async def update_report(
@@ -332,7 +361,7 @@ async def update_report(
     data: ReportUpdate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_admin_or_owner),
 ):
     """
     Update report status and/or assignment (admin/contractor), OR let the
@@ -350,17 +379,12 @@ async def update_report(
     report = await _fetch_report_or_404(db, report_id)
     owner_id = report.owner_id
 
-    is_privileged = current_user.role in (
-        UserRole.admin, UserRole.superadmin, UserRole.contractor,
-    )
+    is_privileged = current_user.role in _STAFF_ROLES
 
     if not is_privileged:
         # ── Owner self-edit path: tightly scoped, no status changes ──────
-        if current_user.id != owner_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to perform this action.",
-            )
+        # _require_admin_or_owner already enforced that this user is the owner;
+        # no need to re-check identity here.
         if report.status not in (ReportStatus.PENDING, ReportStatus.DECLINED):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -594,7 +618,7 @@ async def upload_media(
 ):
     report = await _fetch_report_or_404(db, report_id)
 
-    if report.owner_id != current_user.id and current_user.role.value != "admin":
+    if report.owner_id != current_user.id and current_user.role not in _STAFF_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
     # Read file
@@ -933,7 +957,7 @@ async def generate_summary(
     """
     report = await _fetch_report_or_404(db, report_id)
 
-    if report.owner_id != current_user.id and current_user.role != UserRole.admin:
+    if report.owner_id != current_user.id and current_user.role not in _STAFF_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to generate a summary for this report.",

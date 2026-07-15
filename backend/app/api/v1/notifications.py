@@ -1,18 +1,31 @@
-
-
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, select, update
+from pydantic import BaseModel
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.middleware.auth_middleware import get_current_user
+from app.middleware.auth_middleware import get_current_user, require_admin
+from app.models.enums import NotificationType
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.notification import NotificationResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
+
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
+
+class SendNotificationRequest(BaseModel):
+    user_id:   int
+    report_id: int | None = None
+    title:     str
+    message:   str
+    type:      str = "info"
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -71,18 +84,53 @@ async def get_notification_count(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get count of unread notifications."""
-    result = await db.execute(
-        select(Notification).where(
-            Notification.user_id == current_user.id,
-            Notification.is_read == False,  # noqa: E712
+    """Get unread and total notification counts using COUNT(*) — no full-row fetch."""
+    unread_count, total_count = (
+        await db.execute(
+            select(
+                func.count(Notification.id).filter(Notification.is_read == False).label("unread"),  # noqa: E712
+                func.count(Notification.id).label("total"),
+            ).where(Notification.user_id == current_user.id)
         )
-    )
-    unread = result.scalars().all()
+    ).one()
     return {
-        "unread_count": len(unread),
-        "total_count": len(unread),  # Alias for frontend compatibility
+        "unread_count": unread_count,
+        "total_count":  total_count,
     }
+
+
+@router.post("/send", status_code=status.HTTP_201_CREATED)
+async def send_notification(
+    data: SendNotificationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Admin-only: send a notification directly to any user.
+    Used by Manage Reports, Manage Requests, and All Reports pages
+    to message report submitters.
+    """
+    try:
+        notif_type = NotificationType[data.type]
+    except KeyError:
+        notif_type = NotificationType.info
+
+    notif = Notification(
+        user_id=data.user_id,
+        report_id=data.report_id,
+        title=data.title,
+        message=data.message,
+        type=notif_type,
+        is_read=False,
+    )
+    db.add(notif)
+    await db.commit()
+    await db.refresh(notif)
+    logger.info(
+        "Admin %d sent notification to user %d | report_id=%s | title=%r",
+        current_user.id, data.user_id, data.report_id, data.title,
+    )
+    return {"success": True, "id": notif.id}
 
 
 @router.patch("/read-all", status_code=status.HTTP_200_OK)

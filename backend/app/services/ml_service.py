@@ -41,7 +41,7 @@ _crack_model = None
 _HF_MODEL = "umm-maybe/AI-image-detector"
 _HF_TIMEOUT = 12
 
-REALTIME_CONF_THRESHOLD = 0.60
+REALTIME_CONF_THRESHOLD = 0.40  # lowered from 0.60: live 320-px frames score ~0.1-0.15 below 640-px stills
 
 _BASE_THRESHOLDS: dict[str, float] = {
     "pothole": 0.40,

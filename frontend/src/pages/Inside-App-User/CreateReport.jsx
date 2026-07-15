@@ -25,6 +25,7 @@ import {
 } from "react-icons/fa";
 import { MdOutlineLocationOn } from "react-icons/md";
 import { useUser } from "../../hooks/useUser";
+import { tokenStorage } from "../../api/client";
 import { analyzeMedia, analyzeVideo } from "../../api/ml";
 import { createReport, uploadMedia } from "../../api/reports";
 import { useOfflineQueue, enqueueOfflineReport } from "../../hooks/useOfflineQueue";
@@ -52,7 +53,7 @@ const SEVERITY_BACKEND = {
   critical:     "critical",
   non_critical: "non_critical",
 }
-const REALTIME_CONF_THRESHOLD = 0.60;
+const REALTIME_CONF_THRESHOLD = 0.40; // lowered from 0.60: live 320-px frames score ~0.1-0.15 below 640-px stills
 const MAX_REC_SECS            = 10;
 const MAX_ANALYSIS_RETRIES    = 3;
 const ANGLE_MIN               = 45;
@@ -758,7 +759,7 @@ if (ai_validation && typeof ai_validation === "object") {
 
   // ── Camera helpers (UNCHANGED) ─────────────────────────────────────────────
   const stopCamera = useCallback(() => {
-    clearInterval(detectionLoopRef.current);
+    detectionLoopRef.current = false; // signals the self-pacing detection loop to stop
     clearInterval(recordTimerRef.current);
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current._discard = true;
@@ -788,52 +789,66 @@ if (ai_validation && typeof ai_validation === "object") {
         await videoRef.current.play();
       }
       setCameraActive(true);
-      detectionLoopRef.current = setInterval(async () => {
-        if (!videoRef.current || videoRef.current.readyState < 2) return;
-        try {
-          const blob = await snapFrameBlob(videoRef.current);
-          const fd   = new FormData();
-          fd.append("file", blob, "frame.jpg");
-          const res = await fetch(`/api/v1/ml/analyze`, {
-            method: "POST", body: fd,
-            signal: AbortSignal.timeout(800),
-            credentials: "include",
-          });
-          if (!res.ok) return;
-          const { data } = await res.json();
-          const allDets = data?.all_detections ?? [];
-          const pred = data?.prediction;
-          
-          if (allDets.length === 0 && (!pred || pred.label === "none")) {
-            setLiveDetection((p) => ({ ...p, detected: false, status: "scanning", bbox: null, boxes: [] }));
-            return;
+      // Self-pacing detection loop: the next frame is only sent after current
+      // inference completes, so slow backend responses never cause overlapping
+      // requests or queued-up fetches. detectionLoopRef acts as a stop flag.
+      detectionLoopRef.current = true;
+      (async () => {
+        while (detectionLoopRef.current) {
+          if (!videoRef.current || videoRef.current.readyState < 2) {
+            await new Promise((r) => setTimeout(r, 100));
+            continue;
           }
-          
-          const best = allDets[0] ?? pred;
-          const conf = best?.confidence ?? 0;
-          const normBox = best?.norm_bbox ?? null;
-          const dist = distanceFeedback(normBox);
-          
-          setLiveDetection({
-            detected:   allDets.length > 0 && conf >= REALTIME_CONF_THRESHOLD,
-            label:      best?.class ?? best?.label ?? null,
-            confidence: conf,
-            severity:   best?.severity,
-            bbox:       normBox,
-            boxes:      allDets,
-            distance:   dist,
-            status:     allDets.length > 0 && conf >= REALTIME_CONF_THRESHOLD
-              ? (dist.ok ? "detected" : "warning")
-              : "scanning",
-          });
-          if (videoRef.current) {
-            setViewfinderSize({
-              width:  videoRef.current.offsetWidth  || 640,
-              height: videoRef.current.offsetHeight || 360,
+          try {
+            const blob  = await snapFrameBlob(videoRef.current);
+            const fd    = new FormData();
+            fd.append("file", blob, "frame.jpg");
+            const token = tokenStorage.getAccess();
+            const res   = await fetch("/api/v1/ml/analyze/realtime", {
+              method:      "POST",
+              body:        fd,
+              signal:      AbortSignal.timeout(4000),
+              credentials: "include",
+              headers:     token ? { Authorization: `Bearer ${token}` } : {},
             });
+            if (res.ok) {
+              const { data } = await res.json();
+              const allDets  = data?.all_detections ?? [];
+              const pred     = data?.prediction;
+              if (allDets.length === 0 && (!pred || pred.label === "none")) {
+                setLiveDetection((p) => ({ ...p, detected: false, status: "scanning", bbox: null, boxes: [] }));
+              } else {
+                const best    = allDets[0] ?? pred;
+                const conf    = best?.confidence ?? 0;
+                const normBox = best?.norm_bbox ?? null;
+                const dist    = distanceFeedback(normBox);
+                setLiveDetection({
+                  detected:   allDets.length > 0 && conf >= REALTIME_CONF_THRESHOLD,
+                  label:      best?.class ?? best?.label ?? null,
+                  confidence: conf,
+                  severity:   best?.severity,
+                  bbox:       normBox,
+                  boxes:      allDets,
+                  distance:   dist,
+                  status:     allDets.length > 0 && conf >= REALTIME_CONF_THRESHOLD
+                    ? (dist.ok ? "detected" : "warning")
+                    : "scanning",
+                });
+              }
+              if (videoRef.current) {
+                setViewfinderSize({
+                  width:  videoRef.current.offsetWidth  || 640,
+                  height: videoRef.current.offsetHeight || 360,
+                });
+              }
+            }
+          } catch {
+            // Network errors / AbortError are silently skipped — loop continues
           }
-        } catch {}
-      }, 600);
+          // Minimum inter-frame gap keeps CPU sane when inference is very fast
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      })();
     } catch (err) {
       setCameraError(
         err.name === "NotAllowedError"
@@ -880,7 +895,7 @@ if (ai_validation && typeof ai_validation === "object") {
         const captured = new File([blob], "snap_video.webm", { type: "video/webm" });
         setFile(captured);
         setPreview(URL.createObjectURL(blob));
-        clearInterval(detectionLoopRef.current);
+        detectionLoopRef.current = false; // signals the self-pacing detection loop to stop
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         if (videoRef.current) videoRef.current.srcObject = null;
@@ -920,6 +935,33 @@ if (ai_validation && typeof ai_validation === "object") {
   }, []);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
+
+  // Warm up the ML model as soon as this form mounts so the first camera frame
+  // doesn't hit a cold model. Sends a 4×4 blank JPEG to /ml/analyze/realtime;
+  // the backend loads model weights on first request, so subsequent frames are fast.
+  // Fire-and-forget — failures are silently ignored.
+  useEffect(() => {
+    const warmupML = async () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 4;
+        canvas.height = 4;
+        const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.5));
+        if (!blob) return;
+        const fd = new FormData();
+        fd.append("file", blob, "warmup.jpg");
+        const warmupToken = tokenStorage.getAccess();
+        await fetch("/api/v1/ml/analyze/realtime", {
+          method: "POST", body: fd, credentials: "include",
+          signal: AbortSignal.timeout(10_000),
+          headers: warmupToken ? { Authorization: `Bearer ${warmupToken}` } : {},
+        });
+      } catch {
+        // best-effort — ignored
+      }
+    };
+    warmupML();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Device orientation (UNCHANGED) ────────────────────────────────────────
   useEffect(() => {
@@ -1113,16 +1155,24 @@ if (ai_validation && typeof ai_validation === "object") {
   const recProgress    = (recordingTime / MAX_REC_SECS) * 100;
   const showAngleHUD   = cameraActive && phoneAngle !== null;
 
-  const viewfinderOverlayDetections = (liveDetection.detected && liveDetection.boxes?.length)
+  // Render overlay for ANY returned detection — decoupled from liveDetection.detected.
+  // detected=true (conf >= REALTIME_CONF_THRESHOLD) only controls the status pill text.
+  // This prevents the double-gate that swallowed detections just below the threshold.
+  const viewfinderOverlayDetections = liveDetection.boxes?.length
     ? liveDetection.boxes.map((b) => ({
-        label: b.class ?? b.label, 
-        confidence: b.confidence, 
-        severity: b.severity ?? liveDetection.severity,
-        x_norm: b.x_norm ?? (b.norm_bbox?.[0] ?? 0), 
-        y_norm: b.y_norm ?? (b.norm_bbox?.[1] ?? 0), 
-        w_norm: b.w_norm ?? ((b.norm_bbox?.[2] ?? 0) - (b.norm_bbox?.[0] ?? 0)), 
+        label:      b.class ?? b.label,
+        confidence: b.confidence,
+        severity:   b.severity ?? liveDetection.severity,
+        x_norm: b.x_norm ?? (b.norm_bbox?.[0] ?? 0),
+        y_norm: b.y_norm ?? (b.norm_bbox?.[1] ?? 0),
+        w_norm: b.w_norm ?? ((b.norm_bbox?.[2] ?? 0) - (b.norm_bbox?.[0] ?? 0)),
         h_norm: b.h_norm ?? ((b.norm_bbox?.[3] ?? 0) - (b.norm_bbox?.[1] ?? 0)),
       }))
+    : [];
+
+  // Full detection objects for SegmentationMask — same decoupling as above.
+  const viewfinderMaskDetections = liveDetection.boxes?.length
+    ? liveDetection.boxes
     : [];
 
   // ── NEW: Derived mask data ─────────────────────────────────────────────────
@@ -1243,6 +1293,22 @@ const showMask = analysisComplete &&
                       detections={viewfinderOverlayDetections}
                       width={viewfinderSize.width}
                       height={viewfinderSize.height} />
+                  )}
+                  {/* Polygon mask overlay on the live viewfinder.
+                      imageSize = video element's rendered px dimensions (from viewfinderSize).
+                      naturalSize = same value: segments_norm coords are already 0–1 relative
+                      to the inference resolution, so SegmentationMask scales them to displayW/H
+                      directly without needing a separate natural-resolution reference.
+                      showBoundingBox/showLabels are false — DetectionOverlay handles those. */}
+                  {cameraActive && viewfinderSize.width > 0 && viewfinderMaskDetections.length > 0 && (
+                    <SegmentationMask
+                      predictions={viewfinderMaskDetections}
+                      imageSize={viewfinderSize}
+                      naturalSize={viewfinderSize}
+                      showBoundingBox={false}
+                      showLabels={false}
+                      smoothPasses={0}
+                    />
                   )}
                   {cameraActive && liveDetection.distance && (
                     <div className={`distance-indicator ${liveDetection.distance.ok ? "ok" : "warn"}`}

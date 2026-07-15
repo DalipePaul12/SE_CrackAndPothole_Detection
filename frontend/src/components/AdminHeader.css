@@ -6,14 +6,21 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 40px;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: var(--sidebar-width, var(--user-width));
+  right: 0;
   z-index: 100;
   border-bottom-left-radius: 30px;
   border-bottom-right-radius: 30px;
   box-shadow: var(--shadow-sm);
   flex-shrink: 0;
-  transition: background var(--transition-med), border-color var(--transition-med);
+  transition: background var(--transition-med), border-color var(--transition-med),
+              left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.admin-header.collapsed {
+  left: var(--sidebar-collapsed-width, var(--user-collapsed));
 }
 
 .admin-header-left h2 {
