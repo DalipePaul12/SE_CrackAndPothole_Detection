@@ -33,9 +33,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 def _get_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # Use request.client.host, which Starlette populates from the sanitised
+    # X-Forwarded-For chain when uvicorn is started with --proxy-headers.
+    # The reverse proxy (Replit / Render) *prepends* the real client IP, so
+    # Starlette's resolved value is set by infrastructure — not the client.
+    # We never read X-Forwarded-For directly to prevent header spoofing.
     return request.client.host if request.client else "unknown"
 
 
@@ -68,7 +70,10 @@ async def register(
 ):
     # ── Enforce DB-configured password minimum length ─────────────────────────
     admin_cfg = await _load_admin_settings(db)
-    min_len = (admin_cfg.password_min_length if admin_cfg else None) or 8
+    # Safe-fail: clamp to a floor of 8 regardless of what is stored in the DB
+    # (guards against a null value, 0, or a sub-minimum set via direct DB access).
+    _raw_min = (admin_cfg.password_min_length if admin_cfg else 0) or 0
+    min_len = max(_raw_min, 8)
     if len(user_data.password) < min_len:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -386,7 +391,8 @@ async def reset_password(
 
     # ── Enforce DB-configured password minimum length ─────────────────────────
     admin_cfg = await _load_admin_settings(db)
-    min_len = (admin_cfg.password_min_length if admin_cfg else None) or 8
+    _raw_min = (admin_cfg.password_min_length if admin_cfg else 0) or 0
+    min_len = max(_raw_min, 8)
     if len(data.new_password) < min_len:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

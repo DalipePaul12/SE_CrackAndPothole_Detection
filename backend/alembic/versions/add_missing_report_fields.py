@@ -8,8 +8,12 @@ Missing columns were the root cause of HTTP 500 on every report submission:
   SQLAlchemy ORM object → AttributeError → HTTP 500.
 
 Revision ID: 0001_add_missing_report_fields
-Revises: <paste your current head revision here>
+Revises: 105dd01b71ae
 Create Date: 2025-05-14
+
+Chain note: this migration branches from 105dd01b71ae in parallel with
+a1b2c3d4e5f6 (add_revoked_tokens_table). Both branches are merged by
+1dbe9ad95f07. The merge commit is still required.
 """
 
 from alembic import op
@@ -18,7 +22,7 @@ import sqlalchemy as sa
 
 # ── Revision identifiers ───────────────────────────────────────────────────────
 revision = "0001_add_missing_report_fields"
-down_revision = None          # ← replace with your current alembic head revision
+down_revision = "105dd01b71ae"   # branches in parallel with a1b2c3d4e5f6
 branch_labels = None
 depends_on = None
 

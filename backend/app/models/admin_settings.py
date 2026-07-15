@@ -52,7 +52,7 @@ class AdminSettings(Base):
     critical_alert_sound = Column(Boolean,    nullable=False, default=True)
 
     # ── Security & Privacy ────────────────────────────────────────────────────
-    require_2fa              = Column(Boolean,  nullable=False, default=False)
+    require_2fa              = Column(Boolean,  nullable=False, default=True)
     password_min_length      = Column(Integer,  nullable=False, default=8)
     session_timeout          = Column(Integer,  nullable=False, default=60)
     data_retention_days      = Column(Integer,  nullable=False, default=365)

@@ -85,6 +85,14 @@ async def require_admin(
 
     # ── Enforce allowed_admin_ips ─────────────────────────────────────────────
     # If the setting is non-empty, only listed IPs may access admin routes.
+    #
+    # IP source: request.client.host — populated by Starlette from the
+    # sanitised X-Forwarded-For header ONLY when uvicorn is started with
+    # --proxy-headers (see Backend API workflow).  That flag makes uvicorn
+    # trust the reverse proxy (Replit / Render load-balancer) which *prepends*
+    # the real client IP to the chain — meaning the leftmost IP is set by the
+    # infrastructure, not the client, so it cannot be spoofed via a hand-crafted
+    # header.  We never read X-Forwarded-For directly here.
     from app.models.admin_settings import AdminSettings
     result = await db.execute(select(AdminSettings).where(AdminSettings.id == 1))
     cfg = result.scalar_one_or_none()
@@ -93,12 +101,7 @@ async def require_admin(
         if allowed_str:
             allowed_ips = {ip.strip() for ip in allowed_str.split(",") if ip.strip()}
             if allowed_ips:
-                forwarded = request.headers.get("X-Forwarded-For", "")
-                client_ip = (
-                    forwarded.split(",")[0].strip()
-                    if forwarded
-                    else (request.client.host if request.client else "")
-                )
+                client_ip = request.client.host if request.client else ""
                 if client_ip not in allowed_ips:
                     logger.warning(
                         "Admin access denied: ip=%s not in allowlist | user_id=%d",

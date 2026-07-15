@@ -79,7 +79,7 @@ class AdminSettingsUpdate(BaseModel):
 
     # Security
     require_2fa:               Optional[bool] = None
-    password_min_length:       Optional[int]  = Field(None, ge=6, le=32)
+    password_min_length:       Optional[int]  = Field(None, ge=6, le=64)
     session_timeout:           Optional[int]  = Field(None, ge=5, le=1440)
     data_retention_days:       Optional[int]  = Field(None, ge=30, le=2555)
     allow_public_registration: Optional[bool] = None
