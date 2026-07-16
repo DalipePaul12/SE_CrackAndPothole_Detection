@@ -104,6 +104,9 @@ class UserResponse(AppBaseModel):
     reputation_score: float
     is_active: bool
     is_verified: bool
+    # Additive optional field — existing clients that don't use it are unaffected.
+    # None is treated as True (available) in all application logic.
+    is_available: Optional[bool] = None
     created_at: datetime
     updated_at: datetime
     last_login_at: Optional[datetime] = None

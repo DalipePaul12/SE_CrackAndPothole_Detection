@@ -50,6 +50,11 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
 
+    # Contractor availability flag — True = accepting new projects.
+    # Nullable so existing rows are unaffected until explicitly set;
+    # treat NULL as available (same as True) in application logic.
+    is_available = Column(Boolean, nullable=True, default=True)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(

@@ -85,7 +85,24 @@ class DeclineBody(BaseModel):
     reason: str
 
 
+class AvailabilityUpdate(BaseModel):
+    is_available: bool
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.patch("/availability")
+async def update_availability(
+    body: AvailabilityUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_contractor),
+):
+    """Contractor: toggle availability for new project assignments."""
+    current_user.is_available = body.is_available
+    await db.commit()
+    await db.refresh(current_user)
+    return {"is_available": current_user.is_available}
+
 
 @router.get("/assigned-projects")
 async def get_assigned_projects(

@@ -147,10 +147,15 @@ async def update_project_status(
 
 @router.get("/available-contractors")
 async def get_available_contractors(
+    is_available: bool | None = Query(None, description="Filter by contractor availability. Omit to return all contractors."),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Admin/superadmin: list all contractors with their active project count."""
+    """Admin/superadmin: list all contractors with their active project count.
+
+    Optional ?is_available=true/false filter.  NULL is_available is treated as
+    available (true) — matching existing rows created before the column existed.
+    """
     if current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -166,11 +171,22 @@ async def get_available_contractors(
         .scalar_subquery()
     )
 
-    result = await db.execute(
+    query = (
         select(User, active_count_sq.label("active_project_count"))
         .where(User.role == UserRole.contractor)
-        .order_by(User.full_name)
     )
+
+    if is_available is True:
+        # NULL treated as available
+        query = query.where(
+            (User.is_available == True) | (User.is_available.is_(None))
+        )
+    elif is_available is False:
+        query = query.where(User.is_available == False)
+    # is_available is None → no filter; return all contractors
+
+    query = query.order_by(User.full_name)
+    result = await db.execute(query)
 
     rows = result.all()
     return [
@@ -179,6 +195,8 @@ async def get_available_contractors(
             "full_name": user.full_name,
             "email": user.email,
             "active_project_count": count,
+            # Expose the flag; normalise NULL → True for API consumers
+            "is_available": user.is_available if user.is_available is not None else True,
         }
         for user, count in rows
     ]
