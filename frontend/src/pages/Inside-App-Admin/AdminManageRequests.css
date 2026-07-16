@@ -12,16 +12,15 @@
 .admin-manage-container {
   padding: 2rem;
   background: var(--bg);
-  /* FIX: Removed min-height: 100vh which forced the container to exceed
-     its parent and caused double scrollbars / overflow behind the header. */
   min-height: 0;
   color: var(--text);
   transition: background 0.3s ease, color 0.3s ease;
-  /* ADDED: Flex column so this fills the scrollable main-content area. */
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow: hidden;
+  /* Allow page to scroll vertically */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ═══════════════════════════════════════════════
@@ -164,14 +163,12 @@
   border-radius: 30px;
   padding: 20px;
   box-shadow: var(--shadow-md);
-  /* FIX: Replaced fixed max-height with flex-based layout so the table
-     container dynamically fills the remaining viewport height. */
+  /* Show ~7 rows (each ~68px) + header ~40px + padding */
   flex: 1;
-  min-height: 0;
+  min-height: 520px;
   border: 1px solid var(--border);
   overflow: hidden;
   transition: background 0.3s ease, border-color 0.3s ease;
-  /* ADDED: Flex column so the table can grow inside it. */
   display: flex;
   flex-direction: column;
 }
@@ -188,12 +185,10 @@
 
 .submissions-table th {
   text-align: left;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   text-transform: uppercase;
   color: var(--subtext);
-  padding-top: 5px;
-  padding-bottom: 15px;
-  padding-left: 14px;
+  padding: 5px 4px 15px 8px;
   position: sticky;
   top: 0;
   background: var(--card);
@@ -201,18 +196,34 @@
   letter-spacing: 0.05em;
   font-weight: 700;
   transition: background 0.3s ease, color 0.3s ease;
-  /* Prevent header from shrinking */
   flex-shrink: 0;
 }
 
 .submissions-table td {
-  padding: 10px 0 10px 14px;
+  padding: 10px 4px 10px 8px;
   border-top: 1px solid var(--border);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   vertical-align: middle;
   color: var(--text);
   transition: border-color 0.3s ease, color 0.3s ease;
 }
+
+/* ── Column width distribution ─────────────────── */
+/* Report */
+.submissions-table th:nth-child(1),
+.submissions-table td:nth-child(1) { width: 26%; }
+/* Type */
+.submissions-table th:nth-child(2),
+.submissions-table td:nth-child(2) { width: 12%; }
+/* Date */
+.submissions-table th:nth-child(3),
+.submissions-table td:nth-child(3) { width: 16%; }
+/* Severity */
+.submissions-table th:nth-child(4),
+.submissions-table td:nth-child(4) { width: 12%; }
+/* Action — needs room for two 88px pills + gap */
+.submissions-table th:nth-child(5),
+.submissions-table td:nth-child(5) { width: 34%; text-align: center; }
 
 .submissions-table tbody {
   display: block;
@@ -291,7 +302,14 @@
 }
 
 /* ═══════════════════════════════════════════════
-   ACTION BUTTONS (table row)
+   CLICKABLE ROW
+═══════════════════════════════════════════════ */
+.amr-clickable-row {
+  cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════
+   ACTION BUTTONS (table row) — glassmorphism pills
 ═══════════════════════════════════════════════ */
 .admin-action-buttons {
   display: flex;
@@ -299,8 +317,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  /* FIX: Allow buttons to wrap instead of forcing cell overflow */
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   width: auto;
 }
 
@@ -309,50 +326,66 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 88px !important;
-  flex: none !important;
-  padding: 6px 0;
+  gap: 4px;
+  /* Strictly identical size — both dimensions locked */
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   border-radius: 100px;
-  font-size: 0.80rem;
-  font-weight: 600;
+  font-size: 0.76rem;
+  font-weight: 700;
   cursor: pointer;
   font-family: inherit;
-  box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
   white-space: nowrap;
-  min-height: 30px;
   flex-shrink: 0;
 }
 
+/* Confirm — green glassmorphism pill */
 .admin-confirm-btn {
-  border: none;
-  background: var(--primary);
-  color: #fff;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1.5px solid rgba(34, 197, 94, 0.35);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .admin-confirm-btn:hover:not(:disabled) {
-  background: var(--primary-light);
+  background: rgba(34, 197, 94, 0.28);
+  border-color: rgba(34, 197, 94, 0.6);
+  color: #86efac;
   transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.25);
 }
 
+/* Decline — dark pill with red accent (fully opaque, never bleeds green) */
 .admin-decline-btn {
-  border: 1.5px solid var(--border);
-  background: var(--card);
-  color: var(--subtext);
+  background: #1c0606;
+  color: #f87171;
+  border: 1.5px solid #dc2626;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .admin-decline-btn:hover:not(:disabled) {
-  background: var(--danger-bg);
-  color: var(--danger);
-  border-color: var(--danger);
+  background: #2d0a0a;
+  border-color: #ef4444;
+  color: #fca5a5;
   transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
 }
 
 .admin-confirm-btn:disabled,
 .admin-decline-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
   transform: none;
 }
@@ -378,34 +411,6 @@
 
 @keyframes amr-spin {
   to { transform: rotate(360deg); }
-}
-
-/* View Details button */
-.amr-view-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 14px;
-  border-radius: 100px;
-  border: 1.5px solid var(--border);
-  background: var(--card);
-  color: var(--subtext);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  min-height: 32px;
-}
-
-.amr-view-btn:hover {
-  background: var(--primary-subtle);
-  color: var(--primary);
-  border-color: var(--primary);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
 }
 
 /* Message btn (inside modal) */

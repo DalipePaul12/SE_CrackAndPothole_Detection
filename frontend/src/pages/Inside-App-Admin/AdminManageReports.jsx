@@ -1314,25 +1314,21 @@ function CommentSection({ reportId }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// REFACTORED ViewModal — added Assign Contractor section
+// TABBED ViewModal — matches AdminManageRequests popup design
 // ═══════════════════════════════════════════════════════════════════════════
 function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComplete, onCancel, onVerify, onAssigned }) {
-  const st    = r.status?.toLowerCase();
-  const media = mediaFull(r);
-  const pri   = getPriority(r);
-  const sev   = severity(r).toLowerCase();
+  const st     = r.status?.toLowerCase();
+  const sev    = severity(r).toLowerCase();
+  const pri    = getPriority(r);
+  const conf   = r.ai_confidence ?? r.confidence ?? null;
+  const mCount = r.media_attachments?.length ?? 0;
 
-  // Assignment section reveal — toggled by the "Start" button or openAssign prop.
-  const [showAssign,  setShowAssign]  = useState(openAssign);
+  const isTerminal = [REPORT_STATUS.RESOLVED, REPORT_STATUS.REJECTED, REPORT_STATUS.CANCELLED].includes(st);
+
+  const [activeTab,   setActiveTab]   = useState("details");
   const [completion,  setCompletion]  = useState(null);
   const [compLoading, setCompLoading] = useState(false);
-  const assignRef = useRef(null);
-
-  useEffect(() => {
-    if (showAssign && assignRef.current) {
-      assignRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [showAssign]);
+  const [showAssign,  setShowAssign]  = useState(openAssign);
 
   useEffect(() => {
     if (st !== REPORT_STATUS.RESOLVED || !project?.id) return;
@@ -1346,181 +1342,331 @@ function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComp
     return () => { cancelled = true; };
   }, [st, project?.id]);
 
+  const statusLabel = STATUS_LABELS[st] ?? (st ? st.charAt(0).toUpperCase() + st.slice(1) : "Unknown");
+
+  const dateStr = (iso) => iso
+    ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "—";
+
+  const tabs = [
+    { id: "details",    label: "Details",    icon: IcoClipboard },
+    { id: "media",      label: "Media",      icon: IcoCamera,  badge: mCount > 0 ? mCount : null },
+    { id: "notes",      label: "Notes",      icon: IcoUsers },
+    { id: "actions",    label: "Actions",    icon: IcoShield,  badge: isTerminal ? null : 3 },
+    { id: "updates",    label: "Updates",    icon: IcoClock },
+    ...(st === REPORT_STATUS.RESOLVED
+      ? [{ id: "completion", label: "Completion", icon: IcoCheck }]
+      : []),
+  ];
+
   return (
-    <ModalShell onClose={onClose}>
-      <CloseBtn onClose={onClose} />
-      <ModalTitle>Report Details</ModalTitle>
-      <StatusTimeline currentStatus={st} />
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content vmr-tabbed-modal" onClick={e => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose}><IcoX size={18} /></button>
 
-      <div className="modal-body">
-        <div className="modal-left">
-          <InfoBlock>
-            <InfoRow label="Report ID">#{String(r.id).padStart(3, "0")}</InfoRow>
-            <InfoRow label="Reporter">{r.owner?.full_name ?? "Anonymous"}</InfoRow>
-            <InfoRow label="Contact">{r.owner?.phone ?? "—"}</InfoRow>
-            <InfoRow label="Reported">{timeAgo(r.created_at)}</InfoRow>
-          </InfoBlock>
-
-          <div className="info-card">
-            <InfoRow label="Damage Type">{damageType(r)}</InfoRow>
-            <InfoRow label="Severity"><Badge text={severity(r)} className={`sev-badge sev-${sev}`} /></InfoRow>
-            <InfoRow label="Priority"><Badge text={pri} className={`pri-badge pri-${pri}`} /></InfoRow>
-            {/* ═══════════════════════════════════════════════════════
-                COMMENTED OUT: Assigned To display — moved to next version
-            ═══════════════════════════════════════════════════════ */}
-            {/*
-            <InfoRow label="Assigned To">
-              {r.assigned_to ?? <span className="unassigned-text">Unassigned</span>}
-            </InfoRow>
-            */}
-            {r.description && (
-              <div className="description-block">
-                <div className="description-label">Description</div>
-                <div className="additional-info">{r.description}</div>
-              </div>
-            )}
-          </div>
-
-          <div className="location-info">
-            <div className="location-info-wrapper">
-              <IcoMapPin size={16} className="location-info-pin" />
-              <div>
-                <div className="location-info-barangay">{barangay(r)}</div>
-                {street(r) && <div className="location-info-street">{street(r)}</div>}
-              </div>
-            </div>
-          </div>
-
-          <div className="modal-actions">
-            {st === REPORT_STATUS.PENDING     && (
-              <button className="action-btn wide ab-verify" onClick={() => onVerify(r.id)}>
-                <IcoShield size={14} /> Verify Report
-              </button>
-            )}
-            {st === REPORT_STATUS.VERIFIED    && (
-              <button className="action-btn wide ab-start" onClick={() => setShowAssign(true)}>
-                <IcoWrench size={14} /> Start
-              </button>
-            )}
-            {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) && (
-              <button className="action-btn wide ab-complete" onClick={() => onMarkComplete(r)}>
-                <IcoCheck size={14} /> Mark as Completed
-              </button>
-            )}
-            {![REPORT_STATUS.RESOLVED, REPORT_STATUS.REJECTED, REPORT_STATUS.CANCELLED].includes(st) && (
-              <button className="action-btn wide ab-reject" onClick={() => onCancel(r)}>
-                <IcoBan size={14} /> Cancel Report
-              </button>
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div className="vmr-header">
+          <div className="vmr-header-id">
+            <span className="vmr-id-code">RPT-{String(r.id).padStart(5, "0")}</span>
+            <span className={`vmr-status-badge vmr-st-${st}`}>{statusLabel}</span>
+            {conf !== null && (
+              <span className="vmr-ai-badge">AI {Math.round(conf * 100)}%</span>
             )}
           </div>
         </div>
 
-        <div className="modal-right">
-          <div className="modal-photo-label">Report Photo</div>
-          <div className="modal-media">
-            {media ? (
-              media.type === "video"
-                ? <video src={media.url} controls />
-                : <img src={media.url} alt="Report" />
-            ) : (
-              <div className="modal-no-media">
-                <IcoCamera size={36} />
-                <div>No media attached</div>
+        {/* ── Tabs ───────────────────────────────────────────────── */}
+        <div className="vmr-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              className={`vmr-tab ${activeTab === tab.id ? "active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <tab.icon size={14} />
+              {tab.label}
+              {tab.badge != null && <span className="vmr-tab-badge">{tab.badge}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Tab Body ───────────────────────────────────────────── */}
+        <div className="vmr-body">
+
+          {/* DETAILS */}
+          {activeTab === "details" && (
+            <div className="vmr-grid">
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><IcoUsers size={14}/><span>REPORTER</span></div>
+                <div className="vmr-card-body">
+                  <div className="vmr-row"><span className="vmr-lbl">Name</span><span className="vmr-val">{r.owner?.full_name ?? "Anonymous"}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Contact</span><span className="vmr-val">{r.owner?.phone ?? "—"}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Email</span><span className="vmr-val">{r.owner?.email ?? "—"}</span></div>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-      {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) ? (
-        <div
-          ref={assignRef}
-          style={showAssign ? {
-            outline: "2px solid #3b82f6",
-            borderRadius: 8,
-            transition: "outline 0.2s",
-          } : {}}
-        >
-          <AssignContractorSection
-            report={r}
-            initialProject={project}
-            onAssigned={onAssigned}
-          />
-        </div>
-      ) : st === REPORT_STATUS.PENDING ? (
-        <div style={{
-          borderTop: "1px solid var(--border)", marginTop: 20,
-          padding: "12px 14px", background: "var(--bg)", borderRadius: 8,
-          border: "1px dashed var(--border)", display: "flex",
-          alignItems: "center", gap: 8,
-          color: "var(--subtext)", fontSize: "0.84rem",
-        }}>
-          <IcoShield size={14} />
-          Verify this report first before assigning a contractor.
-        </div>
-      ) : null}
-      {/* ── Completion Details (RESOLVED only) ──────────────────────────────── */}
-      {st === REPORT_STATUS.RESOLVED && (
-        <div className="amr-completion-section">
-          <div className="amr-completion-hdr">
-            <IcoCheck size={14} /> Completion Details
-          </div>
-          {compLoading ? (
-            <p className="amr-compl-loading">Loading completion data…</p>
-          ) : !completion ? (
-            <p className="amr-compl-empty">No completion details recorded for this project.</p>
-          ) : (
-            <>
-              <div className="amr-compl-grid">
-                {completion.notes && (
-                  <div className="amr-compl-row amr-compl-row--full">
-                    <span className="amr-compl-key">Notes</span>
-                    <span className="amr-compl-val">{completion.notes}</span>
-                  </div>
-                )}
-                {completion.materials_used && (
-                  <div className="amr-compl-row amr-compl-row--full">
-                    <span className="amr-compl-key">Materials Used</span>
-                    <span className="amr-compl-val">{completion.materials_used}</span>
-                  </div>
-                )}
-                {completion.actual_cost != null && (
-                  <div className="amr-compl-row">
-                    <span className="amr-compl-key">Actual Cost</span>
-                    <span className="amr-compl-val amr-compl-cost">
-                      ₱{Number(completion.actual_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                )}
-                {completion.completed_at && (
-                  <div className="amr-compl-row">
-                    <span className="amr-compl-key">Completed On</span>
-                    <span className="amr-compl-val">
-                      {new Date(completion.completed_at).toLocaleDateString("en-PH", { dateStyle: "medium" })}
-                    </span>
-                  </div>
-                )}
+
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><IcoAlert size={14}/><span>DAMAGE INFO</span></div>
+                <div className="vmr-card-body">
+                  <div className="vmr-row"><span className="vmr-lbl">Type</span><span className="vmr-val">{damageType(r)}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Severity</span><span className={`vmr-val sev-badge sev-${sev}`}>{severity(r)}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Priority</span><span className={`vmr-val pri-badge pri-${pri}`}>{pri}</span></div>
+                  {conf !== null && (
+                    <div className="vmr-row"><span className="vmr-lbl">AI Confidence</span><span className="vmr-val">{Math.round(conf * 100)}%</span></div>
+                  )}
+                </div>
               </div>
-              {completion.completion_photos?.length > 0 && (
-                <div className="amr-compl-photos">
-                  <div className="amr-compl-photos-label">Completion Photos</div>
-                  <div className="amr-compl-photos-row">
-                    {completion.completion_photos.map(ph => (
-                      <img
-                        key={ph.id}
-                        src={`${import.meta.env.VITE_API_URL || ""}${ph.file_url}`}
-                        alt={ph.file_name ?? "Completion photo"}
-                        className="amr-compl-photo"
-                      />
-                    ))}
+
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><IcoMapPin size={14}/><span>LOCATION</span></div>
+                <div className="vmr-card-body">
+                  <div className="vmr-row"><span className="vmr-lbl">Barangay</span><span className="vmr-val">{barangay(r)}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Street</span><span className="vmr-val">{street(r) || "—"}</span></div>
+                </div>
+              </div>
+
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><IcoClock size={14}/><span>TIMELINE</span></div>
+                <div className="vmr-card-body">
+                  <div className="vmr-row"><span className="vmr-lbl">Submitted</span><span className="vmr-val">{dateStr(r.created_at)}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Updated</span><span className="vmr-val">{dateStr(r.updated_at ?? r.created_at)}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Age</span><span className="vmr-val">{timeAgo(r.created_at)}</span></div>
+                </div>
+              </div>
+
+              {project && (
+                <div className="vmr-card vmr-card--full">
+                  <div className="vmr-card-hdr"><IcoWrench size={14}/><span>ASSIGNED CONTRACTOR</span></div>
+                  <div className="vmr-card-body">
+                    <div className="vmr-row"><span className="vmr-lbl">Name</span><span className="vmr-val">{project.contractor?.business_name ?? project.contractor?.full_name ?? "—"}</span></div>
+                    <div className="vmr-row"><span className="vmr-lbl">Project Status</span><span className="vmr-val">{ASSIGN_STATUS_LABELS[project.status] ?? project.status ?? "—"}</span></div>
                   </div>
                 </div>
               )}
-            </>
+            </div>
+          )}
+
+          {/* MEDIA */}
+          {activeTab === "media" && (
+            <div className="vmr-media-tab">
+              {mCount > 0 ? (
+                <>
+                  {r.media_attachments.map((att, i) => {
+                    const url = `${import.meta.env.VITE_API_URL || ""}${att.file_url}`;
+                    return att.media_type === "video"
+                      ? <video key={i} src={url} controls className="vmr-media-main" />
+                      : <img key={i} src={url} alt={`Media ${i + 1}`} className="vmr-media-main" />;
+                  })}
+                </>
+              ) : (
+                <div className="vmr-media-empty"><IcoCamera size={48}/><p>No media attached</p></div>
+              )}
+            </div>
+          )}
+
+          {/* NOTES */}
+          {activeTab === "notes" && (
+            <div className="vmr-notes-tab">
+              {r.description && (
+                <div className="vmr-note-card">
+                  <div className="vmr-note-label">Reporter Description</div>
+                  <p className="vmr-note-text">{r.description}</p>
+                </div>
+              )}
+              <CommentSection reportId={r.id} />
+            </div>
+          )}
+
+          {/* ACTIONS */}
+          {activeTab === "actions" && (
+            <div className="vmr-actions-tab">
+              {st === REPORT_STATUS.PENDING && (
+                <div className="vmr-action-card">
+                  <div className="vmr-action-hdr">
+                    <IcoShield size={20} className="vmr-action-ico vmr-ico-verify"/>
+                    <div><h4>Verify Report</h4><p>Mark this report as verified and move to queue</p></div>
+                  </div>
+                  <button className="action-btn ab-verify" onClick={() => onVerify(r.id)}>
+                    <IcoShield size={14}/> Verify Report
+                  </button>
+                </div>
+              )}
+
+              {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) && (
+                <div className="vmr-action-card">
+                  <div className="vmr-action-hdr">
+                    <IcoWrench size={20} className="vmr-action-ico vmr-ico-start"/>
+                    <div><h4>Assign Contractor</h4><p>Assign and track a contractor for this report</p></div>
+                  </div>
+                  <AssignContractorSection
+                    report={r}
+                    initialProject={project}
+                    onAssigned={onAssigned}
+                  />
+                </div>
+              )}
+
+              {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) && (
+                <div className="vmr-action-card">
+                  <div className="vmr-action-hdr">
+                    <IcoCheck size={20} className="vmr-action-ico vmr-ico-complete"/>
+                    <div><h4>Mark as Completed</h4><p>Record completion details and close this report</p></div>
+                  </div>
+                  <button className="action-btn ab-complete" onClick={() => onMarkComplete(r)}>
+                    <IcoCheck size={14}/> Mark as Completed
+                  </button>
+                </div>
+              )}
+
+              {!isTerminal && (
+                <div className="vmr-action-card">
+                  <div className="vmr-action-hdr">
+                    <IcoBan size={20} className="vmr-action-ico vmr-ico-cancel"/>
+                    <div><h4>Cancel Report</h4><p>Cancel this report with a reason</p></div>
+                  </div>
+                  <button className="action-btn ab-reject" onClick={() => onCancel(r)}>
+                    <IcoBan size={14}/> Cancel Report
+                  </button>
+                </div>
+              )}
+
+              {isTerminal && (
+                <div className="vmr-terminal-note">
+                  <IcoCheck size={16}/>
+                  This report is <strong>{statusLabel}</strong> — no further actions available.
+                </div>
+              )}
+
+              {st === REPORT_STATUS.PENDING && (
+                <div className="vmr-terminal-note">
+                  <IcoShield size={16}/>
+                  Verify this report first before assigning a contractor.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* UPDATES */}
+          {activeTab === "updates" && (
+            <div className="vmr-updates-tab">
+              <div className="vmr-update-item">
+                <div className="vmr-update-dot"/>
+                <div className="vmr-update-content">
+                  <p>Report submitted</p>
+                  <span>{dateStr(r.created_at)} · {timeAgo(r.created_at)}</span>
+                </div>
+              </div>
+              {r.updated_at && r.updated_at !== r.created_at && (
+                <div className="vmr-update-item">
+                  <div className="vmr-update-dot vmr-dot-updated"/>
+                  <div className="vmr-update-content">
+                    <p>Status updated to <strong>{statusLabel}</strong></p>
+                    <span>{dateStr(r.updated_at)}</span>
+                  </div>
+                </div>
+              )}
+              {project && (
+                <div className="vmr-update-item">
+                  <div className="vmr-update-dot vmr-dot-assign"/>
+                  <div className="vmr-update-content">
+                    <p>Contractor assigned — {project.contractor?.business_name ?? project.contractor?.full_name ?? "Unknown"}</p>
+                    <span>{dateStr(project.created_at ?? r.updated_at)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* COMPLETION (resolved only) */}
+          {activeTab === "completion" && st === REPORT_STATUS.RESOLVED && (
+            <div className="vmr-completion-tab">
+              {compLoading ? (
+                <p className="vmr-compl-loading">Loading completion data…</p>
+              ) : !completion ? (
+                <p className="vmr-compl-empty">No completion details recorded for this project.</p>
+              ) : (
+                <>
+                  <div className="vmr-grid">
+                    {completion.notes && (
+                      <div className="vmr-card vmr-card--full">
+                        <div className="vmr-card-hdr"><IcoClipboard size={14}/><span>NOTES</span></div>
+                        <div className="vmr-card-body">
+                          <p className="vmr-compl-notes">{completion.notes}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {completion.actual_cost != null && (
+                      <div className="vmr-card">
+                        <div className="vmr-card-hdr"><IcoStar size={14}/><span>ACTUAL COST</span></div>
+                        <div className="vmr-card-body">
+                          <div className="vmr-row">
+                            <span className="vmr-lbl">Total</span>
+                            <span className="vmr-val vmr-cost">
+                              ₱{Number(completion.actual_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {completion.completed_at && (
+                      <div className="vmr-card">
+                        <div className="vmr-card-hdr"><IcoClock size={14}/><span>COMPLETED ON</span></div>
+                        <div className="vmr-card-body">
+                          <div className="vmr-row">
+                            <span className="vmr-lbl">Date</span>
+                            <span className="vmr-val">{dateStr(completion.completed_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {completion.materials_used && Array.isArray(completion.materials_used) && completion.materials_used.length > 0 && (
+                      <div className="vmr-card vmr-card--full">
+                        <div className="vmr-card-hdr"><IcoWrench size={14}/><span>MATERIALS USED</span></div>
+                        <div className="vmr-card-body">
+                          <table className="vmr-materials-table">
+                            <thead>
+                              <tr><th>Material</th><th>Qty</th><th>Unit Cost</th></tr>
+                            </thead>
+                            <tbody>
+                              {completion.materials_used.map((m, i) => (
+                                <tr key={i}>
+                                  <td>{m.name ?? "—"}</td>
+                                  <td>{m.quantity ?? "—"}</td>
+                                  <td>{m.unit_cost != null ? `₱${Number(m.unit_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {completion.completion_photos?.length > 0 && (
+                    <div className="vmr-compl-photos">
+                      <div className="vmr-compl-photos-lbl">Completion Photos</div>
+                      <div className="vmr-compl-photos-row">
+                        {completion.completion_photos.map(ph => (
+                          <img
+                            key={ph.id}
+                            src={`${import.meta.env.VITE_API_URL || ""}${ph.file_url}`}
+                            alt={ph.file_name ?? "Completion photo"}
+                            className="vmr-compl-photo"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           )}
         </div>
-      )}
-      <CommentSection reportId={r.id} />
-    </ModalShell>
+      </div>
+    </div>
   );
 }
 

@@ -175,22 +175,25 @@ export default function AdminManageRequests() {
               <tr>
                 <th>Report</th>
                 <th>Type</th>
+                <th>Date</th>
                 <th>Severity</th>
                 <th>Action</th>
-                <th>Date</th>
-                <th>Details</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="6" className="no-data">Loading…</td></tr>
+                <tr><td colSpan="5" className="no-data">Loading…</td></tr>
               ) : filtered.length > 0 ? (
                 filtered.map((r) => {
 
                   const thumb = mediaUrl(r, BASE_URL);
                   const mediaIsVideo = r.media_attachments?.[0]?.media_type === "video";
                   return (
-                    <tr key={r.id}>
+                    <tr
+                      key={r.id}
+                      className="amr-clickable-row"
+                      onClick={() => setSelected(r)}
+                    >
                       <td>
                         <div className="report-cell">
                           {thumb && !mediaIsVideo && (
@@ -213,50 +216,45 @@ export default function AdminManageRequests() {
 
                       <td>{damageType(r)}</td>
 
+                      <td>{dateStr(r)}</td>
+
                       <td>
                         <span className={`severity ${severity(r).toLowerCase()}`}>
                           {severity(r)}
                         </span>
                       </td>
 
-                      <td>
+                      <td onClick={(e) => e.stopPropagation()}>
                         <div className="admin-action-buttons">
                           <button
                             className="admin-confirm-btn"
                             disabled={actionLoading.has(r.id + "-confirm") || actionLoading.has(r.id + "-decline")}
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setConfirmDialog({
                                 id:   r.id,
                                 name: `Report#${String(r.id).padStart(3, "0")}`,
-                              })
-                            }
-                          >Confirm</button>
+                              });
+                            }}
+                          ><Check size={13} /> Confirm</button>
                           <button
                             className="admin-decline-btn"
                             disabled={actionLoading.has(r.id + "-confirm") || actionLoading.has(r.id + "-decline")}
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setDeclineDialog({
                                 id:   r.id,
                                 name: `Report#${String(r.id).padStart(3, "0")}`,
-                              })
-                            }
-                          >Decline</button>
+                              });
+                            }}
+                          ><X size={13} /> Decline</button>
                         </div>
-                      </td>
-
-                      <td>{dateStr(r)}</td>
-
-                      <td>
-                        <button
-                          className="amr-view-btn"
-                          onClick={() => setSelected(r)}
-                        >View Details</button>
                       </td>
                     </tr>
                   );
                 })
               ) : (
-                <tr><td colSpan="6" className="no-data">No pending requests</td></tr>
+                <tr><td colSpan="5" className="no-data">No pending requests</td></tr>
               )}
             </tbody>
           </table>
