@@ -11,7 +11,7 @@ import {
   Loader2, ChevronFirst, ChevronLeft, ChevronRight, ChevronLast, User,
   AlertTriangle, Calendar, FileText, Wrench, Image, Camera, Paperclip,
   Mail, MailOpen, Send, CheckCircle, ClipboardList, ArrowDown, ArrowUp,
-  ArrowUpDown, Circle, StickyNote, Ban, UserCog, RotateCcw, ChevronUp, ChevronDown,
+  ArrowUpDown, Circle, StickyNote, Ban, RotateCcw, ChevronUp, ChevronDown,
   FileText as FileIcon, ImageIcon, MessageSquare, Shield, Activity,
 } from "lucide-react";
 
@@ -19,7 +19,6 @@ const BASE_URL    = import.meta.env.VITE_API_URL || "";
 const PAGE_SIZE   = 20;
 const TYPE_OPTIONS   = ["All", "Crack", "Pothole"];
 const STATUS_OPTIONS = ["All", REPORT_STATUS.PENDING, REPORT_STATUS.VERIFIED, REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.RESOLVED, REPORT_STATUS.DECLINED];
-const TEAM_OPTIONS   = ["Unassigned", "Road Team A", "Road Team B", "Maintenance Unit", "Emergency Response"];
 const STATUS_LABELS  = {
   [REPORT_STATUS.PENDING]:     "Pending",
   [REPORT_STATUS.VERIFIED]:    "Verified",
@@ -905,7 +904,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const [activeTab,      setTab]           = useState("details");
   const [comments,       setComments]      = useState([]);
   const [newNote,        setNewNote]       = useState("");
-  const [assignedTo,     setAssigned]      = useState(initial.assigned_to ?? "Unassigned");
   const [declineReason,  setDeclineReason] = useState("");
   const [submitting,     setSubmitting]    = useState(false);
   const [imgErrors,      setImgErrors]     = useState({});
@@ -975,13 +973,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
       console.error("doAddNote failed:", e);
     }
     setNoteLoading(false);
-  };
-
-  const doAssign = async () => {
-    setSubmitting(true);
-    await updateReport(r.id, { assigned_to: assignedTo });
-    setR((p) => ({ ...p, assigned_to: assignedTo }));
-    setSubmitting(false);
   };
 
   const loadUpdates = useCallback(async () => {
@@ -1119,18 +1110,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                   <strong>Decline Reason:</strong> {r.decline_reason}
                 </div>
               )}
-
-              <div className="detail-card assign-card">
-                <h5 className="detail-card-title"><UserCog size={14} /> Assignment</h5>
-                <div className="assign-row">
-                  <select value={assignedTo} onChange={(e) => setAssigned(e.target.value)}>
-                    {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <button className="btn-assign" onClick={doAssign} disabled={submitting}>
-                    {submitting ? "Saving…" : "Assign"}
-                  </button>
-                </div>
-              </div>
 
               <div className="modal-map-link">
                 <button

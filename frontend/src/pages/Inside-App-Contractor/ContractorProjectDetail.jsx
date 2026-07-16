@@ -368,6 +368,7 @@ export default function ContractorProjectDetail() {
   /* ── Validation before confirm ────────────────────────────────────────── */
   const validate = () => {
     if (!notes.trim()) return "Please add completion notes.";
+    if (photos.length === 0) return "At least one proof photo is required.";
     if (!actualCost || isNaN(parseFloat(actualCost)) || parseFloat(actualCost) < 0)
       return "Please enter a valid actual cost (₱).";
     const hasMaterialData = materials.some((m) => m.name.trim());
@@ -705,7 +706,7 @@ export default function ContractorProjectDetail() {
           <div className="cpd-field">
             <div className="cpd-label">
               Proof of Completion Photos
-              <span className="cpd-optional"> (optional)</span>
+              <span className="cpd-required"> *</span>
             </div>
             <div
               className="cpd-upload-zone"
@@ -747,7 +748,7 @@ export default function ContractorProjectDetail() {
             <button
               className="cpd-submit-btn"
               onClick={handleSubmitClick}
-              disabled={submitting}
+              disabled={submitting || !notes.trim() || photos.length === 0}
               type="button"
             >
               {submitting ? (

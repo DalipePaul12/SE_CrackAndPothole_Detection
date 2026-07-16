@@ -66,3 +66,29 @@ export const deleteProject = async (projectId) => {
     error: res?.error ?? null,
   };
 };
+
+/**
+ * GET /projects/available-contractors
+ * Returns contractors with name, active_project_count, is_available.
+ */
+export const getAvailableContractors = async () => {
+  const res = await api.get("/projects/available-contractors");
+  return {
+    success: res?.success ?? false,
+    data: Array.isArray(res?.data) ? res.data : [],
+    error: res?.error ?? null,
+  };
+};
+
+/**
+ * PATCH /projects/{projectId}/assign
+ * Assigns a contractor to a project. Body: { contractor_id }
+ */
+export const assignContractor = async (projectId, contractorId) => {
+  const res = await api.patch(`/projects/${projectId}/assign`, { contractor_id: contractorId });
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};

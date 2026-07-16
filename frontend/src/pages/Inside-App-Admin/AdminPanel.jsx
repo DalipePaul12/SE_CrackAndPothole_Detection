@@ -13,7 +13,7 @@ import {
   LayoutDashboard, CheckCircle2, AlertCircle, AlertTriangle,
   Clock, Settings2, Map, ClipboardList, Zap, SlidersHorizontal,
   Flame, BarChart2, MapPin, Timer, PieChartIcon, TrendingUp, TrendingDown,
-  BrainCircuit, Radio, FolderOpen, RefreshCw,
+  BrainCircuit, Radio, FolderOpen, RefreshCw, Users,
 } from "lucide-react";
 
 import { useAnalytics } from "../../hooks/useAnalytics";
@@ -23,6 +23,7 @@ import {
   getRecentReports,
   getActivityFeed,
   getPriorityFlags,
+  getContractorPerformance,
 } from "../../api/analytics";
 
 const DAMAGE_COLORS = ["#2ba81d", "#134d05"];
@@ -85,13 +86,14 @@ export default function AdminPanel() {
     loading: loadingAnalytics,
   } = useAnalytics();
 
-  const [sla,           setSla]           = useState(null);
-  const [aiInsights,    setAiInsights]    = useState(null);
-  const [recentReports, setRecentReports] = useState([]);
-  const [activityFeed,  setActivityFeed]  = useState([]);
-  const [priorityFlags, setPriorityFlags] = useState(null);
-  const [loadingExtra,  setLoadingExtra]  = useState(true);
-  const [errors,        setErrors]        = useState({});
+  const [sla,             setSla]             = useState(null);
+  const [aiInsights,      setAiInsights]      = useState(null);
+  const [recentReports,   setRecentReports]   = useState([]);
+  const [activityFeed,    setActivityFeed]    = useState([]);
+  const [priorityFlags,   setPriorityFlags]   = useState(null);
+  const [contractorPerf,  setContractorPerf]  = useState([]);
+  const [loadingExtra,    setLoadingExtra]    = useState(true);
+  const [errors,          setErrors]          = useState({});
 
   const [filterBarangay, setFilterBarangay] = useState("All");
   const [filterDate,     setFilterDate]     = useState("All time");
@@ -115,22 +117,24 @@ export default function AdminPanel() {
     setLoadingExtra(true);
     cancelRef.current = false;
 
-    const [slaRes, aiRes, recentRes, feedRes, prioRes] = await Promise.all([
+    const [slaRes, aiRes, recentRes, feedRes, prioRes, perfRes] = await Promise.all([
       getSLAStats(),
       getAIInsights(),
       getRecentReports(8),
       getActivityFeed(8),
       getPriorityFlags(),
+      getContractorPerformance(),
     ]);
 
     if (cancelRef.current) return;
     const errs = {};
 
-    if (slaRes.success)    setSla(slaRes.data);                    else errs.sla = slaRes.error;
-    if (aiRes.success)     setAiInsights(aiRes.data);              else errs.ai = aiRes.error;
-    if (recentRes.success) setRecentReports(recentRes.data || []); else errs.recent = recentRes.error;
-    if (feedRes.success)   setActivityFeed(feedRes.data || []);    else errs.feed = feedRes.error;
-    if (prioRes.success)   setPriorityFlags(prioRes.data);         else errs.priority = prioRes.error;
+    if (slaRes.success)    setSla(slaRes.data);                        else errs.sla = slaRes.error;
+    if (aiRes.success)     setAiInsights(aiRes.data);                  else errs.ai = aiRes.error;
+    if (recentRes.success) setRecentReports(recentRes.data || []);     else errs.recent = recentRes.error;
+    if (feedRes.success)   setActivityFeed(feedRes.data || []);        else errs.feed = feedRes.error;
+    if (prioRes.success)   setPriorityFlags(prioRes.data);             else errs.priority = prioRes.error;
+    if (perfRes.success)   setContractorPerf(perfRes.data || []);      else errs.perf = perfRes.error;
 
     setErrors(errs);
     setLoadingExtra(false);
@@ -631,6 +635,71 @@ export default function AdminPanel() {
                 </table>
               </div>
             )}
+      </div>
+
+      <div className="ap-panel ap-panel-full">
+        <div className="ap-panel-title">
+          <span className="ap-panel-icon-pill ap-pill-blue">
+            <Users size={13} color="#1565c0" />
+          </span>
+          Contractor Performance
+        </div>
+        {loadingMain ? (
+          <Skeleton h={160} />
+        ) : contractorPerf.length === 0 ? (
+          <p className="ap-empty">No contractor data available.</p>
+        ) : (
+          <div className="ap-table-wrap">
+            <table className="ap-table">
+              <thead>
+                <tr>
+                  {["Contractor", "Email", "Active Projects", "Completed", "Avg Resolution"].map(h => (
+                    <th key={h}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {contractorPerf.map(c => (
+                  <tr key={c.contractor_id} className="ap-table-row">
+                    <td style={{ fontWeight: 600 }}>{c.full_name}</td>
+                    <td style={{ color: "var(--subtext)", fontSize: "0.82rem" }}>{c.email}</td>
+                    <td>
+                      <span
+                        className="ap-badge"
+                        style={{
+                          background: c.active_projects > 0 ? "#e3f2fd" : "var(--bg)",
+                          color: c.active_projects > 0 ? "#1565c0" : "var(--subtext)",
+                          fontWeight: 700,
+                          padding: "2px 10px",
+                          borderRadius: 10,
+                        }}
+                      >
+                        {c.active_projects}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className="ap-badge"
+                        style={{
+                          background: c.completed_projects > 0 ? "#e8f5e9" : "var(--bg)",
+                          color: c.completed_projects > 0 ? "#2e7d32" : "var(--subtext)",
+                          fontWeight: 700,
+                          padding: "2px 10px",
+                          borderRadius: 10,
+                        }}
+                      >
+                        {c.completed_projects}
+                      </span>
+                    </td>
+                    <td style={{ color: c.avg_resolution_days != null ? "var(--text)" : "var(--subtext)" }}>
+                      {c.avg_resolution_days != null ? `${c.avg_resolution_days}d` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
     </div>

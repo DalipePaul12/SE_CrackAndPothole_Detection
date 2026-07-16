@@ -8,6 +8,7 @@ import {
   addComment,
   getComments,
 } from "../../api/reports";
+import { getAvailableContractors, assignContractor, createProject, getProjects } from "../../api/projects";
 import "./AdminManageReports.css";
 import { REPORT_STATUS } from "../../constants/reportStatus";
 
@@ -49,6 +50,13 @@ const TEAMS_DEFAULT = [
   { id: 3, name: "Team Gamma", leader: "Marco Villanueva", members: ["Liza Mendoza", "Pedro Reyes"]         },
 ];
 */
+
+const ASSIGN_STATUS_LABELS = {
+  scheduled:   "Assigned",
+  in_progress: "In Progress",
+  completed:   "Completed",
+  cancelled:   "Cancelled",
+};
 
 // ─── Icons (unchanged) ────────────────────────────────────────────────────
 function IcoClipboard({ size = 16, ...p }) {
@@ -310,6 +318,147 @@ function BulkBar({ count, onComplete, onCancel, onClear }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// ASSIGN CONTRACTOR SECTION — used inside ViewModal
+// ═══════════════════════════════════════════════════════════════════════════
+function AssignContractorSection({ report, initialProject, onAssigned }) {
+  const [contractors, setContractors] = React.useState([]);
+  const [project,     setProject]     = React.useState(initialProject || null);
+  const [selectedId,  setSelectedId]  = React.useState(
+    initialProject?.contractor?.id ?? initialProject?.contractor_id ?? null
+  );
+  const [loading,   setLoading]   = React.useState(true);
+  const [assigning, setAssigning] = React.useState(false);
+  const [error,     setError]     = React.useState(null);
+  const [success,   setSuccess]   = React.useState(null);
+
+  React.useEffect(() => {
+    getAvailableContractors().then(res => {
+      if (res.success) setContractors(res.data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleAssign = async () => {
+    if (!selectedId) return;
+    setAssigning(true); setError(null); setSuccess(null);
+
+    let projectId = project?.id;
+
+    if (!projectId) {
+      const res = await createProject({ report_id: report.id });
+      if (!res.success) {
+        setError(res.error || "Failed to create project");
+        setAssigning(false);
+        return;
+      }
+      projectId = res.data?.id;
+      setProject(res.data);
+    }
+
+    const res = await assignContractor(projectId, selectedId);
+    if (!res.success) {
+      setError(res.error || "Failed to assign contractor");
+      setAssigning(false);
+      return;
+    }
+    setProject(res.data);
+    const found = contractors.find(c => c.id === selectedId);
+    setSuccess(`Assigned to ${found?.full_name || "contractor"}`);
+    setAssigning(false);
+    onAssigned?.(res.data);
+  };
+
+  const projStatus        = project?.status?.toLowerCase();
+  const assignedName      = project?.contractor?.full_name
+                         ?? project?.contractor?.email
+                         ?? contractors.find(c => c.id === project?.contractor_id)?.full_name
+                         ?? null;
+
+  const s = {
+    wrap:    { borderTop: "1px solid var(--border)", marginTop: 20, paddingTop: 16 },
+    title:   { display: "flex", alignItems: "center", gap: 7, fontSize: "0.83rem", fontWeight: 700,
+               textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--subtext)", marginBottom: 12 },
+    current: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "8px 12px",
+               background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, flexWrap: "wrap" },
+    row:     { display: "flex", gap: 8, alignItems: "center", marginTop: 8 },
+    select:  { flex: 1, background: "var(--input-bg,var(--card))", border: "1px solid var(--input-border,var(--border))",
+               borderRadius: 8, padding: "8px 12px", fontSize: "0.88rem", color: "var(--text)",
+               fontFamily: "inherit", outline: "none" },
+    statBadge: (st) => {
+      const colors = { scheduled: "#7b1fa2", in_progress: "#1e88e5", completed: "#43a047", cancelled: "#9e9e9e" };
+      const c = colors[st] || "#aaa";
+      return { fontSize: "0.7rem", fontWeight: 700, padding: "2px 8px", borderRadius: 10,
+               background: c + "22", color: c };
+    },
+    btn: (disabled) => ({
+      display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
+      background: disabled ? "var(--border)" : "var(--primary)",
+      color: disabled ? "var(--subtext)" : "#fff",
+      border: "none", borderRadius: 8, padding: "8px 16px",
+      fontSize: "0.83rem", fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer",
+    }),
+    err: { fontSize: "0.78rem", color: "var(--danger,#ef4444)", fontWeight: 600, marginTop: 6 },
+    ok:  { fontSize: "0.78rem", color: "#16a34a",               fontWeight: 600, marginTop: 6 },
+  };
+
+  return (
+    <div style={s.wrap}>
+      <div style={s.title}><IcoUsers size={13} /> Assign Contractor</div>
+
+      <div style={s.current}>
+        <span style={{ fontSize: "0.82rem", color: "var(--subtext)" }}>Current:</span>
+        {project
+          ? <>
+              <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}>
+                {assignedName || "No contractor yet"}
+              </span>
+              {projStatus && (
+                <span style={s.statBadge(projStatus)}>
+                  {ASSIGN_STATUS_LABELS[projStatus] ?? projStatus}
+                </span>
+              )}
+            </>
+          : <span style={{ fontSize: "0.85rem", color: "var(--subtext)", fontStyle: "italic" }}>
+              Unassigned — no project created yet
+            </span>
+        }
+      </div>
+
+      {loading
+        ? <p style={{ fontSize: "0.85rem", color: "var(--subtext)" }}>Loading contractors…</p>
+        : (
+          <div style={s.row}>
+            <select
+              style={s.select}
+              value={selectedId ?? ""}
+              onChange={e => setSelectedId(Number(e.target.value) || null)}
+            >
+              <option value="">Select a contractor…</option>
+              {contractors.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.full_name || c.email}
+                  {" · "}{c.active_project_count} active
+                  {" · "}{c.is_available ? "✓ Available" : "✗ Busy"}
+                </option>
+              ))}
+            </select>
+            <button
+              style={s.btn(!selectedId || assigning)}
+              disabled={!selectedId || assigning}
+              onClick={handleAssign}
+            >
+              {assigning ? "Assigning…" : project?.contractor_id ? "Reassign" : "Assign"}
+            </button>
+          </div>
+        )
+      }
+      {error   && <div style={s.err}>{error}</div>}
+      {success && <div style={s.ok}>✓ {success}</div>}
+    </div>
+  );
+}
+
 // REFACTORED ACTION BUTTONS — Removed Assign button
 // New flow: pending → Verify → verified → Start → in_progress → Complete → resolved
 // ═══════════════════════════════════════════════════════════════════════════
@@ -363,12 +512,12 @@ function AdminManageReports() {
   const [selected, setSelected] = useState(new Set());
 
   const [viewReport,     setViewReport]     = useState(null);
+  const [viewOpenAssign, setViewOpenAssign] = useState(false);
   const [completeReport, setCompleteReport] = useState(null);
-  // ═════════════════════════════════════════════════════════════════
-  // COMMENTED OUT: Assign modal state — moved to next version
-  // const [assignReport,   setAssignReport]   = useState(null);
-  // ═════════════════════════════════════════════════════════════════
   const [cancelReport,   setCancelReport]   = useState(null);
+
+  // Project map: report_id → project (for Assigned To column + ViewModal)
+  const [projectByReportId, setProjectByReportId] = useState({});
   const [bulkMode,       setBulkMode]       = useState(null);
   const [bulkConfirm,    setBulkConfirm]    = useState(null); // { status, label, verb, danger }
 
@@ -425,8 +574,17 @@ function AdminManageReports() {
   // ═════════════════════════════════════════════════════════════════
   // REFACTORED STATUS HANDLERS — No more assign handler
   // ═════════════════════════════════════════════════════════════════
-  const handleVerify  = useCallback((id) => patchStatus(id, REPORT_STATUS.VERIFIED),    [patchStatus]);
-  const handleStart   = useCallback((id) => patchStatus(id, REPORT_STATUS.IN_PROGRESS), [patchStatus]);
+  const handleVerify  = useCallback((id) => patchStatus(id, REPORT_STATUS.VERIFIED), [patchStatus]);
+  // "Start" no longer patches status — it opens ViewModal with the assignment section revealed.
+  // The IN_PROGRESS transition now only happens via the contractor-accept endpoint.
+  const handleStart = useCallback((id) => {
+    setViewReport(prev => {
+      // If the modal is already open for this report, just reveal the assign section.
+      if (prev?.id === id) return prev;
+      return reports.find(r => r.id === id) ?? null;
+    });
+    setViewOpenAssign(true);
+  }, [reports]);
 
   // ═════════════════════════════════════════════════════════════════
   // COMMENTED OUT: handleAssign — moved to next version
@@ -469,6 +627,23 @@ function AdminManageReports() {
     });
   }, [patchStatus]);
 
+  // fetchProjects — builds a report_id → project map for assignment display.
+  const fetchProjects = useCallback(async () => {
+    const res = await getProjects();
+    if (res.success && Array.isArray(res.data)) {
+      const map = {};
+      res.data.forEach(p => { if (p.report_id) map[p.report_id] = p; });
+      setProjectByReportId(map);
+    }
+  }, []);
+
+  // handleAssigned — called by AssignContractorSection when assignment succeeds.
+  const handleAssigned = useCallback((project) => {
+    if (project?.report_id) {
+      setProjectByReportId(prev => ({ ...prev, [project.report_id]: project }));
+    }
+  }, []);
+
   // fetchPage — always uses the current server-side filter state via closure.
   // Call with a page number; server filters (status/damage_type/severity) are
   // applied here so the backend returns only matching rows before pagination.
@@ -502,9 +677,8 @@ function AdminManageReports() {
     reverseGeocodeAll(raw).then(geocoded => setReports(geocoded));
   }, [filterStatus, filterType, filterSeverity]); // re-created when server filters change
 
-  // Re-fetch from page 1 whenever the server-side filter callback changes
-  // (i.e. whenever filterStatus / filterType / filterSeverity change).
-  useEffect(() => { fetchPage(1); }, [fetchPage]);
+  // Re-fetch from page 1 whenever the server-side filter callback changes.
+  useEffect(() => { fetchPage(1); fetchProjects(); }, [fetchPage, fetchProjects]);
 
   // Auto-refresh: tick down and refresh the *current* page with current filters.
   useEffect(() => {
@@ -721,10 +895,7 @@ function AdminManageReports() {
               <col className="col-severity" />
               <col className="col-priority" />
               <col className="col-status" />
-              {/* ═══════════════════════════════════════════════════════
-                  COMMENTED OUT: Assigned To column — moved to next version
-              ═══════════════════════════════════════════════════════ */}
-              {/* <col className="col-assigned" /> */}
+              <col className="col-assigned" />
               <col className="col-actions" />
             </colgroup>
             <thead>
@@ -738,10 +909,7 @@ function AdminManageReports() {
                   ["severity",  "Severity",    true ],
                   ["priority",  "Priority",    true ],
                   ["status",    "Status",      true ],
-                  // ═══════════════════════════════════════════════════
-                  // COMMENTED OUT: Assigned To header — moved to next version
-                  // [null,        "Assigned To", false],
-                  // ═══════════════════════════════════════════════════
+                  [null,        "Assigned To", false],
                   [null,        "Actions",     false],
                 ].map(([col, label, sortable], i) => (
                   <th
@@ -760,9 +928,9 @@ function AdminManageReports() {
 
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="no-data">Loading reports…</td></tr>
+                <tr><td colSpan={10} className="no-data">Loading reports…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={9} className="no-data">No reports found</td></tr>
+                <tr><td colSpan={10} className="no-data">No reports found</td></tr>
               ) : filtered.map(r => {
                 const st       = r.status?.toLowerCase();
                 const pri      = getPriority(r);
@@ -820,23 +988,25 @@ function AdminManageReports() {
                     <td className="col-priority"><Badge text={pri}          className={`pri-badge pri-${pri}`} /></td>
                     <td className="col-status"><Badge text={STATUS_LABELS[st] ?? st} className={`status-badge st-${st}`} /></td>
 
-                    {/* ═══════════════════════════════════════════════
-                        COMMENTED OUT: Assigned To cell — moved to next version
-                    ═══════════════════════════════════════════════ */}
-                    {/*
                     <td className="col-assigned" onClick={e => e.stopPropagation()}>
-                      {r.assigned_to ? (
-                        <div className="assigned-cell-wrapper">
-                          <div className="worker-avatar assigned-avatar-sm">
-                            {initials(r.assigned_to)}
+                      {(() => {
+                        const proj = projectByReportId[r.id];
+                        if (!proj) return <span className="unassigned">— Unassigned</span>;
+                        const pst  = proj.status?.toLowerCase();
+                        const name = proj.contractor?.full_name
+                                  ?? proj.contractor?.email
+                                  ?? "—";
+                        return (
+                          <div className="assigned-cell-wrapper">
+                            <span className="assigned-name" style={{ fontSize: "0.78rem" }}>{name}</span>
+                            <Badge
+                              text={ASSIGN_STATUS_LABELS[pst] ?? pst}
+                              className={`status-badge st-${pst}`}
+                            />
                           </div>
-                          <span className="assigned-name">{r.assigned_to}</span>
-                        </div>
-                      ) : (
-                        <span className="unassigned">— Unassigned</span>
-                      )}
+                        );
+                      })()}
                     </td>
-                    */}
 
                     <td className="col-actions" onClick={e => e.stopPropagation()}>
                       <ActionButtons
@@ -902,15 +1072,13 @@ function AdminManageReports() {
       {viewReport && !completeReport && !cancelReport && createPortal(
         <ViewModal
           report={viewReport}
-          onClose={() => setViewReport(null)}
-          onMarkComplete={r => { setCompleteReport(r); setViewReport(null); }}
-          // ═════════════════════════════════════════════════════════════
-          // COMMENTED OUT: onAssign — moved to next version
-          // onAssign={r       => { setAssignReport(r);   setViewReport(null); }}
-          // ═════════════════════════════════════════════════════════════
-          onCancel={r       => { setCancelReport(r);   setViewReport(null); }}
+          project={projectByReportId[viewReport.id] ?? null}
+          openAssign={viewOpenAssign}
+          onClose={() => { setViewReport(null); setViewOpenAssign(false); }}
+          onMarkComplete={r => { setCompleteReport(r); setViewReport(null); setViewOpenAssign(false); }}
+          onCancel={r       => { setCancelReport(r);   setViewReport(null); setViewOpenAssign(false); }}
           onVerify={id      => { handleVerify(id); setViewReport(p => p ? { ...p, status: REPORT_STATUS.VERIFIED } : null); }}
-          onStart={id       => { handleStart(id); setViewReport(p => p ? { ...p, status: REPORT_STATUS.IN_PROGRESS } : null); }}
+          onAssigned={handleAssigned}
         />,
         document.body
       )}
@@ -1146,14 +1314,22 @@ function CommentSection({ reportId }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// REFACTORED ViewModal — Removed Assign button, added Start button
-// New flow: Verify → Start → Complete
+// REFACTORED ViewModal — added Assign Contractor section
 // ═══════════════════════════════════════════════════════════════════════════
-function ViewModal({ report: r, onClose, onMarkComplete, onCancel, onVerify, onStart }) {
+function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComplete, onCancel, onVerify, onAssigned }) {
   const st    = r.status?.toLowerCase();
   const media = mediaFull(r);
   const pri   = getPriority(r);
   const sev   = severity(r).toLowerCase();
+
+  // Assignment section reveal — toggled by the "Start" button or openAssign prop.
+  const [showAssign, setShowAssign] = useState(openAssign);
+  const assignRef = useRef(null);
+  useEffect(() => {
+    if (showAssign && assignRef.current) {
+      assignRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [showAssign]);
 
   return (
     <ModalShell onClose={onClose}>
@@ -1207,8 +1383,8 @@ function ViewModal({ report: r, onClose, onMarkComplete, onCancel, onVerify, onS
               </button>
             )}
             {st === REPORT_STATUS.VERIFIED    && (
-              <button className="action-btn wide ab-start" onClick={() => onStart(r.id)}>
-                <IcoWrench size={14} /> Start Repair
+              <button className="action-btn wide ab-start" onClick={() => setShowAssign(true)}>
+                <IcoWrench size={14} /> Start
               </button>
             )}
             {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) && (
@@ -1240,6 +1416,33 @@ function ViewModal({ report: r, onClose, onMarkComplete, onCancel, onVerify, onS
           </div>
         </div>
       </div>
+      {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) ? (
+        <div
+          ref={assignRef}
+          style={showAssign ? {
+            outline: "2px solid #3b82f6",
+            borderRadius: 8,
+            transition: "outline 0.2s",
+          } : {}}
+        >
+          <AssignContractorSection
+            report={r}
+            initialProject={project}
+            onAssigned={onAssigned}
+          />
+        </div>
+      ) : st === REPORT_STATUS.PENDING ? (
+        <div style={{
+          borderTop: "1px solid var(--border)", marginTop: 20,
+          padding: "12px 14px", background: "var(--bg)", borderRadius: 8,
+          border: "1px dashed var(--border)", display: "flex",
+          alignItems: "center", gap: 8,
+          color: "var(--subtext)", fontSize: "0.84rem",
+        }}>
+          <IcoShield size={14} />
+          Verify this report first before assigning a contractor.
+        </div>
+      ) : null}
       <CommentSection reportId={r.id} />
     </ModalShell>
   );

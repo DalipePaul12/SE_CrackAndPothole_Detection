@@ -126,19 +126,6 @@ export default function AdminManageRequests() {
     setMessageDialog(null);
   };
 
-  const handleAssign = async (reportId, assignee) => {
-    const res = await updateReport(reportId, { assigned_to: assignee });
-    if (res.success) {
-      setReports(prev => prev.map(r => r.id === reportId ? { ...r, assigned_to: assignee } : r));
-      if (selectedReport?.id === reportId) {
-        setSelected(prev => ({ ...prev, assigned_to: assignee }));
-      }
-      showToast(`Assigned to ${assignee}`);
-    } else {
-      showToast("Failed to assign.", "error");
-    }
-  };
-
   return (
     <>
       {toast && (
@@ -311,7 +298,6 @@ export default function AdminManageRequests() {
             setDeclineDialog({ id: r.id, name: `Report#${String(r.id).padStart(3, "0")}` });
           }}
           onMessage={(r) => { setSelected(null); setMessageDialog(r); }}
-          onAssign={handleAssign}
           actionLoading={
             actionLoading.has(selectedReport?.id + "-confirm") ||
             actionLoading.has(selectedReport?.id + "-decline")
@@ -351,9 +337,8 @@ export default function AdminManageRequests() {
   );
 }
 
-function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessage, onAssign, actionLoading }) {
+function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessage, actionLoading }) {
   const [activeTab, setActiveTab] = useState("details");
-  const [assignee, setAssignee] = useState(r.assigned_to || "");
 
   const loc     = r.location_address ?? r.barangay ?? "—";
   const dtype   = r.ai_damage_type   ?? r.damage_type ?? "—";
@@ -372,11 +357,6 @@ function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessag
     { id: "notes",   label: "Notes",   icon: MessageSquare },
     { id: "actions", label: "Actions", icon: Shield, badge: 2 },
     { id: "updates", label: "Updates", icon: Activity },
-  ];
-
-  const workers = [
-    "Juan dela Cruz", "Maria Santos", "Pedro Reyes",
-    "Ana Garcia", "Marco Villanueva", "Liza Mendoza"
   ];
 
   return (
@@ -490,35 +470,6 @@ function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessag
                     <span className="amr-info-label">Updated</span>
                     <span className="amr-info-value">{r.updated_at ? dateStr({ created_at: r.updated_at }) : dateStr(r)}</span>
                   </div>
-                </div>
-              </div>
-
-              <div className="amr-info-card amr-full-width">
-                <div className="amr-card-header">
-                  <Shield size={16} />
-                  <span>ASSIGNMENT</span>
-                </div>
-                <div className="amr-card-body amr-assign-body">
-                  <div className="amr-assign-select-wrap">
-                    <select
-                      className="amr-assign-select"
-                      value={assignee}
-                      onChange={(e) => setAssignee(e.target.value)}
-                    >
-                      <option value="">Unassigned</option>
-                      {workers.map((w) => (
-                        <option key={w} value={w}>{w}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="amr-select-icon" />
-                  </div>
-                  <button
-                    className="amr-assign-btn"
-                    onClick={() => assignee && onAssign(r.id, assignee)}
-                    disabled={!assignee || actionLoading}
-                  >
-                    Assign
-                  </button>
                 </div>
               </div>
 

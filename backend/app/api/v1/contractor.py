@@ -142,6 +142,14 @@ async def accept_project(
     old_status = project.status
     project.status = ProjectStatus.IN_PROGRESS
 
+    # ── Cascade linked report to IN_PROGRESS ──────────────────────────────────
+    report_result = await db.execute(
+        select(Report).where(Report.id == project.report_id)
+    )
+    report = report_result.scalar_one_or_none()
+    if report:
+        report.status = ReportStatus.IN_PROGRESS
+
     log = ProjectUpdateLog(
         project_id=project.id,
         changed_by_id=current_user.id,
@@ -242,6 +250,12 @@ async def complete_project(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This project cannot be completed in its current status.",
+        )
+
+    if not notes or not notes.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Completion notes are required.",
         )
 
     if not photos:

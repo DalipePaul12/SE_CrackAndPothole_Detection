@@ -13,7 +13,10 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import redis.asyncio as aioredis
+try:
+    import redis.asyncio as aioredis
+except ImportError:
+    aioredis = None  # type: ignore[assignment]
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,9 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rate_limiter import limiter
+from app.models.project import Project
 from app.models.report import Report
 from app.models.user import User
-from app.models.enums import DamageType, ReportStatus, SeverityLevel, UserRole
+from app.models.enums import DamageType, ProjectStatus, ReportStatus, SeverityLevel, UserRole
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -33,12 +37,14 @@ _CACHE_TTL = 60          # seconds
 _CACHE_PREFIX = "analytics:"
 
 # Module-level Redis client — lazily connected on first use.
-_redis_client: aioredis.Redis | None = None
+_redis_client = None
 
 
-def _get_redis() -> aioredis.Redis | None:
-    """Return a shared Redis client, or None if REDIS_URL is unset."""
+def _get_redis():
+    """Return a shared Redis client, or None if Redis is unavailable."""
     global _redis_client
+    if aioredis is None:
+        return None
     if _redis_client is None:
         url = os.getenv("REDIS_URL")
         if url:
@@ -499,4 +505,71 @@ async def get_priority_flags(
         critical_by_barangay=critical_by_barangay,
     )
     await _cache_set("priority_flags", data)
+    return _ok(data)
+
+
+# ── /contractor-performance ─────────────────────────────────────────────────
+@router.get("/contractor-performance")
+@limiter.limit("30/minute")
+async def get_contractor_performance(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_require_staff),
+):
+    """Return per-contractor stats: active projects, completed count, avg resolution days."""
+    if (c := await _cache_get("contractor_performance")) is not None:
+        return _ok(c)
+
+    active_sq = (
+        select(func.count(Project.id))
+        .where(Project.contractor_id == User.id)
+        .where(Project.status.notin_([ProjectStatus.COMPLETED, ProjectStatus.CANCELLED]))
+        .correlate(User)
+        .scalar_subquery()
+    )
+    completed_sq = (
+        select(func.count(Project.id))
+        .where(Project.contractor_id == User.id)
+        .where(Project.status == ProjectStatus.COMPLETED)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    avg_days_sq = (
+        select(
+            func.avg(
+                func.extract("epoch", Project.actual_completion_date - Project.start_date) / 86400.0
+            )
+        )
+        .where(Project.contractor_id == User.id)
+        .where(Project.status == ProjectStatus.COMPLETED)
+        .where(Project.actual_completion_date.isnot(None))
+        .where(Project.start_date.isnot(None))
+        .correlate(User)
+        .scalar_subquery()
+    )
+
+    rows = (await db.execute(
+        select(
+            User,
+            active_sq.label("active_projects"),
+            completed_sq.label("completed_projects"),
+            avg_days_sq.label("avg_resolution_days"),
+        )
+        .where(User.role == UserRole.contractor)
+        .order_by(completed_sq.desc(), User.full_name)
+    )).all()
+
+    data = [
+        {
+            "contractor_id": user.id,
+            "full_name": user.full_name or user.email,
+            "email": user.email,
+            "active_projects": active or 0,
+            "completed_projects": completed or 0,
+            "avg_resolution_days": round(float(avg_days), 1) if avg_days else None,
+        }
+        for user, active, completed, avg_days in rows
+    ]
+
+    await _cache_set("contractor_performance", data)
     return _ok(data)
