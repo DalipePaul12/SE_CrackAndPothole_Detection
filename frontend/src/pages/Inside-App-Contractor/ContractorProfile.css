@@ -1,0 +1,459 @@
+/* ============================================================
+   CONTRACTOR PROFILE PAGE  —  ContractorProfile.css
+   All class names are prefixed .cp- to avoid collisions.
+   Uses the same CSS variables as the rest of the app.
+   ============================================================ */
+
+.cp-page {
+  padding: 0 2rem 3rem;
+  background: var(--bg);
+  min-height: calc(100vh - 80px);
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── Transient toast ────────────────────────────────────────── */
+
+.cp-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  animation: cp-toast-in 0.25s ease;
+  pointer-events: none;
+}
+
+@keyframes cp-toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.cp-toast-success {
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success);
+}
+
+.cp-toast-warning {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border, #ca8a04);
+  color: var(--warning);
+}
+
+/* ── Skeleton loading ───────────────────────────────────────── */
+
+.cp-skeleton-block {
+  height: 140px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--card) 25%, var(--bg-secondary) 50%, var(--card) 75%);
+  background-size: 200% 100%;
+  animation: cp-shimmer 1.2s infinite;
+}
+
+.cp-skeleton-block.short { height: 80px; }
+
+@keyframes cp-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Error state ────────────────────────────────────────────── */
+
+.cp-error-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  color: var(--danger);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.cp-retry-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--danger-border);
+  background: transparent;
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.cp-retry-btn:hover { background: rgba(239,68,68,0.1); }
+
+/* ── Hero card ──────────────────────────────────────────────── */
+
+.cp-hero-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+}
+
+/* Avatar */
+.cp-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 3px solid var(--primary-subtle2);
+}
+
+.cp-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cp-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  background: var(--primary-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+/* Hero text */
+.cp-hero-info {
+  flex: 1;
+  min-width: 160px;
+}
+
+.cp-name {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 6px;
+  line-height: 1.2;
+}
+
+.cp-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--primary-subtle);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.cp-member-since {
+  font-size: 0.78rem;
+  color: var(--subtext);
+  margin: 0;
+}
+
+/* Availability block — lives in the hero card, right-aligned */
+.cp-availability-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.cp-avail-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cp-avail-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cp-avail-chip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.avail-on {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success-border);
+}
+
+.avail-off {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning-border, #ca8a04);
+}
+
+.cp-avail-hint {
+  font-size: 0.73rem;
+  color: var(--subtext);
+  text-align: right;
+  max-width: 200px;
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* Toggle button */
+.cp-toggle-btn {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-med);
+  outline: none;
+  background: var(--border-strong);
+  flex-shrink: 0;
+}
+
+.cp-toggle-btn.on  { background: var(--primary); }
+.cp-toggle-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.cp-toggle-btn:focus-visible {
+  box-shadow: 0 0 0 3px var(--primary-subtle2);
+}
+
+.cp-toggle-knob {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--transition-med);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+
+.cp-toggle-btn.on .cp-toggle-knob { transform: translateX(22px); }
+
+/* ── Stats strip ────────────────────────────────────────────── */
+
+.cp-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.cp-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.cp-stat-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cp-stat-primary .cp-stat-icon { background: var(--primary-subtle); color: var(--primary); }
+.cp-stat-warning .cp-stat-icon { background: var(--warning-bg);     color: var(--warning); }
+.cp-stat-success .cp-stat-icon { background: var(--success-bg);     color: var(--success); }
+
+.cp-stat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cp-stat-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+
+.cp-stat-label {
+  font-size: 0.72rem;
+  color: var(--subtext);
+  font-weight: 500;
+}
+
+/* ── Section cards ──────────────────────────────────────────── */
+
+.cp-section-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow-sm);
+}
+
+.cp-section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Info rows */
+.cp-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cp-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  font-size: 0.84rem;
+}
+
+.cp-info-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.cp-info-label {
+  color: var(--subtext);
+  font-weight: 600;
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.cp-info-value {
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Status chips */
+.cp-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cp-status-chip {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 7px;
+  text-transform: capitalize;
+}
+
+.chip-success {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success-border);
+}
+
+.chip-warning {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning-border, #ca8a04);
+}
+
+.chip-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+}
+
+.cp-status-note {
+  font-size: 0.78rem;
+  color: var(--subtext);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .cp-page { padding: 0 1.25rem 3rem; }
+}
+
+@media (max-width: 768px) {
+  .cp-page { padding: 0 0.75rem 2.5rem; }
+
+  .cp-hero-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .cp-availability-block {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .cp-avail-hint { text-align: left; }
+
+  .cp-stats-strip {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .cp-info-label { min-width: 90px; }
+}
+
+@media (max-width: 480px) {
+  .cp-page { padding: 0 0.5rem 2rem; }
+
+  .cp-name { font-size: 1.15rem; }
+
+  .cp-stat-card { padding: 12px 14px; }
+
+  .cp-section-card { padding: 16px; }
+
+  .cp-toast {
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    text-align: center;
+  }
+}

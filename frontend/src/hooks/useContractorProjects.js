@@ -1,18 +1,18 @@
 // src/hooks/useContractorProjects.js
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getAssignedProjects, acceptProject, declineProject } from "../api/contractor";
+import { getAssignedProjects, acceptProject, declineProject, completeProject } from "../api/contractor";
 import { tokenStorage } from "../api/client";
 
 /**
- * Fetches contractor-assigned projects and exposes accept / decline mutations.
+ * Fetches contractor-assigned projects and exposes accept / decline / complete mutations.
  *
  * @param {Object}  options
  * @param {string=} options.statusFilter  Optional status_filter sent to the API.
  */
 export function useContractorProjects({ statusFilter } = {}) {
-  const [projects,     setProjects]     = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState(null);
+  const [projects,      setProjects]      = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError,   setActionError]   = useState(null);
 
@@ -90,6 +90,20 @@ export function useContractorProjects({ statusFilter } = {}) {
     return true;
   }, [fetchProjects]);
 
+  // ── complete ───────────────────────────────────────────────────────────────
+  const complete = useCallback(async (projectId, formData) => {
+    setActionLoading(true);
+    setActionError(null);
+    const res = await completeProject(projectId, formData);
+    setActionLoading(false);
+    if (!res.success) {
+      setActionError(res.error || "Failed to complete project.");
+      return { success: false, error: res.error || "Failed to complete project." };
+    }
+    await fetchProjects();
+    return { success: true };
+  }, [fetchProjects]);
+
   const clearActionError = useCallback(() => setActionError(null), []);
 
   return {
@@ -99,6 +113,7 @@ export function useContractorProjects({ statusFilter } = {}) {
     refetch,
     accept,
     decline,
+    complete,
     actionLoading,
     actionError,
     clearActionError,

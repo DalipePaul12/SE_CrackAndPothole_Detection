@@ -6,6 +6,7 @@ import {
   updateReport,
   uploadReportMedia,
   addComment,
+  getComments,
 } from "../../api/reports";
 import "./AdminManageReports.css";
 import { REPORT_STATUS } from "../../constants/reportStatus";
@@ -992,6 +993,159 @@ function InfoRow({ label, children }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// COMMENT SECTION — used inside ViewModal
+// ═══════════════════════════════════════════════════════════════════════════
+function CommentSection({ reportId }) {
+  const [comments,  setComments]  = React.useState([]);
+  const [cLoading,  setCLoading]  = React.useState(true);
+  const [cText,     setCText]     = React.useState("");
+  const [cSending,  setCSending]  = React.useState(false);
+  const [cErr,      setCErr]      = React.useState(null);
+  const [cSent,     setCSent]     = React.useState(false);
+  const endRef = React.useRef(null);
+
+  const loadComments = React.useCallback(async () => {
+    setCLoading(true);
+    const res = await getComments(reportId);
+    setCLoading(false);
+    if (res.success) setComments(Array.isArray(res.data) ? res.data : []);
+  }, [reportId]);
+
+  React.useEffect(() => { loadComments(); }, [loadComments]);
+
+  const handleSend = async () => {
+    const trimmed = cText.trim();
+    if (!trimmed) return;
+    setCSending(true); setCErr(null);
+    const res = await addComment(reportId, trimmed);
+    setCSending(false);
+    if (!res.success) { setCErr(res.error || "Failed to send."); return; }
+    setCText(""); setCSent(true);
+    setTimeout(() => setCSent(false), 3000);
+    await loadComments();
+    setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+  };
+
+  const initials = (name = "") =>
+    (name || "?").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+
+  const fmtMini = (iso) =>
+    iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "";
+
+  const roleColor = (role) => {
+    if (role === "admin" || role === "superadmin") return "#4338ca";
+    if (role === "contractor") return "#0d9488";
+    return "#6b7280";
+  };
+
+  const s = {
+    wrap:  { borderTop: "1px solid var(--border)", marginTop: 20, paddingTop: 16 },
+    title: { display:"flex", alignItems:"center", gap:7, fontSize:"0.83rem", fontWeight:700,
+              textTransform:"uppercase", letterSpacing:"0.05em", color:"var(--subtext)", marginBottom:12 },
+    list:  { display:"flex", flexDirection:"column", gap:10,
+              maxHeight:260, overflowY:"auto", marginBottom:14, paddingRight:4 },
+    row:   { display:"flex", gap:9, alignItems:"flex-start" },
+    ava:   (role) => ({ width:30, height:30, borderRadius:"50%", flexShrink:0,
+              background: role==="admin"||role==="superadmin" ? "rgba(99,102,241,0.14)" : "rgba(13,148,136,0.14)",
+              color: roleColor(role), display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:"0.68rem", fontWeight:700 }),
+    body:  { display:"flex", flexDirection:"column", gap:3 },
+    meta:  { display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" },
+    name:  { fontSize:"0.78rem", fontWeight:700, color:"var(--text)" },
+    role:  (role) => ({ fontSize:"0.68rem", fontWeight:600, padding:"1px 6px", borderRadius:10,
+              background: roleColor(role)+"22", color: roleColor(role) }),
+    time:  { fontSize:"0.7rem", color:"var(--subtext)" },
+    bubble:{ fontSize:"0.86rem", color:"var(--text)", background:"var(--bg)",
+              border:"1px solid var(--border)", borderRadius:10, padding:"7px 11px", margin:0,
+              lineHeight:1.5 },
+    del:   { fontSize:"0.8rem", color:"var(--subtext)", fontStyle:"italic", margin:0 },
+    empty: { textAlign:"center", color:"var(--subtext)", fontSize:"0.86rem", padding:"10px 0" },
+    ta:    { width:"100%", boxSizing:"border-box", background:"var(--input-bg,var(--card))",
+              border:"1px solid var(--input-border,var(--border))", borderRadius:8,
+              padding:"9px 12px", fontSize:"0.88rem", color:"var(--text)", resize:"none",
+              fontFamily:"inherit", outline:"none" },
+    foot:  { display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:6 },
+    char:  { fontSize:"0.75rem", color:"var(--subtext)" },
+    right: { display:"flex", alignItems:"center", gap:8 },
+    err:   { fontSize:"0.78rem", color:"var(--danger,#ef4444)", fontWeight:600 },
+    ok:    { fontSize:"0.78rem", color:"#16a34a", fontWeight:600 },
+    send:  { display:"inline-flex", alignItems:"center", gap:5, background:"var(--primary)",
+              color:"#fff", border:"none", borderRadius:8, padding:"7px 14px",
+              fontSize:"0.82rem", fontWeight:700, cursor:"pointer", opacity:1 },
+  };
+
+  const roleLabel = (role) => {
+    if (role === "admin" || role === "superadmin") return "Admin";
+    if (role === "contractor") return "Contractor";
+    return "Citizen";
+  };
+
+  return (
+    <div style={s.wrap}>
+      <div style={s.title}>
+        <IcoUsers size={13} /> Discussion Thread
+        {comments.length > 0 && (
+          <span style={{ background:"var(--primary)", color:"#fff", borderRadius:20,
+            fontSize:"0.68rem", fontWeight:700, padding:"1px 7px" }}>
+            {comments.length}
+          </span>
+        )}
+      </div>
+
+      {cLoading ? (
+        <p style={s.empty}>Loading…</p>
+      ) : comments.length === 0 ? (
+        <p style={s.empty}>No messages yet.</p>
+      ) : (
+        <div style={s.list}>
+          {comments.map((c) => (
+            <div key={c.id} style={s.row}>
+              <div style={s.ava(c.user?.role)}>{initials(c.user?.full_name)}</div>
+              <div style={s.body}>
+                <div style={s.meta}>
+                  <span style={s.name}>{c.user?.full_name ?? "Unknown"}</span>
+                  <span style={s.role(c.user?.role)}>{roleLabel(c.user?.role)}</span>
+                  <span style={s.time}>{fmtMini(c.created_at)}</span>
+                </div>
+                {c.is_deleted
+                  ? <p style={s.del}>[Message removed]</p>
+                  : <p style={s.bubble}>{c.content}</p>}
+              </div>
+            </div>
+          ))}
+          <div ref={endRef} />
+        </div>
+      )}
+
+      <textarea
+        style={s.ta}
+        rows={3}
+        maxLength={1000}
+        placeholder="Add a note or reply to this report thread…"
+        value={cText}
+        onChange={(e) => setCText(e.target.value)}
+        disabled={cSending}
+      />
+      <div style={s.foot}>
+        <span style={s.char}>{cText.length}/1000</span>
+        <div style={s.right}>
+          {cErr  && <span style={s.err}>{cErr}</span>}
+          {cSent && <span style={s.ok}>✓ Sent!</span>}
+          <button
+            style={{ ...s.send, opacity: (cSending || !cText.trim()) ? 0.45 : 1,
+              cursor: (cSending || !cText.trim()) ? "not-allowed" : "pointer" }}
+            onClick={handleSend}
+            disabled={cSending || !cText.trim()}
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // REFACTORED ViewModal — Removed Assign button, added Start button
 // New flow: Verify → Start → Complete
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1086,6 +1240,7 @@ function ViewModal({ report: r, onClose, onMarkComplete, onCancel, onVerify, onS
           </div>
         </div>
       </div>
+      <CommentSection reportId={r.id} />
     </ModalShell>
   );
 }

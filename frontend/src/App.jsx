@@ -33,6 +33,9 @@ import Settings      from "./pages/Inside-App-User/Settings.jsx";
 import ContractorDashboard         from "./pages/Inside-App-Contractor/ContractorDashboard.jsx";
 import ContractorAssignedProjects  from "./pages/Inside-App-Contractor/ContractorAssignedProjects.jsx";
 import ContractorCompletedProjects from "./pages/Inside-App-Contractor/ContractorCompletedProjects.jsx";
+import ContractorProjectDetail     from "./pages/Inside-App-Contractor/ContractorProjectDetail.jsx";
+import ContractorNotifications     from "./pages/Inside-App-Contractor/ContractorNotifications.jsx";
+import ContractorProfile           from "./pages/Inside-App-Contractor/ContractorProfile.jsx";
 
 // Inside App — Admin
 import AdminPanel          from "./pages/Inside-App-Admin/AdminPanel.jsx";
@@ -154,9 +157,12 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
 
           {/* ── Contractor panel WITH sidebar layout ───────────────────── */}
           <Route element={<ContractorLayoutGuard />}>
-            <Route path="/contractorpanel/dashboard" element={<ContractorDashboard />} />
-            <Route path="/contractorpanel/projects"  element={<ContractorAssignedProjects />} />
-            <Route path="/contractorpanel/completed" element={<ContractorCompletedProjects />} />
+            <Route path="/contractorpanel/dashboard"           element={<ContractorDashboard />} />
+            <Route path="/contractorpanel/projects"            element={<ContractorAssignedProjects />} />
+            <Route path="/contractorpanel/projects/:projectId" element={<ContractorProjectDetail />} />
+            <Route path="/contractorpanel/completed"           element={<ContractorCompletedProjects />} />
+            <Route path="/contractorpanel/notifications"       element={<ContractorNotifications />} />
+            <Route path="/contractorpanel/profile"             element={<ContractorProfile />} />
           </Route>
 
           {/* ── Fallback — must stay last so it never shadows the routes

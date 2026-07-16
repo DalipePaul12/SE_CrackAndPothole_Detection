@@ -53,6 +53,31 @@
   flex-wrap: wrap;
 }
 
+/* ── View Details button (IN_PROGRESS cards) ──────────────────────────────── */
+.cap-card-actions--inprogress {
+  justify-content: space-between;
+  align-items: center;
+}
+.cap-btn-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 13px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--transition-fast, 0.15s), color var(--transition-fast, 0.15s);
+  text-decoration: none;
+}
+.cap-btn-detail:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .cap-filter-tab {
   background: var(--card);
   border: 1px solid var(--border);

@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import {
   ClipboardList, RefreshCw, AlertCircle, AlertTriangle,
-  CheckCircle2, Wrench, MapPin, Calendar, X,
+  CheckCircle2, Wrench, MapPin, Calendar, X, ArrowRight,
 } from "lucide-react";
 import SeverityBadge from "../../components/SeverityBadge.jsx";
 import { useContractorProjects } from "../../hooks/useContractorProjects.js";
@@ -94,6 +95,7 @@ function DeclineModal({ project, onConfirm, onCancel, loading, error }) {
 function ProjectCard({ project, onAccept, onDecline, actionLoading, actionError }) {
   const [showDecline, setShowDecline] = useState(false);
   const [localError,  setLocalError]  = useState(null);
+  const navigate = useNavigate();
   const report  = getReport(project);
   const status  = project.status?.toUpperCase();
   const isPending = status === "SCHEDULED";
@@ -190,11 +192,19 @@ function ProjectCard({ project, onAccept, onDecline, actionLoading, actionError 
         )}
 
         {status === "IN_PROGRESS" && (
-          <div className="cap-card-actions">
+          <div className="cap-card-actions cap-card-actions--inprogress">
             <span className="cap-in-progress-label">
               <Wrench size={14} aria-hidden="true" />
               Work in progress
             </span>
+            <button
+              className="cap-btn cap-btn-detail"
+              onClick={() => navigate(`/contractorpanel/projects/${project.id}`, { state: { project } })}
+              aria-label={`View details for project ${project.id}`}
+            >
+              View Details
+              <ArrowRight size={14} aria-hidden="true" />
+            </button>
           </div>
         )}
       </div>
