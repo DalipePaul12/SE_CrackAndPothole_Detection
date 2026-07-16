@@ -36,6 +36,21 @@ async def create_report(
     """
     Persist a new report with all AI-generated and user-provided fields.
     """
+    # Apply admin default_severity when ML hasn't assigned one.
+    # Falls back to None (original behaviour) if admin settings are unavailable.
+    effective_severity = data.ai_severity
+    if effective_severity is None:
+        from sqlalchemy import select as _sel
+        from app.models.admin_settings import AdminSettings as _AS
+        _cfg = (
+            await db.execute(_sel(_AS).where(_AS.id == 1))
+        ).scalar_one_or_none()
+        if _cfg and _cfg.default_severity:
+            try:
+                effective_severity = SeverityLevel(_cfg.default_severity)
+            except ValueError:
+                pass  # unrecognised enum value — leave as None
+
     report = Report(
         owner_id=owner_id,
         latitude=data.latitude,
@@ -48,7 +63,7 @@ async def create_report(
 
         # ── ML results ─────────────────────────────────────────────────────
         ai_damage_type=data.ai_damage_type,
-        ai_severity=data.ai_severity,
+        ai_severity=effective_severity,
         ai_confidence=data.ai_confidence,
 
         # ── Legacy fake detection ─────────────────────────────────────────

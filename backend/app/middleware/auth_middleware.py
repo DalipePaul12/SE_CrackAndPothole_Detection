@@ -135,3 +135,31 @@ async def require_contractor(
             detail="You do not have permission to perform this action.",
         )
     return current_user
+
+
+async def check_maintenance_mode(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """
+    Router-level dependency: admins and superadmins pass through unconditionally.
+    Everyone else receives HTTP 503 with the configured maintenance_message while
+    maintenance_mode is enabled in admin settings.
+
+    FastAPI caches get_current_user and get_db within a request, so there is no
+    extra DB round-trip beyond what the route already performs.
+    """
+    if current_user.role in (UserRole.admin, UserRole.superadmin):
+        return
+
+    from app.models.admin_settings import AdminSettings
+    result = await db.execute(select(AdminSettings).where(AdminSettings.id == 1))
+    cfg = result.scalar_one_or_none()
+    if cfg and cfg.maintenance_mode:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                cfg.maintenance_message
+                or "System is under maintenance. Please check back shortly."
+            ),
+        )

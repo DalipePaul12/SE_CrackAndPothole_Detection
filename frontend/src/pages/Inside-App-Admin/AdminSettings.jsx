@@ -10,12 +10,11 @@ import {
   RotateCcw,
   ShieldAlert,
   Download,
-  RefreshCw,
   AlertCircle,
   CheckCircle,
 } from "lucide-react";
 import "./AdminSettings.css";
-import { getSettings, updateSettings } from "../../api/settings";
+import { getSettings, updateSettings, resetReportStatuses, exportAuditLog } from "../../api/settings";
 
 // ── snake_case (API) ↔ camelCase (component state) ───────────────────────────
 
@@ -26,27 +25,21 @@ function fromApi(d) {
     timezone:                 d.timezone,
     contactEmail:             d.contact_email,
     defaultSeverity:          d.default_severity,
-    autoAssign:               d.auto_assign,
-    responseTimeHours:        d.response_time_hours,
-    escalateAfterHours:       d.escalate_after_hours,
     defaultLat:               d.default_lat,
     defaultLng:               d.default_lng,
     defaultZoom:              d.default_zoom,
-    mapProvider:              d.map_provider,
     emailAlerts:              d.email_alerts,
-    smsAlerts:                d.sms_alerts,
     pushAlerts:               d.push_alerts,
     digestFrequency:          d.digest_frequency,
     criticalAlertSound:       d.critical_alert_sound,
     require2FA:               d.require_2fa,
     passwordMinLength:        d.password_min_length,
     sessionTimeout:           d.session_timeout,
-    dataRetentionDays:        d.data_retention_days,
     allowPublicRegistration:  d.allow_public_registration,
     maintenanceMode:          d.maintenance_mode,
     maintenanceMessage:       d.maintenance_message,
     allowedAdminIPs:          d.allowed_admin_ips,
-    apiKey:                   d.api_key,
+    updatedAt:                d.updated_at ?? null,
   };
 }
 
@@ -57,27 +50,20 @@ function toApi(s) {
     timezone:                  s.timezone,
     contact_email:             s.contactEmail,
     default_severity:          s.defaultSeverity,
-    auto_assign:               s.autoAssign,
-    response_time_hours:       s.responseTimeHours,
-    escalate_after_hours:      s.escalateAfterHours,
     default_lat:               s.defaultLat,
     default_lng:               s.defaultLng,
     default_zoom:              s.defaultZoom,
-    map_provider:              s.mapProvider,
     email_alerts:              s.emailAlerts,
-    sms_alerts:                s.smsAlerts,
     push_alerts:               s.pushAlerts,
     digest_frequency:          s.digestFrequency,
     critical_alert_sound:      s.criticalAlertSound,
     require_2fa:               s.require2FA,
     password_min_length:       s.passwordMinLength,
     session_timeout:           s.sessionTimeout,
-    data_retention_days:       s.dataRetentionDays,
     allow_public_registration: s.allowPublicRegistration,
     maintenance_mode:          s.maintenanceMode,
     maintenance_message:       s.maintenanceMessage,
     allowed_admin_ips:         s.allowedAdminIPs,
-    api_key:                   s.apiKey,
   };
 }
 
@@ -85,16 +71,22 @@ function toApi(s) {
 const DEFAULTS = {
   orgName: "Snap2Fix", municipality: "Panghulo", timezone: "Asia/Manila",
   contactEmail: "admin@snap2fix.gov", defaultSeverity: "medium",
-  autoAssign: true, responseTimeHours: 24, escalateAfterHours: 72,
   defaultLat: 14.5995, defaultLng: 120.9842, defaultZoom: 13,
-  mapProvider: "google", emailAlerts: true, smsAlerts: false,
-  pushAlerts: true, digestFrequency: "daily", criticalAlertSound: true,
+  emailAlerts: true, pushAlerts: true, digestFrequency: "daily", criticalAlertSound: true,
   require2FA: false, passwordMinLength: 8, sessionTimeout: 60,
-  dataRetentionDays: 365, allowPublicRegistration: false,
+  allowPublicRegistration: false,
   maintenanceMode: false,
   maintenanceMessage: "System under maintenance. Please check back shortly.",
-  allowedAdminIPs: "", apiKey: "",
+  allowedAdminIPs: "", updatedAt: null,
 };
+
+function fmtDate(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString("en-PH", {
+    year: "numeric", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
 
 const AdminSettings = () => {
   const [activeTab,   setActiveTab]   = useState("general");
@@ -106,12 +98,17 @@ const AdminSettings = () => {
   const [saveError,   setSaveError]   = useState(null);
   const [resetDialog, setResetDialog] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState("");
+  const [resetting,   setResetting]   = useState(false);
+  const [resetResult, setResetResult] = useState(null);
+  const [exporting,   setExporting]   = useState(false);
+  const [dirty,       setDirty]       = useState(false);
 
   // ── Load settings on mount ─────────────────────────────────────────────────
   useEffect(() => {
     getSettings().then((res) => {
       if (res.success) {
         setSettings(fromApi(res.data));
+        setDirty(false);
       } else {
         setLoadError(res.error);
       }
@@ -119,17 +116,53 @@ const AdminSettings = () => {
     });
   }, []);
 
+  // ── Warn before navigating away / closing tab with unsaved changes ─────────
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
   const handleChange = (field, value) => {
     setSettings((prev) => ({ ...prev, [field]: value }));
     setSaved(false);
     setSaveError(null);
+    setDirty(true);
   };
 
-  const handleResetAllStatuses = () => {
+  const handleResetAllStatuses = async () => {
     if (resetConfirmText !== "RESET") return;
-    // TODO: wire to backend once POST /api/v1/admin/reports/reset-statuses exists
+    setResetting(true);
+    const res = await resetReportStatuses();
+    setResetting(false);
     setResetDialog(false);
     setResetConfirmText("");
+    if (res.success) {
+      const count = res.data?.affected_count ?? 0;
+      setResetResult(`Reset complete — ${count} report(s) moved back to pending.`);
+      setTimeout(() => setResetResult(null), 5000);
+    } else {
+      setSaveError(res.error || "Reset failed. Please try again.");
+    }
+  };
+
+  const handleExportAuditLog = async () => {
+    setExporting(true);
+    const res = await exportAuditLog();
+    setExporting(false);
+    if (!res.success) {
+      setSaveError(res.error || "Export failed. Please try again.");
+      return;
+    }
+    const url = URL.createObjectURL(res.blob);
+    const a   = document.createElement("a");
+    a.href     = url;
+    a.download = res.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // ── Persist to backend ────────────────────────────────────────────────────
@@ -141,6 +174,7 @@ const AdminSettings = () => {
     if (res.success) {
       setSettings(fromApi(res.data));   // sync with server-confirmed values
       setSaved(true);
+      setDirty(false);
       setTimeout(() => setSaved(false), 3500);
     } else {
       setSaveError(res.error);
@@ -167,6 +201,11 @@ const AdminSettings = () => {
           </p>
         </div>
         <div className="settings-actions">
+          {resetResult && (
+            <span className="save-indicator save-indicator--info">
+              <CheckCircle size={14} strokeWidth={2} /> {resetResult}
+            </span>
+          )}
           {saved && (
             <span className="save-indicator save-indicator--success">
               <CheckCircle size={14} strokeWidth={2} /> Changes saved
@@ -177,12 +216,17 @@ const AdminSettings = () => {
               <AlertCircle size={14} strokeWidth={2} /> {saveError}
             </span>
           )}
+          {settings.updatedAt && (
+            <span className="settings-last-saved">
+              Last saved: {fmtDate(settings.updatedAt)}
+            </span>
+          )}
           <button
             className="adm-btn adm-btn-ghost"
             onClick={() => window.location.reload()}
             disabled={saving}
           >
-            <RotateCcw size={14} strokeWidth={2} /> Reset
+            <RotateCcw size={14} strokeWidth={2} /> Discard Changes
           </button>
           <button
             className="adm-btn adm-btn-primary"
@@ -209,7 +253,13 @@ const AdminSettings = () => {
             <button
               key={id}
               className={`settings-tab ${activeTab === id ? "active" : ""}`}
-              onClick={() => setActiveTab(id)}
+              onClick={() => {
+                if (dirty && activeTab !== id) {
+                  if (!window.confirm("You have unsaved changes. Switch tabs and discard them?")) return;
+                  setDirty(false);
+                }
+                setActiveTab(id);
+              }}
             >
               <span className="tab-icon">
                 <Icon size={18} strokeWidth={1.8} />
@@ -290,47 +340,8 @@ const AdminSettings = () => {
                     <option value="high">High</option>
                     <option value="critical">Critical</option>
                   </select>
-                </div>
-                <div className="form-group">
-                  <label>Target Response Time (Hours)</label>
-                  <input
-                    className="adm-input"
-                    type="number"
-                    min="1"
-                    max="168"
-                    value={settings.responseTimeHours}
-                    onChange={(e) => handleChange("responseTimeHours", Number(e.target.value))}
-                    disabled={loading}
-                  />
                   <span className="field-hint">
-                    SLA clock starts when a report is submitted
-                  </span>
-                </div>
-                <div className="form-group">
-                  <label>Auto-Escalate After (Hours)</label>
-                  <input
-                    className="adm-input"
-                    type="number"
-                    min="1"
-                    max="720"
-                    value={settings.escalateAfterHours}
-                    onChange={(e) => handleChange("escalateAfterHours", Number(e.target.value))}
-                    disabled={loading}
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label className="toggle-label">
-                    <input
-                      type="checkbox"
-                      checked={settings.autoAssign}
-                      onChange={(e) => handleChange("autoAssign", e.target.checked)}
-                      disabled={loading}
-                    />
-                    <span className="toggle-slider"></span>
-                    Enable Auto-Assignment by Street/Barangay
-                  </label>
-                  <span className="field-hint">
-                    Routes reports to the admin responsible for the reported location
+                    Applied automatically when ML detection returns no severity result.
                   </span>
                 </div>
               </div>
@@ -397,19 +408,6 @@ const AdminSettings = () => {
                     disabled={loading}
                   />
                 </div>
-                <div className="form-group">
-                  <label>Map Provider</label>
-                  <select
-                    className="adm-select"
-                    value={settings.mapProvider}
-                    onChange={(e) => handleChange("mapProvider", e.target.value)}
-                    disabled={loading}
-                  >
-                    <option value="google">Google Maps</option>
-                    <option value="osm">OpenStreetMap</option>
-                    <option value="mapbox">Mapbox</option>
-                  </select>
-                </div>
               </div>
             </section>
           )}
@@ -429,18 +427,6 @@ const AdminSettings = () => {
                     />
                     <span className="toggle-slider"></span>
                     Email Alerts for Critical Reports
-                  </label>
-                </div>
-                <div className="form-group full-width">
-                  <label className="toggle-label">
-                    <input
-                      type="checkbox"
-                      checked={settings.smsAlerts}
-                      onChange={(e) => handleChange("smsAlerts", e.target.checked)}
-                      disabled={loading}
-                    />
-                    <span className="toggle-slider"></span>
-                    SMS Alerts for Overdue SLA
                   </label>
                 </div>
                 <div className="form-group full-width">
@@ -525,21 +511,6 @@ const AdminSettings = () => {
                     disabled={loading}
                   />
                 </div>
-                <div className="form-group">
-                  <label>Data Retention (Days)</label>
-                  <input
-                    className="adm-input"
-                    type="number"
-                    min="30"
-                    max="2555"
-                    value={settings.dataRetentionDays}
-                    onChange={(e) => handleChange("dataRetentionDays", Number(e.target.value))}
-                    disabled={loading}
-                  />
-                  <span className="field-hint">
-                    Resolved reports auto-purged after this period
-                  </span>
-                </div>
                 <div className="form-group full-width">
                   <label className="toggle-label">
                     <input
@@ -562,8 +533,11 @@ const AdminSettings = () => {
                 <button
                   className="adm-btn adm-btn-ghost"
                   style={{ marginTop: 10 }}
+                  onClick={handleExportAuditLog}
+                  disabled={exporting}
                 >
-                  <Download size={14} strokeWidth={2} /> Export Audit Log (CSV)
+                  <Download size={14} strokeWidth={2} />
+                  {exporting ? "Exporting…" : "Export Audit Log (CSV)"}
                 </button>
               </div>
             </section>
@@ -613,32 +587,6 @@ const AdminSettings = () => {
                     Comma-separated. Leave blank to allow all IPs.
                   </span>
                 </div>
-                <div className="form-group full-width">
-                  <label>API Key</label>
-                  <div className="input-group">
-                    <input
-                      className="adm-input"
-                      type="text"
-                      value={settings.apiKey}
-                      readOnly
-                    />
-                    <button
-                      className="adm-btn adm-btn-ghost"
-                      disabled={loading || saving}
-                      onClick={() =>
-                        handleChange(
-                          "apiKey",
-                          "sk_live_" + Math.random().toString(36).substr(2, 18)
-                        )
-                      }
-                    >
-                      <RefreshCw size={14} strokeWidth={2} /> Regenerate
-                    </button>
-                  </div>
-                  <span className="field-hint">
-                    Click Regenerate, then Save Changes to rotate the key.
-                  </span>
-                </div>
               </div>
             </section>
           )}
@@ -676,10 +624,10 @@ const AdminSettings = () => {
               </button>
               <button
                 className="adm-btn adm-btn-danger"
-                disabled={resetConfirmText !== "RESET"}
+                disabled={resetConfirmText !== "RESET" || resetting}
                 onClick={handleResetAllStatuses}
               >
-                Reset All Statuses
+                {resetting ? "Resetting…" : "Reset All Statuses"}
               </button>
             </div>
           </div>

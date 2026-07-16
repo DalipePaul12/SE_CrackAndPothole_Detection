@@ -56,3 +56,26 @@ export async function getSettings() {
 export async function updateSettings(payload) {
   return api.put("/settings", payload);
 }
+
+/**
+ * Bulk-reset all non-terminal report statuses (verified, assigned, in_progress)
+ * back to "pending".  Terminal statuses (resolved, declined, etc.) are untouched.
+ *
+ * @returns {{ success: boolean, data: { affected_count: number }|null, error: string|null }}
+ */
+export async function resetReportStatuses() {
+  return api.post("/settings/reset-report-statuses", {});
+}
+
+/**
+ * Download the full audit log as a CSV file.
+ * Uses api.download() for consistent auth-refresh behaviour with all other calls.
+ *
+ * @returns {{ success: boolean, blob: Blob, filename: string }|{ success: false, error: string }}
+ */
+export async function exportAuditLog() {
+  const res = await api.download("/settings/audit-log/export");
+  if (!res.success) return res;
+  const filename = `audit_log_${new Date().toISOString().slice(0, 10)}.csv`;
+  return { success: true, blob: res.blob, filename };
+}

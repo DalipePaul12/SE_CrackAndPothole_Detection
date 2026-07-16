@@ -1,21 +1,30 @@
 """
 settings.py — Admin-only system settings endpoints.
 
-GET  /api/v1/settings   — return current settings (creates singleton row if absent)
-PUT  /api/v1/settings   — persist settings (partial update — only sent fields written)
+GET  /api/v1/settings                     — return current settings (creates singleton row if absent)
+PUT  /api/v1/settings                     — persist settings (partial update — only sent fields written)
+POST /api/v1/settings/reset-report-statuses — bulk-reset non-terminal reports to pending
+GET  /api/v1/settings/audit-log/export    — stream audit_logs as CSV download
 
-Both routes require admin or superadmin role.
+All routes require admin or superadmin role.
 """
+import csv
+import io
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from fastapi.responses import Response
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.middleware.auth_middleware import require_admin
 from app.middleware.rate_limiter import limiter
 from app.models.admin_settings import AdminSettings
+from app.models.audit_log import AuditLog
+from app.models.enums import ReportStatus
+from app.models.report import Report
 from app.models.user import User
 from app.schemas.settings import AdminSettingsResponse, AdminSettingsUpdate
 
@@ -96,3 +105,95 @@ async def update_settings(
         list(updates.keys()),
     )
     return row
+
+
+# ── Bulk reset ────────────────────────────────────────────────────────────────
+
+@router.post("/reset-report-statuses", status_code=200)
+@limiter.limit("5/minute")
+async def reset_report_statuses(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """
+    Bulk-reset non-terminal report statuses back to 'pending'.
+    Non-terminal statuses: verified, assigned, in_progress.
+    Terminal statuses (resolved, declined, cancelled, rejected, completed) are
+    never touched — history is preserved.
+    An explicit AuditLog entry is written with the affected row count so a
+    bulk action like this is traceable beyond the generic middleware log.
+    """
+    non_terminal = [
+        ReportStatus.VERIFIED,
+        ReportStatus.ASSIGNED,
+        ReportStatus.IN_PROGRESS,
+    ]
+
+    result = await db.execute(
+        sa_update(Report)
+        .where(Report.status.in_(non_terminal))
+        .values(status=ReportStatus.PENDING)
+        .execution_options(synchronize_session=False)
+    )
+    affected = result.rowcount if result.rowcount is not None else 0
+
+    ip = request.headers.get(
+        "X-Forwarded-For",
+        request.client.host if request.client else None,
+    )
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="BULK_RESET_REPORT_STATUSES",
+        target_resource="reports",
+        target_id=None,
+        details={"affected_count": affected, "reset_to": "pending"},
+        ip_address=ip,
+        user_agent=request.headers.get("User-Agent"),
+    ))
+
+    await db.commit()
+    logger.info(
+        "Admin %d bulk-reset %d report(s) to pending.", current_user.id, affected
+    )
+    return {"success": True, "affected_count": affected}
+
+
+# ── Audit log CSV export ──────────────────────────────────────────────────────
+
+@router.get("/audit-log/export")
+@limiter.limit("10/minute")
+async def export_audit_log(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> Response:
+    """Stream the full audit_logs table as a UTF-8 CSV file download."""
+    result = await db.execute(
+        select(AuditLog).order_by(AuditLog.timestamp.desc())
+    )
+    rows = result.scalars().all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "id", "user_id", "action", "target_resource",
+        "target_id", "ip_address", "timestamp",
+    ])
+    for r in rows:
+        writer.writerow([
+            r.id,
+            r.user_id,
+            r.action,
+            r.target_resource,
+            r.target_id,
+            r.ip_address,
+            r.timestamp.isoformat() if r.timestamp else "",
+        ])
+
+    filename = f"audit_log_{datetime.now(tz=timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

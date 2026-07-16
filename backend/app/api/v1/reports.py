@@ -47,6 +47,7 @@ from app.middleware.auth_middleware import (
     get_current_user,
     require_admin,
     require_admin_or_contractor,
+    check_maintenance_mode,
 )
 from app.middleware.rate_limiter import limiter
 from app.models.audit_log import AuditLog
@@ -76,7 +77,11 @@ from app.utils.geo import calculate_distance
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/reports", tags=["Reports"])
+router = APIRouter(
+    prefix="/reports",
+    tags=["Reports"],
+    dependencies=[Depends(check_maintenance_mode)],
+)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

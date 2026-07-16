@@ -48,50 +48,63 @@ async def notify(
         report_id,
     )
 
+    # ── Respect admin push_alerts / email_alerts settings ────────────────────
+    # Fail open: if settings are unavailable, always deliver (never silence).
     try:
-        from app.routers.ws import manager
-
-        await manager.send_to_user(
-            user_id=user_id,
-            data={
-                "event": "notification",
-                "id": notif.id,
-                "title": notif.title,
-                "message": notif.message,
-                "type": notif.type.value,
-                "report_id": notif.report_id,
-                "is_read": notif.is_read,
-                "created_at": notif.created_at.isoformat(),
-            },
-        )
-
-        logger.info("WebSocket notification sent to user_id=%d", user_id)
-
+        from sqlalchemy import select as _sel
+        from app.models.admin_settings import AdminSettings as _AS
+        _cfg      = (await db.execute(_sel(_AS).where(_AS.id == 1))).scalar_one_or_none()
+        _push_on  = _cfg.push_alerts  if _cfg is not None else True
+        _email_on = _cfg.email_alerts if _cfg is not None else True
     except Exception:
-        logger.exception("Failed to send WebSocket notification to user_id=%d", user_id)
+        _push_on = _email_on = True
+
+    if _push_on:
+        try:
+            from app.routers.ws import manager
+
+            await manager.send_to_user(
+                user_id=user_id,
+                data={
+                    "event": "notification",
+                    "id": notif.id,
+                    "title": notif.title,
+                    "message": notif.message,
+                    "type": notif.type.value,
+                    "report_id": notif.report_id,
+                    "is_read": notif.is_read,
+                    "created_at": notif.created_at.isoformat(),
+                },
+            )
+
+            logger.info("WebSocket notification sent to user_id=%d", user_id)
+
+        except Exception:
+            logger.exception("Failed to send WebSocket notification to user_id=%d", user_id)
 
     # ── Send email notification (best-effort, never blocks) ───────────────────
-    try:
-        from app.services.email_service import send_notification_email
+    if _email_on:
+        try:
+            from app.services.email_service import send_notification_email
 
-        resolved_email = email
-        if resolved_email is None:
-            # Per-call SELECT — acceptable for single-user paths.  If this
-            # function is ever called in a loop, pre-fetch all emails with one
-            # User.id.in_(ids) query and pass email= to avoid N+1.
-            from sqlalchemy import select
-            from app.models.user import User
-            result = await db.execute(select(User.email).where(User.id == user_id))
-            resolved_email = result.scalar_one_or_none()
-        if resolved_email:
-            await send_notification_email(
-                email=resolved_email,
-                title=title,
-                message=message,
-                report_id=report_id,
-            )
-    except Exception:
-        logger.exception("Failed to send notification email to user_id=%d", user_id)
+            resolved_email = email
+            if resolved_email is None:
+                # Per-call SELECT — acceptable for single-user paths.  If this
+                # function is ever called in a loop, pre-fetch all emails with one
+                # User.id.in_(ids) query and pass email= to avoid N+1.
+                from sqlalchemy import select
+                from app.models.user import User
+                result = await db.execute(select(User.email).where(User.id == user_id))
+                resolved_email = result.scalar_one_or_none()
+            if resolved_email:
+                await send_notification_email(
+                    email=resolved_email,
+                    title=title,
+                    message=message,
+                    report_id=report_id,
+                )
+        except Exception:
+            logger.exception("Failed to send notification email to user_id=%d", user_id)
 
     return notif
 
@@ -123,30 +136,40 @@ async def notify_background(
             await db.commit()
             logger.info("Background notification created for user_id=%d", user_id)
 
-            # ── Send email notification ─────────────────────────────────
+            # ── Respect email_alerts admin setting ────────────────────────────
             try:
-                from app.services.email_service import send_notification_email
-
-                resolved_email = email
-                if resolved_email is None:
-                    # Per-call SELECT — acceptable for single-user paths.  If
-                    # this task is ever scheduled in a loop, pre-fetch all
-                    # emails with one User.id.in_(ids) query and pass email=.
-                    from sqlalchemy import select
-                    from app.models.user import User
-                    result = await db.execute(
-                        select(User.email).where(User.id == user_id)
-                    )
-                    resolved_email = result.scalar_one_or_none()
-                if resolved_email:
-                    await send_notification_email(
-                        email=resolved_email,
-                        title=title,
-                        message=message,
-                        report_id=report_id,
-                    )
+                from sqlalchemy import select as _sel
+                from app.models.admin_settings import AdminSettings as _AS
+                _cfg      = (await db.execute(_sel(_AS).where(_AS.id == 1))).scalar_one_or_none()
+                _email_on = _cfg.email_alerts if _cfg is not None else True
             except Exception:
-                logger.exception("Background email failed for user_id=%d", user_id)
+                _email_on = True  # fail open
+
+            if _email_on:
+                # ── Send email notification ─────────────────────────────────
+                try:
+                    from app.services.email_service import send_notification_email
+
+                    resolved_email = email
+                    if resolved_email is None:
+                        # Per-call SELECT — acceptable for single-user paths.  If
+                        # this task is ever scheduled in a loop, pre-fetch all
+                        # emails with one User.id.in_(ids) query and pass email=.
+                        from sqlalchemy import select
+                        from app.models.user import User
+                        result = await db.execute(
+                            select(User.email).where(User.id == user_id)
+                        )
+                        resolved_email = result.scalar_one_or_none()
+                    if resolved_email:
+                        await send_notification_email(
+                            email=resolved_email,
+                            title=title,
+                            message=message,
+                            report_id=report_id,
+                        )
+                except Exception:
+                    logger.exception("Background email failed for user_id=%d", user_id)
 
     except Exception:
         logger.exception("Background notification failed for user_id=%d", user_id)

@@ -197,6 +197,55 @@ export const api = {
   delete: (url)               => request(url, { method: "DELETE" }),
 
   /**
+   * download() — GET a binary response (blob) with full auth-refresh support.
+   * Mirrors upload() exactly, substituting response.blob() for response.json().
+   * Use for any endpoint that returns non-JSON (CSV, PDF, binary).
+   */
+  download: async (url, _isRetry = false) => {
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const token = tokenStorage.getAccess();
+
+      const response = await fetch(`${BASE_URL}${API_PREFIX}${url}`, {
+        method:      "GET",
+        credentials: "include",
+        signal:      controller.signal,
+        headers:     { ...authHeaders(token) },
+      });
+
+      if (response.status === 401 && !_isRetry) {
+        clearTimeout(timeout);
+        const nt = await attemptTokenRefresh();
+        if (nt) return api.download(url, true);
+        return { success: false, error: "Session expired. Please log in again." };
+      }
+
+      if (!response.ok) {
+        let errMsg = `Download failed (${response.status})`;
+        try {
+          const errData = await response.json();
+          errMsg = errData?.error || errData?.detail || errMsg;
+        } catch { /* response body is not JSON — use status-based message */ }
+        return { success: false, error: errMsg };
+      }
+
+      const blob = await response.blob();
+      return { success: true, blob };
+    } catch (err) {
+      return {
+        success: false,
+        error:   err.name === "AbortError"
+          ? "Download timed out. Please try again."
+          : "Network error during download. Check backend connection.",
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+
+  /**
    * upload() — multipart/form-data
    * 120s timeout: ML inference on CPU can take 30-90s on large images.
    * ⚠️ Never set Content-Type manually — browser sets it with the boundary.
