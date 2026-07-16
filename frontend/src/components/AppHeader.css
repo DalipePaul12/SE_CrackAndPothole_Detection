@@ -20,14 +20,6 @@
 .app-header-left {
   display: flex;
   align-items: center;
-  gap: 15px;
-}
-
-.app-header-left h2 {
-  font-size: 1.6rem;
-  color: var(--text);
-  font-weight: 600;
-  transition: color 0.3s ease;
 }
 
 .app-header-right {

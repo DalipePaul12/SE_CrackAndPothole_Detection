@@ -15,7 +15,6 @@ from collections import defaultdict
 import requests
 from app.core.config import settings
 from app.services.ml_service import _severity_from_bbox_norm
-from ultralytics import YOLO
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +28,15 @@ def _ensure_models_loaded():
     if pothole_model is not None and crack_model is not None:
         return
     try:
+        from ultralytics import YOLO
         pothole_model = YOLO(settings.POTHOLE_MODEL_PATH)
         crack_model   = YOLO(settings.CRACK_MODEL_PATH)
         logger.info("YOLO models loaded — pothole: %s | crack: %s",
                     settings.POTHOLE_MODEL_PATH, settings.CRACK_MODEL_PATH)
+    except ImportError:
+        logger.warning("ultralytics not installed — YOLO inference unavailable.")
+        pothole_model = None
+        crack_model   = None
     except Exception as e:
         logger.error("YOLO model load failed: %s", e)
         pothole_model = None

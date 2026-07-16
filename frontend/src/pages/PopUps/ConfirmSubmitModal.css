@@ -79,6 +79,40 @@
   background: linear-gradient(360deg, #184918, #58c758);
 }
 
+/* DARK MODE */
+body.dark .confirm-modal {
+  background-color: #1e2d1e;
+  border-color: #3a5a3a;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+body.dark .confirm-modal h3 {
+  color: #6fcf6f;
+}
+
+body.dark .confirm-modal p {
+  color: #a0b8a0;
+}
+
+body.dark .confirm-cancel {
+  background: #2a3d2a;
+  border-color: #4a6a4a;
+  color: #d0e8d0;
+}
+
+body.dark .confirm-cancel:hover {
+  background: #3a5a3a;
+}
+
+body.dark .confirm-confirm {
+  background: linear-gradient(360deg, #206220, #43a343);
+  border-color: #4a8a4a;
+}
+
+body.dark .confirm-confirm:hover {
+  background: linear-gradient(360deg, #184918, #58c758);
+}
+
 /* Animations */
 @keyframes csm-fadeIn {
   from { opacity: 0; }

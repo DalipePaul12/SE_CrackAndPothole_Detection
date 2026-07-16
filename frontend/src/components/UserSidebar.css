@@ -75,9 +75,10 @@ body.dark {
 }
 
 .user-sidebar-header {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--user-border);
@@ -182,6 +183,10 @@ body.dark {
 
 /* ========== COLLAPSE TOGGLE ========== */
 .user-collapse-btn {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
   background: transparent;
   border: 1px solid var(--user-border);
   color: var(--user-text-muted);

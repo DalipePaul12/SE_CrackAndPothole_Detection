@@ -79,9 +79,10 @@ body.dark {
 }
 
 .admin-sidebar-header {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--admin-border);
@@ -173,6 +174,10 @@ body.dark {
 }
 
 .admin-collapse-btn {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
   width: 28px;
   height: 28px;
   border-radius: 8px;

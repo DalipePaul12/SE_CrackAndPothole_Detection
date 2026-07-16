@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Bell } from "lucide-react";
+import { Bell, Menu, X } from "lucide-react";
 import { useDarkMode } from "../hooks/useDarkMode";
 import { useNotifications } from "../hooks/useNotifications";
 import "./AdminHeader.css";
 
-export default function AdminHeader({ title = "Admin Panel", onMenuClick, isCollapsed }) {
+export default function AdminHeader({ title = "Admin Panel", onMenuClick, isCollapsed, isSidebarOpen }) {
   const { isDark } = useDarkMode();
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
     useNotifications();
@@ -28,7 +28,17 @@ export default function AdminHeader({ title = "Admin Panel", onMenuClick, isColl
 
   return (
     <header className={`admin-header${isCollapsed ? " collapsed" : ""}`}>
+      {/* LEFT — hamburger + title */}
       <div className="admin-header-left">
+        {onMenuClick && (
+          <button
+            className="ah-hamburger"
+            onClick={onMenuClick}
+            aria-label={isSidebarOpen ? "Close menu" : "Open menu"}
+          >
+            {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        )}
         <h2 className="admin-header-title">{title}</h2>
       </div>
 

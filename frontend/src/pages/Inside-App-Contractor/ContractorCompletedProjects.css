@@ -183,6 +183,15 @@
   color: var(--subtext);
 }
 
+/* ── Action row ───────────────────────────────────────────────────────────── */
+.ccp-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ── Expand button ────────────────────────────────────────────────────────── */
 .ccp-expand-btn {
   display: flex;
@@ -198,6 +207,28 @@
   transition: opacity var(--transition-fast, 0.15s);
 }
 .ccp-expand-btn:hover { opacity: 0.75; }
+
+/* ── View Full Details button ─────────────────────────────────────────────── */
+.ccp-view-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #206220, #43a343);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.80rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 13px;
+  margin-left: auto;
+  transition: opacity var(--transition-fast, 0.15s), box-shadow var(--transition-fast, 0.15s);
+  white-space: nowrap;
+}
+.ccp-view-btn:hover {
+  opacity: 0.88;
+  box-shadow: 0 3px 10px rgba(34,197,94,0.25);
+}
 
 /* ── Expanded details ─────────────────────────────────────────────────────── */
 .ccp-details {

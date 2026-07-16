@@ -4,11 +4,12 @@
  */
 import AdminHeader from "./AdminHeader";
 
-export default function ContractorHeader({ onMenuClick, isCollapsed }) {
+export default function ContractorHeader({ onMenuClick, isSidebarOpen, isCollapsed }) {
   return (
     <AdminHeader
       title="Contractor Panel"
       onMenuClick={onMenuClick}
+      isSidebarOpen={isSidebarOpen}
       isCollapsed={isCollapsed}
     />
   );

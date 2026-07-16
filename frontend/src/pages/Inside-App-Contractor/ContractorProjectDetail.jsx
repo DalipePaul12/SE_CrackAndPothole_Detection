@@ -440,6 +440,15 @@ export default function ContractorProjectDetail() {
     setSubmitting(false);
 
     if (!res.success) {
+      // The project may have been saved successfully but the server crashed
+      // on the post-commit notification step. Re-fetch to get the real status.
+      const fresh = await getContractorProject(project.id);
+      if (fresh.success && fresh.data?.status === "COMPLETED") {
+        setProject(fresh.data);
+        setSubmitSuccess(true);
+        setTimeout(() => navigate("/contractorpanel/projects", { replace: true }), 2500);
+        return;
+      }
       setSubmitError(res.error || "Submission failed. Please try again.");
       return;
     }

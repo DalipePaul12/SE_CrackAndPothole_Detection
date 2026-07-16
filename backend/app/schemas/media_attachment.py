@@ -11,8 +11,8 @@ class MediaAttachmentResponse(AppBaseModel):
     file_name: Optional[str] = None
     file_size_bytes: Optional[int] = None
     media_type: MediaType
-    is_ai_generated: bool
-    ai_generated_confidence: Optional[float] = None  # FIX: was float, crashes when DB value is NULL
+    is_ai_generated: Optional[bool] = False
+    ai_generated_confidence: Optional[float] = None
     ai_generated_model_used: Optional[str] = None
-    is_processed: bool
+    is_processed: Optional[bool] = False
     created_at: datetime

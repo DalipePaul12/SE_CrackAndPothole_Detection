@@ -1,10 +1,13 @@
 import io
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -137,7 +140,7 @@ async def _notify_admin(
             )
     else:
         result = await db.execute(
-            select(User).where(User.role.in_([UserRole.admin, UserRole.superadmin]))
+            select(User).where(User.role == UserRole.admin)
         )
         admins = result.scalars().all()
         for admin in admins:
@@ -453,36 +456,42 @@ async def complete_project(
     await db.commit()
     await db.refresh(project)
 
-    # ── Notify admin ──────────────────────────────────────────────────────────
-    await _notify_admin(
-        db,
-        project,
-        title=f"Project #{project.id} completed",
-        message=(
-            f"Contractor {current_user.full_name or current_user.email} "
-            f"has marked project #{project.id} as complete."
-        ),
-        notification_type=NotificationType.success,
-    )
-
-    # ── Notify report submitter ───────────────────────────────────────────────
-    if report and report.owner_id:
-        owner_result = await db.execute(
-            select(User).where(User.id == report.owner_id)
+    # ── Notify admin (best-effort — never fail the response) ─────────────────
+    try:
+        await _notify_admin(
+            db,
+            project,
+            title=f"Project #{project.id} completed",
+            message=(
+                f"Contractor {current_user.full_name or current_user.email} "
+                f"has marked project #{project.id} as complete."
+            ),
+            notification_type=NotificationType.success,
         )
-        owner = owner_result.scalar_one_or_none()
-        if owner:
-            await notify(
-                db,
-                user_id=owner.id,
-                title="Your report has been resolved",
-                message=(
-                    f"The road damage you reported (Report #{report.id}) "
-                    f"has been repaired and marked complete."
-                ),
-                type=NotificationType.success,
-                report_id=report.id,
-                email=owner.email,
+    except Exception:
+        logger.warning("Failed to notify admin for project %s completion.", project.id, exc_info=True)
+
+    # ── Notify report submitter (best-effort) ─────────────────────────────────
+    try:
+        if report and report.owner_id:
+            owner_result = await db.execute(
+                select(User).where(User.id == report.owner_id)
             )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                await notify(
+                    db,
+                    user_id=owner.id,
+                    title="Your report has been resolved",
+                    message=(
+                        f"The road damage you reported (Report #{report.id}) "
+                        f"has been repaired and marked complete."
+                    ),
+                    type=NotificationType.success,
+                    report_id=report.id,
+                    email=owner.email,
+                )
+    except Exception:
+        logger.warning("Failed to notify owner for project %s completion.", project.id, exc_info=True)
 
     return project

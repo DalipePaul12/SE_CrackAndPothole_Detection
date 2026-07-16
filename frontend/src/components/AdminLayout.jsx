@@ -7,6 +7,7 @@ import "./AdminLayout.css";
 function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth < 1024);
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 1024;
 
   useEffect(() => {
     const handleResize = () => {
@@ -22,27 +23,19 @@ function AdminLayout() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const toggleSidebar = useCallback(() => setIsSidebarOpen(prev => !prev), []);
-  const closeSidebar = useCallback(() => setIsSidebarOpen(false), []);
+  /* Lock body scroll while mobile sidebar is open */
+  useEffect(() => {
+    document.body.style.overflow = isSidebarOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [isSidebarOpen]);
+
+  const toggleSidebar  = useCallback(() => setIsSidebarOpen(prev => !prev), []);
+  const closeSidebar   = useCallback(() => setIsSidebarOpen(false), []);
   const toggleCollapse = useCallback(() => setIsCollapsed(prev => !prev), []);
 
   return (
     <div className="admin-layout">
-      <button className="mobile-menu-btn" onClick={toggleSidebar} aria-label="Toggle sidebar">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          {isSidebarOpen ? (
-            <path d="M18 6L6 18M6 6l12 12" />
-          ) : (
-            <>
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </>
-          )}
-        </svg>
-      </button>
-
-      <AdminSidebar 
+      <AdminSidebar
         isOpen={isSidebarOpen}
         onClose={closeSidebar}
         isCollapsed={isCollapsed}
@@ -51,14 +44,17 @@ function AdminLayout() {
 
       <AdminHeader
         onMenuClick={toggleSidebar}
+        isSidebarOpen={isSidebarOpen}
         isCollapsed={isCollapsed}
       />
 
-      <main className={`admin-main-content ${isCollapsed ? 'collapsed' : ''}`}>
+      <main className={`admin-main-content ${isCollapsed ? "collapsed" : ""}`}>
         <Outlet />
       </main>
 
-      {isSidebarOpen && <div className="sidebar-backdrop" onClick={closeSidebar} />}
+      {isSidebarOpen && (
+        <div className="sidebar-backdrop" onClick={closeSidebar} aria-hidden="true" />
+      )}
     </div>
   );
 }

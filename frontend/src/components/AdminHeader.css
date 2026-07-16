@@ -23,7 +23,13 @@
   left: var(--sidebar-collapsed-width, var(--user-collapsed));
 }
 
-.admin-header-left h2 {
+.admin-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-header-title {
   font-size: 1.6rem;
   color: var(--text);
   font-weight: 600;
@@ -231,16 +237,46 @@
   margin-top: 2px;
 }
 
+/* ── Hamburger (mobile only) — matches user-side burger-btn style ── */
+.ah-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text);
+  padding: 4px;
+  margin-right: 4px;
+  flex-shrink: 0;
+  transition: color 0.2s;
+}
+.ah-hamburger:hover {
+  color: var(--primary, #4caf50);
+}
+
 /* ── Mobile ── */
 @media (max-width: 1023px) {
   .admin-header {
+    left: 0 !important;          /* sidebar is off-screen, header goes full-width */
     padding: 0 16px;
-    padding-left: 60px; /* clear the hamburger */
-    border-radius: 0;
+    gap: 12px;
+    /* keep border-bottom-left/right-radius from the base rule — same as user side */
+  }
+
+  .admin-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ah-hamburger {
+    display: flex;
   }
 
   .admin-header-left h2 {
-    font-size: 1.2rem;
+    font-size: 1.15rem;
   }
 
   .admin-header-right {
@@ -249,5 +285,11 @@
 
   .admin-name {
     display: none;
+  }
+
+  /* notification dropdown: keep it on-screen on narrow viewports */
+  .ah-notif-dropdown {
+    width: min(340px, calc(100vw - 32px));
+    right: -16px;
   }
 }
