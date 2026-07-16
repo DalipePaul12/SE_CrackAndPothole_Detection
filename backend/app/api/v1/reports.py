@@ -1074,3 +1074,53 @@ async def generate_summary(
     response = ReportResponse.model_validate(report)
     response.upvote_count = await report_service.get_upvote_count(db, report.id)
     return response
+
+@router.get("/{report_id}/project")
+async def get_project_for_report(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return the project associated with a report.
+    Accessible by: the report owner, the assigned contractor, or any admin/superadmin.
+    """
+    from app.models.project import Project
+
+    report = await _fetch_report_or_404(db, report_id)
+
+    is_admin = current_user.role in (UserRole.admin, UserRole.superadmin)
+    is_owner = report.owner_id == current_user.id
+
+    proj_result = await db.execute(
+        select(Project)
+        .where(Project.report_id == report_id)
+        .options(selectinload(Project.contractor))
+    )
+    project = proj_result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="No project found for this report")
+
+    is_contractor = (
+        current_user.role == UserRole.contractor
+        and project.contractor_id == current_user.id
+    )
+
+    if not (is_admin or is_owner or is_contractor):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return {
+        "id": project.id,
+        "status": project.status,
+        "report_id": project.report_id,
+        "contractor_id": project.contractor_id,
+        "contractor_name": (
+            project.contractor.full_name or project.contractor.email
+            if project.contractor else None
+        ),
+        "scheduled_date": project.scheduled_date,
+        "estimated_cost": project.estimated_cost,
+        "completion_percentage": project.completion_percentage,
+        "actual_completion_date": project.actual_completion_date,
+    }

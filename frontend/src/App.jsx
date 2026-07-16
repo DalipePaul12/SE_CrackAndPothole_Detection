@@ -25,7 +25,8 @@ import Dashboard     from "./pages/Inside-App-User/Dashboard.jsx";
 import AllReports    from "./pages/Inside-App-User/AllReports.jsx";
 import MapView       from "./pages/Inside-App-User/MapView.jsx";
 import MyProfile     from "./pages/Inside-App-User/MyProfile.jsx";
-import MySubmissions from "./pages/Inside-App-User/MySubmissions.jsx";
+import MySubmissions    from "./pages/Inside-App-User/MySubmissions.jsx";
+import ProjectTracking  from "./pages/ProjectTracking.jsx";
 import Notifications from "./pages/Inside-App-User/Notifications.jsx";
 import Settings      from "./pages/Inside-App-User/Settings.jsx";
 
@@ -139,7 +140,8 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
             <Route path="/dashboard/reports"       element={<AllReports />} />
             <Route path="/dashboard/mapview"       element={<MapView />} />
             <Route path="/dashboard/profile"       element={<MyProfile />} />
-            <Route path="/dashboard/submissions"   element={<MySubmissions />} />
+            <Route path="/dashboard/submissions"                   element={<MySubmissions />} />
+            <Route path="/dashboard/submissions/:reportId/track" element={<ProjectTracking />} />
             <Route path="/dashboard/notifications" element={<Notifications />} />
             <Route path="/dashboard/settings"      element={<Settings />} />
           </Route>

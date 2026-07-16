@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import "./AdminAllReports.css";
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal";
 import { getReports, updateReport, deleteReport, addComment } from "../../api/reports";
+import { getProjects, getProjectCompletion } from "../../api/projects";
 import { sendNotification } from "../../api/notifications";
 import { REPORT_STATUS } from "../../constants/reportStatus";
 import { getDashboardSummary, getSeverityStats } from "../../api/analytics";
@@ -912,12 +913,34 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const [updatesLoading, setUpdatesLoading]= useState(false);
   const [updateSent,     setUpdateSent]    = useState(false);
   const [customMsg,      setCustomMsg]     = useState("");
+  const [completion,     setCompletion]     = useState(null);
+  const [compLoading,    setCompLoading]    = useState(false);
 
   const transitions = STATUS_TRANSITIONS[r.status] ?? [];
   const attachments = r.media_attachments ?? [];
   const conf        = confVal(r);
   const sev         = severity(r);
   const sevClass    = toClass(sev);
+
+  // Fetch completion details lazily when the report is RESOLVED
+  useEffect(() => {
+    if (r.status !== REPORT_STATUS.RESOLVED) return;
+    let cancelled = false;
+    setCompLoading(true);
+    setCompletion(null);
+    (async () => {
+      try {
+        const projsRes = await getProjects();
+        const proj = (projsRes.data ?? []).find(p => p.report_id === r.id);
+        if (!proj || cancelled) { if (!cancelled) setCompLoading(false); return; }
+        const cRes = await getProjectCompletion(proj.id);
+        if (!cancelled) setCompletion(cRes.data ?? null);
+      } catch { /* non-fatal */ } finally {
+        if (!cancelled) setCompLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [r.id, r.status]);
 
   useEffect(() => {
     const fn = (e) => { if (e.key === "Escape") onClose(); };
@@ -1013,7 +1036,10 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
     { id: "media",   label: "Media",   icon: <ImageIcon size={15} />,       badge: attachments.length },
     { id: "notes",   label: "Notes",   icon: <MessageSquare size={15} />,   badge: comments.length    },
     { id: "actions", label: "Actions", icon: <Shield size={15} />,          badge: transitions.length },
-    { id: "message", label: "Updates", icon: <Activity size={15} />,        badge: updates.length > 0 ? updates.length : null },
+    { id: "message",    label: "Updates",    icon: <Activity size={15} />,   badge: updates.length > 0 ? updates.length : null },
+    ...(r.status === REPORT_STATUS.RESOLVED
+      ? [{ id: "completion", label: "Completion", icon: <Wrench size={15} />, badge: null }]
+      : []),
   ];
 
   return (
@@ -1134,7 +1160,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                   {attachments.map((att, i) => {
                     const url   = imgErrors[i] ? null : mediaUrl(att);
                     const label = i === 0 ? <><Camera size={14} /> Damage Photo</>
-                      : (i === 1 && r.status === REPORT_STATUS.RESOLVED) ? <><CheckCircle size={14} /> Repair Proof</>
                       : <><Paperclip size={14} /> Attachment {i + 1}</>;
                     return (
                       <div key={i} className="media-item-card">
@@ -1352,6 +1377,68 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                     )}
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {activeTab === "completion" && (
+            <div className="tab-pane completion-pane">
+              {compLoading ? (
+                <div className="no-notes">
+                  <Loader2 size={24} className="spin" />
+                  <p>Loading completion details…</p>
+                </div>
+              ) : !completion ? (
+                <div className="no-notes">
+                  <CheckCircle size={28} />
+                  <p>No completion details available for this report.</p>
+                </div>
+              ) : (
+                <div className="compl-section">
+                  <div className="compl-grid">
+                    {completion.notes && (
+                      <div className="compl-item compl-item--full">
+                        <span className="compl-label">Notes</span>
+                        <p className="compl-value">{completion.notes}</p>
+                      </div>
+                    )}
+                    {completion.materials_used && (
+                      <div className="compl-item compl-item--full">
+                        <span className="compl-label">Materials Used</span>
+                        <p className="compl-value">{completion.materials_used}</p>
+                      </div>
+                    )}
+                    {completion.actual_cost != null && (
+                      <div className="compl-item">
+                        <span className="compl-label">Actual Cost</span>
+                        <p className="compl-value compl-cost">
+                          ₱{Number(completion.actual_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    )}
+                    {completion.completed_at && (
+                      <div className="compl-item">
+                        <span className="compl-label">Completed On</span>
+                        <p className="compl-value">{fmtDate(completion.completed_at)}</p>
+                      </div>
+                    )}
+                  </div>
+                  {completion.completion_photos?.length > 0 && (
+                    <div className="compl-photos">
+                      <p className="compl-photos-label"><Camera size={13} /> Completion Photos</p>
+                      <div className="compl-photos-grid">
+                        {completion.completion_photos.map((ph) => (
+                          <img
+                            key={ph.id}
+                            src={`${BASE_URL}${ph.file_url}`}
+                            alt={ph.file_name ?? "Completion photo"}
+                            className="compl-photo-img"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}

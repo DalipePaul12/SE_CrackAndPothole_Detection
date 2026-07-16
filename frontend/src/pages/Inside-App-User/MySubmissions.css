@@ -2253,3 +2253,28 @@
     border-radius: var(--radius-lg);
   }
 }
+/* ── Track button (card + table) ─────────────────────────────────────────── */
+.sub-card-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sub-track-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--primary-subtle, rgba(27,94,63,0.08));
+  border: 1px solid var(--primary-subtle2, rgba(27,94,63,0.15));
+  color: var(--primary);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.sub-track-btn:hover {
+  background: var(--primary-subtle2, rgba(27,94,63,0.15));
+  border-color: var(--primary);
+}

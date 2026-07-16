@@ -53,6 +53,17 @@
   flex-wrap: wrap;
 }
 
+/* ── View Details button (SCHEDULED / pending cards) ──────────────────────── */
+.cap-card-actions--pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.cap-card-actions--pending .cap-btn-detail {
+  margin-right: auto; /* push Accept + Decline to the right */
+}
+
 /* ── View Details button (IN_PROGRESS cards) ──────────────────────────────── */
 .cap-card-actions--inprogress {
   justify-content: space-between;

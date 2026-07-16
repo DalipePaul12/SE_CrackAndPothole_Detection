@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.db.session import get_db
@@ -27,6 +28,78 @@ from app.utils.image_validator import validate_image_bytes
 UPLOAD_ROOT = Path(settings.UPLOAD_DIR)
 
 router = APIRouter(prefix="/contractor", tags=["Contractor"])
+
+
+# ── Serialization helper ───────────────────────────────────────────────────────
+
+def _serialize_project(project: Project) -> dict:
+    """Return an enriched project dict with a nested `report` object.
+
+    Requires Project.report and Report.media_attachments to be eagerly loaded
+    (e.g. via selectinload) before calling this function.
+    """
+    report = project.report
+    media_attachments = []
+    if report and report.media_attachments:
+        for att in report.media_attachments:
+            media_attachments.append({
+                "id": att.id,
+                "file_url": att.file_url,
+                "file_name": att.file_name,
+                "media_type": att.media_type.value if att.media_type else None,
+                "attachment_type": att.attachment_type,
+                "created_at": att.created_at.isoformat() if att.created_at else None,
+            })
+
+    report_data = None
+    if report:
+        report_data = {
+            "id": report.id,
+            "ai_damage_type": report.ai_damage_type.value if report.ai_damage_type else None,
+            "ai_severity": report.ai_severity.value if report.ai_severity else None,
+            "ai_confidence": report.ai_confidence,
+            "description": report.description,
+            "barangay": report.barangay,
+            "street_name": report.street_name,
+            "exact_address": getattr(report, "exact_address", None),
+            "latitude": report.latitude,
+            "longitude": report.longitude,
+            "media_attachments": media_attachments,
+        }
+
+    return {
+        "id": project.id,
+        "report_id": project.report_id,
+        "assigned_admin_id": project.assigned_admin_id,
+        "contractor_id": project.contractor_id,
+        "status": project.status.value if project.status else None,
+        "priority_level": project.priority_level.value if project.priority_level else None,
+        "estimated_cost": project.estimated_cost,
+        "actual_cost": project.actual_cost,
+        "budget_approved": project.budget_approved,
+        "start_date": project.start_date.isoformat() if project.start_date else None,
+        "estimated_completion_date": (
+            project.estimated_completion_date.isoformat()
+            if project.estimated_completion_date else None
+        ),
+        "actual_completion_date": (
+            project.actual_completion_date.isoformat()
+            if project.actual_completion_date else None
+        ),
+        "completion_percentage": project.completion_percentage,
+        "notes": project.notes,
+        "materials_used": project.materials_used,
+        "created_at": project.created_at.isoformat() if project.created_at else None,
+        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+        "report": report_data,
+    }
+
+
+# ── Eager-load options (reused by list + detail endpoints) ────────────────────
+
+_PROJECT_LOAD_OPTIONS = [
+    selectinload(Project.report).selectinload(Report.media_attachments)
+]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -110,12 +183,47 @@ async def get_assigned_projects(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_contractor),
 ):
-    """Contractor: list projects assigned to the current contractor, with optional ?status_filter= filter."""
-    query = select(Project).where(Project.contractor_id == current_user.id)
+    """Contractor: list projects assigned to the current contractor.
+
+    Eagerly loads the linked Report (with ai_damage_type, ai_severity,
+    ai_confidence, description, barangay, street_name) and its
+    MediaAttachment records — nested under a `report` key in each item.
+    """
+    query = (
+        select(Project)
+        .where(Project.contractor_id == current_user.id)
+        .options(*_PROJECT_LOAD_OPTIONS)
+    )
     if status_filter is not None:
         query = query.where(Project.status == status_filter)
     result = await db.execute(query)
-    return result.scalars().all()
+    projects = result.scalars().all()
+    return [_serialize_project(p) for p in projects]
+
+
+@router.get("/projects/{project_id}")
+async def get_contractor_project(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_contractor),
+):
+    """Contractor: fetch a single enriched project by ID (ownership-checked).
+
+    Returns the same shape as assigned-projects list items — Project fields
+    plus a nested `report` object with damage details and media_attachments.
+    """
+    result = await db.execute(
+        select(Project)
+        .where(Project.id == project_id, Project.contractor_id == current_user.id)
+        .options(*_PROJECT_LOAD_OPTIONS)
+    )
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found or not assigned to you.",
+        )
+    return _serialize_project(project)
 
 
 @router.post("/projects/{project_id}/accept")

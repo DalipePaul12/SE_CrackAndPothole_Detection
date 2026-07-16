@@ -816,10 +816,12 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
 }
 
 function ReportCard({ report, onView }) {
+  const navigate = useNavigate();
   const [imgError, setImgError] = useState(false);
   const att      = report.media_attachments?.[0];
   const thumbUrl = !imgError ? mediaUrl(att) : null;
   const status   = normalizeStatus(report.status);
+  const trackable = status === "IN_PROGRESS" || status === "RESOLVED";
 
   return (
     <div
@@ -855,11 +857,22 @@ function ReportCard({ report, onView }) {
         </div>
         <div className="sub-card-footer">
           <span className="sub-card-date">{fmtDate(report.created_at)}</span>
-          {report.upvote_count > 0 && (
-            <span className="sub-card-upvotes">
-              <ThumbsUp size={12} aria-hidden="true" /> {report.upvote_count}
-            </span>
-          )}
+          <div className="sub-card-footer-right">
+            {report.upvote_count > 0 && (
+              <span className="sub-card-upvotes">
+                <ThumbsUp size={12} aria-hidden="true" /> {report.upvote_count}
+              </span>
+            )}
+            {trackable && (
+              <button
+                className="sub-track-btn"
+                onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/submissions/${report.id}/track`); }}
+                aria-label={`Track project for report #${report.id}`}
+              >
+                Track →
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -867,10 +880,12 @@ function ReportCard({ report, onView }) {
 }
 
 function TableRow({ report, onView }) {
+  const navigate = useNavigate();
   const [imgError, setImgError] = useState(false);
   const att      = report.media_attachments?.[0];
   const thumbUrl = !imgError ? mediaUrl(att) : null;
   const status   = normalizeStatus(report.status);
+  const trackable = status === "IN_PROGRESS" || status === "RESOLVED";
 
   return (
     <tr
@@ -909,11 +924,22 @@ function TableRow({ report, onView }) {
         {fmtDate(report.created_at)}
       </td>
       <td>
-        {report.upvote_count > 0 && (
-          <span style={{ color: "var(--primary)", fontWeight: 600, fontSize: "0.82rem", display: "flex", alignItems: "center", gap: 4 }}>
-            <ThumbsUp size={13} aria-hidden="true" /> {report.upvote_count}
-          </span>
-        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+          {report.upvote_count > 0 && (
+            <span style={{ color: "var(--primary)", fontWeight: 600, fontSize: "0.82rem", display: "flex", alignItems: "center", gap: 4 }}>
+              <ThumbsUp size={13} aria-hidden="true" /> {report.upvote_count}
+            </span>
+          )}
+          {trackable && (
+            <button
+              className="sub-track-btn"
+              onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/submissions/${report.id}/track`); }}
+              aria-label={`Track project for report #${report.id}`}
+            >
+              Track →
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );

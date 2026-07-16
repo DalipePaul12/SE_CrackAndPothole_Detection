@@ -41,3 +41,20 @@ export async function declineProject(projectId, reason) {
 export async function completeProject(projectId, formData) {
   return api.upload(`/contractor/projects/${projectId}/complete`, formData);
 }
+
+/**
+ * GET /contractor/projects/:id
+ * Single enriched project (includes nested report + media_attachments).
+ */
+export async function getContractorProject(projectId) {
+  return api.get(`/contractor/projects/${projectId}`);
+}
+
+/**
+ * PATCH /contractor/availability
+ * Toggle contractor availability for new assignments.
+ * Body: { is_available: boolean }
+ */
+export async function updateAvailability(isAvailable) {
+  return api.patch(`/contractor/availability`, { is_available: isAvailable });
+}

@@ -169,7 +169,15 @@ function ProjectCard({ project, onAccept, onDecline, actionLoading, actionError 
 
         {/* ── Actions ───────────────────────────────────────────────────── */}
         {isPending && (
-          <div className="cap-card-actions">
+          <div className="cap-card-actions cap-card-actions--pending">
+            <button
+              className="cap-btn cap-btn-detail"
+              onClick={() => navigate(`/contractorpanel/projects/${project.id}`, { state: { project } })}
+              aria-label={`View details for project ${project.id}`}
+            >
+              View Details
+              <ArrowRight size={14} aria-hidden="true" />
+            </button>
             <button
               className="cap-btn cap-btn-accept"
               onClick={handleAccept}

@@ -8,7 +8,7 @@ import {
   addComment,
   getComments,
 } from "../../api/reports";
-import { getAvailableContractors, assignContractor, createProject, getProjects } from "../../api/projects";
+import { getAvailableContractors, assignContractor, createProject, getProjects, getProjectCompletion } from "../../api/projects";
 import "./AdminManageReports.css";
 import { REPORT_STATUS } from "../../constants/reportStatus";
 
@@ -1323,13 +1323,28 @@ function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComp
   const sev   = severity(r).toLowerCase();
 
   // Assignment section reveal — toggled by the "Start" button or openAssign prop.
-  const [showAssign, setShowAssign] = useState(openAssign);
+  const [showAssign,  setShowAssign]  = useState(openAssign);
+  const [completion,  setCompletion]  = useState(null);
+  const [compLoading, setCompLoading] = useState(false);
   const assignRef = useRef(null);
+
   useEffect(() => {
     if (showAssign && assignRef.current) {
       assignRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [showAssign]);
+
+  useEffect(() => {
+    if (st !== REPORT_STATUS.RESOLVED || !project?.id) return;
+    let cancelled = false;
+    setCompLoading(true);
+    setCompletion(null);
+    getProjectCompletion(project.id)
+      .then(res => { if (!cancelled) setCompletion(res.data ?? null); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setCompLoading(false); });
+    return () => { cancelled = true; };
+  }, [st, project?.id]);
 
   return (
     <ModalShell onClose={onClose}>
@@ -1443,6 +1458,67 @@ function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComp
           Verify this report first before assigning a contractor.
         </div>
       ) : null}
+      {/* ── Completion Details (RESOLVED only) ──────────────────────────────── */}
+      {st === REPORT_STATUS.RESOLVED && (
+        <div className="amr-completion-section">
+          <div className="amr-completion-hdr">
+            <IcoCheck size={14} /> Completion Details
+          </div>
+          {compLoading ? (
+            <p className="amr-compl-loading">Loading completion data…</p>
+          ) : !completion ? (
+            <p className="amr-compl-empty">No completion details recorded for this project.</p>
+          ) : (
+            <>
+              <div className="amr-compl-grid">
+                {completion.notes && (
+                  <div className="amr-compl-row amr-compl-row--full">
+                    <span className="amr-compl-key">Notes</span>
+                    <span className="amr-compl-val">{completion.notes}</span>
+                  </div>
+                )}
+                {completion.materials_used && (
+                  <div className="amr-compl-row amr-compl-row--full">
+                    <span className="amr-compl-key">Materials Used</span>
+                    <span className="amr-compl-val">{completion.materials_used}</span>
+                  </div>
+                )}
+                {completion.actual_cost != null && (
+                  <div className="amr-compl-row">
+                    <span className="amr-compl-key">Actual Cost</span>
+                    <span className="amr-compl-val amr-compl-cost">
+                      ₱{Number(completion.actual_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+                {completion.completed_at && (
+                  <div className="amr-compl-row">
+                    <span className="amr-compl-key">Completed On</span>
+                    <span className="amr-compl-val">
+                      {new Date(completion.completed_at).toLocaleDateString("en-PH", { dateStyle: "medium" })}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {completion.completion_photos?.length > 0 && (
+                <div className="amr-compl-photos">
+                  <div className="amr-compl-photos-label">Completion Photos</div>
+                  <div className="amr-compl-photos-row">
+                    {completion.completion_photos.map(ph => (
+                      <img
+                        key={ph.id}
+                        src={`${import.meta.env.VITE_API_URL || ""}${ph.file_url}`}
+                        alt={ph.file_name ?? "Completion photo"}
+                        className="amr-compl-photo"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
       <CommentSection reportId={r.id} />
     </ModalShell>
   );

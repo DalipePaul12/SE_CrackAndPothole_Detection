@@ -246,3 +246,17 @@ export async function generateReportSummary(reportId) {
   const res = await api.post(`/reports/${reportId}/summary`);
   return unwrap(res);
 }
+
+/**
+ * GET /reports/{reportId}/project
+ * Returns the project associated with this report.
+ * Accessible by the report owner, assigned contractor, or admin.
+ */
+export const getReportProject = async (reportId) => {
+  const res = await api.get(`/reports/${reportId}/project`);
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};

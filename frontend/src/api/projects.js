@@ -92,3 +92,17 @@ export const assignContractor = async (projectId, contractorId) => {
     error: res?.error ?? null,
   };
 };
+
+/**
+ * GET /projects/{projectId}/completion
+ * Returns completion details: notes, materials_used, actual_cost, completed_at, completion_photos[].
+ * Accessible by the report owner, assigned contractor, or any admin.
+ */
+export const getProjectCompletion = async (projectId) => {
+  const res = await api.get(`/projects/${projectId}/completion`);
+  return {
+    success: res?.success ?? false,
+    data: res?.data ?? null,
+    error: res?.error ?? null,
+  };
+};

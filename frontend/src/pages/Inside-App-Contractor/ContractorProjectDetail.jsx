@@ -5,7 +5,7 @@ import {
   AlertTriangle, Camera, Plus, Trash2, ImagePlus, Send, MessageSquare,
   Info, ChevronDown, ChevronUp, X,
 } from "lucide-react";
-import { getAssignedProjects, completeProject } from "../../api/contractor";
+import { getContractorProject, acceptProject, declineProject, completeProject } from "../../api/contractor";
 import { getComments, addComment } from "../../api/reports";
 import SeverityBadge from "../../components/SeverityBadge.jsx";
 import ConfirmSubmitModal from "../PopUps/ConfirmSubmitModal.jsx";
@@ -282,6 +282,12 @@ export default function ContractorProjectDetail() {
   /* ── Lightbox ─────────────────────────────────────────────────────────── */
   const [lightboxSrc, setLightboxSrc] = useState(null);
 
+  /* ── Accept / Decline (SCHEDULED) ────────────────────────────────────── */
+  const [actionLoading,  setActionLoading]  = useState(false);
+  const [actionError,    setActionError]    = useState(null);
+  const [showDecline,    setShowDecline]    = useState(false);
+  const [declineReason,  setDeclineReason]  = useState("");
+
   /* ── Completion form ──────────────────────────────────────────────────── */
   const [notes,        setNotes]        = useState("");
   const [materials,    setMaterials]    = useState([{ name: "", qty: "", unit_cost: "" }]);
@@ -301,15 +307,11 @@ export default function ContractorProjectDetail() {
     if (project) return;
     setLoadingData(true);
     setDataError(null);
-    getAssignedProjects({})
+    getContractorProject(projectId)
       .then((res) => {
         if (!res.success) { setDataError(res.error || "Could not load project."); return; }
-        const body  = res.data;
-        const items = Array.isArray(body?.results) ? body.results
-                    : Array.isArray(body)           ? body : [];
-        const found = items.find((p) => String(p.id) === String(projectId));
-        if (!found) setDataError("Project not found.");
-        else        setProject(found);
+        if (!res.data) setDataError("Project not found.");
+        else           setProject(res.data);
       })
       .catch(() => setDataError("Network error loading project."))
       .finally(() => setLoadingData(false));
@@ -320,11 +322,40 @@ export default function ContractorProjectDetail() {
     return () => previewUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
   }, []);
 
+  /* ── Accept / Decline handlers ───────────────────────────────────────── */
+  const handleAccept = async () => {
+    setActionLoading(true);
+    setActionError(null);
+    const res = await acceptProject(project.id);
+    setActionLoading(false);
+    if (!res.success) {
+      setActionError(res.error || "Failed to accept project.");
+      return;
+    }
+    // Reload fresh project data to reflect IN_PROGRESS status
+    const fresh = await getContractorProject(project.id);
+    if (fresh.success && fresh.data) setProject(fresh.data);
+  };
+
+  const handleDecline = async () => {
+    if (!declineReason.trim()) return;
+    setActionLoading(true);
+    setActionError(null);
+    const res = await declineProject(project.id, declineReason.trim());
+    setActionLoading(false);
+    if (!res.success) {
+      setActionError(res.error || "Failed to decline project.");
+      return;
+    }
+    navigate("/contractorpanel/projects", { replace: true });
+  };
+
   /* ── Derived data ─────────────────────────────────────────────────────── */
-  const report   = project ? getReport(project) : {};
-  const status   = project?.status?.toUpperCase() ?? "";
-  const isIP     = status === "IN_PROGRESS";
-  const isDone   = status === "COMPLETED";
+  const report     = project ? getReport(project) : {};
+  const status     = project?.status?.toUpperCase() ?? "";
+  const isPending  = status === "SCHEDULED";
+  const isIP       = status === "IN_PROGRESS";
+  const isDone     = status === "COMPLETED";
 
   const allAttachments    = report.media_attachments ?? [];
   const submissionPhotos  = allAttachments.filter((a) => a.attachment_type !== "completion_proof");
@@ -475,6 +506,81 @@ export default function ContractorProjectDetail() {
         <div className="cpd-success-banner">
           <CheckCircle2 size={18} />
           Project marked as complete! Redirecting…
+        </div>
+      )}
+
+      {/* ── Accept / Decline panel (SCHEDULED only) ────────────────────────── */}
+      {isPending && !submitSuccess && (
+        <div className="cpd-pending-actions">
+          <div className="cpd-pending-prompt">
+            <AlertTriangle size={16} aria-hidden="true" />
+            Review the report details and photos below, then accept or decline this assignment.
+          </div>
+
+          {actionError && (
+            <p className="cpd-action-error" role="alert">
+              <AlertCircle size={14} aria-hidden="true" /> {actionError}
+            </p>
+          )}
+
+          {!showDecline ? (
+            <div className="cpd-pending-btns">
+              <button
+                className="cpd-accept-btn"
+                onClick={handleAccept}
+                disabled={actionLoading}
+                type="button"
+              >
+                <CheckCircle2 size={16} aria-hidden="true" />
+                {actionLoading ? "Accepting…" : "Accept Project"}
+              </button>
+              <button
+                className="cpd-decline-open-btn"
+                onClick={() => { setActionError(null); setShowDecline(true); }}
+                disabled={actionLoading}
+                type="button"
+              >
+                <X size={16} aria-hidden="true" />
+                Decline
+              </button>
+            </div>
+          ) : (
+            <div className="cpd-decline-form">
+              <label className="cpd-label" htmlFor="cpd-decline-reason">
+                Reason for declining <span className="cpd-required">*</span>
+              </label>
+              <textarea
+                id="cpd-decline-reason"
+                className="cpd-textarea"
+                rows={3}
+                maxLength={500}
+                placeholder="e.g. Outside service area, schedule conflict, equipment unavailable…"
+                value={declineReason}
+                onChange={(e) => setDeclineReason(e.target.value)}
+                disabled={actionLoading}
+                aria-required="true"
+              />
+              <div className="cpd-char-count">{declineReason.length}/500</div>
+              <div className="cpd-decline-actions">
+                <button
+                  className="cpd-decline-confirm-btn"
+                  onClick={handleDecline}
+                  disabled={actionLoading || !declineReason.trim()}
+                  type="button"
+                >
+                  {actionLoading ? "Declining…" : "Confirm Decline"}
+                </button>
+                <button
+                  className="cpd-cancel-btn"
+                  onClick={() => { setShowDecline(false); setDeclineReason(""); setActionError(null); }}
+                  disabled={actionLoading}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

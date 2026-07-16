@@ -75,6 +75,98 @@
 }
 
 /* ── Success / error banners ─────────────────────────────────────────────── */
+/* ── Pending-acceptance action panel ─────────────────────────────────────── */
+.cpd-pending-actions {
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: var(--radius-md, 10px);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cpd-pending-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #92400e;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.cpd-action-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger, #ef4444);
+  font-size: 0.85rem;
+  margin: 0;
+}
+.cpd-pending-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cpd-accept-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--primary, #16a34a);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.cpd-accept-btn:hover:not(:disabled) { opacity: 0.88; }
+.cpd-accept-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cpd-decline-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--danger, #ef4444);
+  border: 1px solid var(--danger, #ef4444);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cpd-decline-open-btn:hover:not(:disabled) {
+  background: rgba(239,68,68,0.08);
+}
+.cpd-decline-open-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cpd-decline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cpd-decline-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.cpd-decline-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.cpd-decline-confirm-btn:hover:not(:disabled) { opacity: 0.88; }
+.cpd-decline-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .cpd-success-banner {
   display: flex;
   align-items: center;
