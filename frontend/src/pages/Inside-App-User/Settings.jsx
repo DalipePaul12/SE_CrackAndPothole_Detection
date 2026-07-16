@@ -136,7 +136,7 @@ function Settings() {
       showToast("Password updated successfully!", "success");
       setPwData({ current: "", new: "", confirm: "" });
     } catch (err) {
-      const msg = err?.detail || "Failed to update password.";
+      const msg = err?.message || err?.detail || "Failed to update password.";
       setPwError(msg);
       showToast(msg, "error");
     } finally {

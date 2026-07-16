@@ -55,7 +55,8 @@ html, body { margin: 0; padding: 0; background: var(--st-bg); }
   /* NO margin-left / margin-top — UserLayout handles it */
   padding: 1.5rem 2rem 3rem;
   min-height: calc(100vh - 80px); /* fill remaining viewport under header */
-  width: 100%;                    /* fill the main content area */
+  width: 100%;                    /* shrinks correctly below max-width */
+  max-width: 860px;               /* prevents cards stretching on wide viewports */
   box-sizing: border-box;
   transition: var(--st-transition);
 }

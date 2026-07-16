@@ -1,55 +1,65 @@
-
 import React from "react";
+import {
+  AlertOctagon,
+  ShieldCheck,
+  Minus,
+  AlertTriangle,
+  Flame,
+  Zap,
+  CircleDot,
+  HelpCircle,
+} from "lucide-react";
 import "./SeverityBadge.css";
 
-
+/* ── Severity config ────────────────────────────────────────────────────── */
 const SEVERITY_CONFIG = {
   low: {
     label:   "Low",
-    icon:    "◎",
+    Icon:    ShieldCheck,
     cssKey:  "low",
     title:   "Low severity — minor surface damage",
   },
   moderate: {
     label:   "Moderate",
-    icon:    "◉",
+    Icon:    AlertTriangle,
     cssKey:  "moderate",
     title:   "Moderate severity — noticeable road damage",
   },
   high: {
     label:   "High",
-    icon:    "●",
+    Icon:    Flame,
     cssKey:  "high",
     title:   "High severity — significant road damage",
   },
   critical: {
     label:   "Critical",
-    icon:    "⬟",
+    Icon:    AlertOctagon,
     cssKey:  "critical",
-    title:   "Critical severity — dangerous road condition",
+    title:   "Critical — dangerous road condition",
   },
-  "non_critical": {
-    label:   "Non_Critical",
-    icon:    "◎",
-    cssKey:  "non_critical",
-    title:   "Non_critical — cosmetic damage only",
+  non_critical: {
+    label:   "Non-Critical",
+    Icon:    ShieldCheck,
+    cssKey:  "non-critical",
+    title:   "Non-Critical — cosmetic damage only",
   },
 };
 
 const SEVERITY_FALLBACK = {
   label:   "Unknown",
-  icon:    "○",
+  Icon:    HelpCircle,
   cssKey:  "unknown",
   title:   "Severity not determined",
 };
 
+/* ── Damage type config ──────────────────────────────────────────────────── */
 const DAMAGE_CONFIG = {
-  pothole: { label: "Pothole", icon: "⬡", cssKey: "pothole" },
-  crack:   { label: "Crack",   icon: "⌇", cssKey: "crack"   },
-  none:    { label: "None",    icon: "—",  cssKey: "none"    },
+  pothole: { label: "Pothole", Icon: CircleDot, cssKey: "pothole" },
+  crack:   { label: "Crack",   Icon: Zap,       cssKey: "crack"   },
+  none:    { label: "None",    Icon: Minus,      cssKey: "none"    },
 };
 
-const DAMAGE_FALLBACK = { label: "Unknown", icon: "?", cssKey: "unknown" };
+const DAMAGE_FALLBACK = { label: "Unknown", Icon: HelpCircle, cssKey: "unknown" };
 
 function formatConfidence(confidence) {
   if (confidence == null) return null;
@@ -58,7 +68,7 @@ function formatConfidence(confidence) {
   return `${pct}%`;
 }
 
-
+/* ── Main component ─────────────────────────────────────────────────────── */
 export default function SeverityBadge({
   severity,
   damageType,
@@ -77,6 +87,7 @@ export default function SeverityBadge({
   const dmgCfg = DAMAGE_CONFIG[dmgKey]    ?? DAMAGE_FALLBACK;
 
   const confStr = showConf ? formatConfidence(confidence) : null;
+  const iconPx  = size === "lg" ? 13 : size === "sm" ? 10 : 11;
 
   const wrapperClass = [
     "sb-wrapper",
@@ -85,10 +96,13 @@ export default function SeverityBadge({
     className,
   ].filter(Boolean).join(" ");
 
+  const SevIcon = sevCfg.Icon;
+  const DmgIcon = dmgCfg.Icon;
+
   return (
     <span className={wrapperClass} aria-label={`Severity: ${sevCfg.label}`}>
 
-      {/* ── Severity pill ───────────────────────────────────────────────── */}
+      {/* ── Severity pill ─────────────────────────────────────────────── */}
       <span
         className={`sb-pill sb-severity sb-severity--${sevCfg.cssKey}`}
         title={sevCfg.title}
@@ -96,7 +110,7 @@ export default function SeverityBadge({
         aria-label={sevCfg.title}
       >
         {showIcon && (
-          <span className="sb-icon" aria-hidden="true">{sevCfg.icon}</span>
+          <SevIcon size={iconPx} className="sb-icon" aria-hidden="true" strokeWidth={2.2} />
         )}
         <span className="sb-label">{sevCfg.label}</span>
         {confStr && (
@@ -106,13 +120,13 @@ export default function SeverityBadge({
         )}
       </span>
 
-      {/* ── Damage type chip ────────────────────────────────────────────── */}
+      {/* ── Damage type chip ──────────────────────────────────────────── */}
       {showDamage && dmgKey && dmgKey !== "none" && (
         <span
           className={`sb-pill sb-damage sb-damage--${dmgCfg.cssKey}`}
           aria-label={`Damage type: ${dmgCfg.label}`}
         >
-          <span className="sb-icon" aria-hidden="true">{dmgCfg.icon}</span>
+          <DmgIcon size={iconPx} className="sb-icon" aria-hidden="true" strokeWidth={2.2} />
           <span className="sb-label">{dmgCfg.label}</span>
         </span>
       )}
@@ -121,7 +135,7 @@ export default function SeverityBadge({
   );
 }
 
-
+/* ── Compound exports ────────────────────────────────────────────────────── */
 export function SeverityPill({ severity, confidence, size = "sm", showConf = false }) {
   return (
     <SeverityBadge
@@ -135,7 +149,6 @@ export function SeverityPill({ severity, confidence, size = "sm", showConf = fal
   );
 }
 
-
 export function SeverityInline({ severity, damageType, confidence }) {
   return (
     <SeverityBadge
@@ -148,7 +161,6 @@ export function SeverityInline({ severity, damageType, confidence }) {
     />
   );
 }
-
 
 export function SeverityDetail({ severity, damageType, confidence }) {
   return (

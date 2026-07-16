@@ -84,8 +84,8 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   ];
 
   const otherNavItems = [
-    { to: "/dashboard/notifications", icon: Bell, label: "Notifications", badge: unreadCount },
-    /*{ to: "/dashboard/settings", icon: Settings, label: "Settings" },*/
+    { to: "/dashboard/notifications", icon: Bell,     label: "Notifications", badge: unreadCount },
+    { to: "/dashboard/settings",      icon: Settings, label: "Settings" },
   ];
 
   return (
