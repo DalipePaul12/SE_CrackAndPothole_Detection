@@ -35,6 +35,7 @@ function useIsDark() {
 }
 
 import { getReports, getReport, updateReport, uploadReportMedia as uploadReportImage } from "../../api/reports";
+import { getSettings } from "../../api/settings";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -43,8 +44,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-const MAP_CENTER       = [14.6607, 120.9612];
-const MAP_ZOOM         = 14;
+const MAP_CENTER_FALLBACK = [14.6607, 120.9612];
+const MAP_ZOOM_FALLBACK   = 14;
 const REFRESH_INTERVAL = 30_000;
 const MAX_FILE_MB      = 5;
 
@@ -539,6 +540,24 @@ function AdminMapView() {
   const isDark = useIsDark();
   const location = useLocation();
 
+  // ── Map center/zoom from AdminSettings (Option A) ──────────────────────────
+  const [mapCenter, setMapCenter] = useState(MAP_CENTER_FALLBACK);
+  const [mapZoom,   setMapZoom  ] = useState(MAP_ZOOM_FALLBACK);
+  useEffect(() => {
+    getSettings().then((res) => {
+      if (res.success && res.data) {
+        const { default_lat, default_lng, default_zoom } = res.data;
+        if (default_lat != null && default_lng != null) {
+          setMapCenter([default_lat, default_lng]);
+        }
+        if (default_zoom != null) {
+          setMapZoom(default_zoom);
+        }
+      }
+      // On failure: keep the hardcoded fallback values — no error shown.
+    });
+  }, []);
+
   const [allReports,  setAllReports ] = useState([]);
   const [loading,     setLoading    ] = useState(true);
   const [error,       setError      ] = useState(null);
@@ -952,7 +971,7 @@ function AdminMapView() {
                   <p>Loading map data…</p>
                 </div>
               ) : (
-                <MapContainer center={MAP_CENTER} zoom={MAP_ZOOM} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+                <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%" }} zoomControl={false}>
                   <TileLayer key={tileUrl} url={tileUrl} attribution={tileAttr} />
                   <MapController flyTo={flyTo} />
                   <MapBoundsWatcher onBoundsChange={setMapBounds} />

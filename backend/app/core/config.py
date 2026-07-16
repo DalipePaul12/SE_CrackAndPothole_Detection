@@ -154,3 +154,23 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# ── Per-damage-type auto-triage thresholds ────────────────────────────────────
+# These are SEPARATE from ml_service._BASE_THRESHOLDS ({"pothole": 0.40, "crack": 0.15}).
+# _BASE_THRESHOLDS gates whether a detection is accepted at all by the YOLO pipeline.
+# LOW_CONFIDENCE_TRIAGE_THRESHOLDS gates whether an already-accepted detection is still
+# risky enough to require a human eye before entering the main workflow.
+#
+# Rationale for asymmetric values:
+#   pothole: 0.55 — pothole confidence naturally runs high (YOLO11 model), so anything
+#            close to the 0.40 base threshold is still ambiguous in practice.
+#   crack:   0.25 — crack confidence naturally runs lower (segmentation model), so using
+#            0.55 here would flag almost every valid crack detection. 0.15+0.10 margin.
+#   fallback 0.5 — used for "uncertain" / "none" damage types.
+#
+# Expected to be retuned after Feature 2 (computed severity from mask area) changes
+# how confidence scores are derived — that is a config-constant change, not a bug.
+LOW_CONFIDENCE_TRIAGE_THRESHOLDS: dict[str, float] = {
+    "pothole": 0.55,
+    "crack":   0.25,
+}

@@ -65,3 +65,5 @@ export const getActivityFeed      = (limit = 10) =>
   safeGet(`/analytics/activity-feed?limit=${limit}`,  []);
 export const getPriorityFlags          = () => safeGet("/analytics/priority-flags",          null);
 export const getContractorPerformance  = () => safeGet("/analytics/contractor-performance", []);
+export const getBarangayTrend = (barangay, days = 30) =>
+  safeGet(`/analytics/barangay-trend?barangay=${encodeURIComponent(barangay)}&days=${days}`, []);

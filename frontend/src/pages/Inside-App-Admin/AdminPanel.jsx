@@ -24,6 +24,7 @@ import {
   getActivityFeed,
   getPriorityFlags,
   getContractorPerformance,
+  getBarangayTrend,
 } from "../../api/analytics";
 
 const DAMAGE_COLORS = ["#2ba81d", "#134d05"];
@@ -101,6 +102,12 @@ export default function AdminPanel() {
   const [trendRange,     setTrendRange]     = useState("Monthly");
   const [clock,          setClock]          = useState("");
 
+  // ── Barangay hotspot trend ───────────────────────────────────────────────
+  const [btBarangay, setBtBarangay] = useState("");   // "" until ranking loads
+  const [btDays,     setBtDays    ] = useState(30);
+  const [btData,     setBtData    ] = useState([]);
+  const [btLoading,  setBtLoading ] = useState(false);
+
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -145,6 +152,38 @@ export default function AdminPanel() {
     const poll = setInterval(loadExtra, POLL_MS);
     return () => { cancelRef.current = true; clearInterval(poll); };
   }, [loadExtra]);
+
+  // Auto-select top barangay once ranking data arrives.
+  useEffect(() => {
+    if (btBarangay === "" && barangayRanking.length > 0) {
+      setBtBarangay(barangayRanking[0].barangay);
+    }
+  }, [barangayRanking, btBarangay]);
+
+  // Fetch trend data whenever barangay or window changes.
+  useEffect(() => {
+    if (!btBarangay) return;
+    let cancelled = false;
+    setBtLoading(true);
+    getBarangayTrend(btBarangay, btDays).then((res) => {
+      if (cancelled) return;
+      if (res.success) {
+        // Format the ISO date string into a short label for the x-axis.
+        const formatted = (res.data || []).map((row) => ({
+          ...row,
+          period: (() => {
+            const d = new Date(row.period + "T00:00:00");
+            return d.toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+          })(),
+        }));
+        setBtData(formatted);
+      } else {
+        setBtData([]);
+      }
+      setBtLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [btBarangay, btDays]);
 
   const loadingMain = loadingAnalytics || loadingExtra;
 
@@ -503,6 +542,57 @@ export default function AdminPanel() {
             )}
           </>
         )}
+      </div>
+
+      {/* ── Barangay Hotspot Trend ─────────────────────────────────────── */}
+      <div className="ap-panel ap-panel-full">
+        <div className="ap-panel-title">
+          <span className="ap-panel-icon-pill ap-pill-amber">
+            <MapPin size={13} color="#e65100" />
+          </span>
+          Barangay Hotspot Trend
+          {/* Barangay selector — populated from live hotspot ranking */}
+          <select
+            className="ap-select"
+            value={btBarangay}
+            onChange={(e) => setBtBarangay(e.target.value)}
+            disabled={barangayRanking.length === 0}
+            style={{ marginLeft: 10 }}
+            aria-label="Select barangay"
+          >
+            {(barangayRanking.length > 0 ? barangayRanking : BARANGAYS.slice(1).map((b) => ({ barangay: b }))).map((h) => (
+              <option key={h.barangay} value={h.barangay}>{h.barangay}</option>
+            ))}
+          </select>
+          {/* Lookback window */}
+          <div className="ap-trend-controls" style={{ marginLeft: "auto" }}>
+            {[30, 60, 90].map((d) => (
+              <button
+                key={d}
+                className={`ap-trend-btn ${btDays === d ? "active" : ""}`}
+                onClick={() => setBtDays(d)}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+        {btLoading || (!btBarangay && barangayRanking.length === 0)
+          ? <div style={{ height: 200 }}><Skeleton h={200} /></div>
+          : btData.length === 0
+            ? <p className="ap-empty">No reports found for <strong>{btBarangay}</strong> in the last {btDays} days.</p>
+            : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={btData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="period" tick={{ fill: "#888", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "#aaa" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }} />
+                  <Legend verticalAlign="bottom" iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12, color: "#666" }} />
+                  <Line type="monotone" dataKey="open_count"     name="Open"     stroke="#fb8c00" strokeWidth={2.5} dot={{ r: 3, fill: "#fb8c00",  strokeWidth: 0 }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="resolved_count" name="Resolved" stroke="#43a047" strokeWidth={2.5} dot={{ r: 3, fill: "#43a047",  strokeWidth: 0 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
       </div>
 
       <div className="ap-row-2col">

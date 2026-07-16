@@ -251,6 +251,64 @@ async def get_hotspots(
     return _ok(data)
 
 
+# ── /barangay-trend ─────────────────────────────────────────────────────────
+@router.get("/barangay-trend")
+@limiter.limit("30/minute")
+async def get_barangay_trend(
+    request: Request,
+    barangay: str = Query(..., description="Barangay name to filter by"),
+    days: int = Query(30, ge=7, le=365, description="Lookback window in days"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_require_staff),
+):
+    """
+    Time-series of open vs. resolved report counts for a single barangay.
+
+    Granularity auto-scales: 'day' for <= 60-day windows, 'week' otherwise.
+    Returns [{ period: "YYYY-MM-DD", open_count: int, resolved_count: int }]
+    ordered by period ascending.
+    """
+    cache_key = f"barangay_trend:{barangay.lower().strip()}:{days}"
+    if (c := await _cache_get(cache_key)) is not None:
+        return _ok(c)
+
+    trunc     = "day" if days <= 60 else "week"
+    cutoff    = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    terminal  = [
+        ReportStatus.RESOLVED, ReportStatus.DECLINED, ReportStatus.COMPLETED,
+        ReportStatus.REJECTED, ReportStatus.CANCELLED,
+    ]
+
+    period_col = func.date_trunc(trunc, Report.created_at).label("period")
+    stmt = (
+        select(
+            period_col,
+            func.sum(case((Report.status.notin_(terminal), 1), else_=0)).label("open_count"),
+            func.sum(case((Report.status == ReportStatus.RESOLVED,  1), else_=0)).label("resolved_count"),
+        )
+        .where(Report.barangay.ilike(barangay.strip()))
+        .where(Report.created_at >= cutoff)
+        .group_by(period_col)
+        .order_by(period_col)
+    )
+
+    rows = (await db.execute(stmt)).all()
+    data = [
+        {
+            "period": (
+                str(row.period.date())
+                if hasattr(row.period, "date")
+                else str(row.period)[:10]
+            ),
+            "open_count":     int(row.open_count),
+            "resolved_count": int(row.resolved_count),
+        }
+        for row in rows
+    ]
+    await _cache_set(cache_key, data)
+    return _ok(data)
+
+
 # ── /sla-stats ──────────────────────────────────────────────────────────────
 @router.get("/sla-stats")
 @limiter.limit("30/minute")

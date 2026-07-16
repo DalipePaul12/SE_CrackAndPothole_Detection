@@ -50,6 +50,7 @@ from app.middleware.auth_middleware import (
     check_maintenance_mode,
 )
 from app.middleware.rate_limiter import limiter
+from app.models.admin_settings import AdminSettings
 from app.models.audit_log import AuditLog
 from app.models.cctv import CCTV
 from app.models.comment import Comment
@@ -138,16 +139,74 @@ async def _bulk_upvote_counts(
     return {row.report_id: row.cnt for row in result}
 
 
+# ── SLA helpers ───────────────────────────────────────────────────────────────
+
+_SLA_TERMINAL_STATUSES = {
+    ReportStatus.RESOLVED,
+    ReportStatus.DECLINED,
+    ReportStatus.COMPLETED,
+    ReportStatus.REJECTED,
+    ReportStatus.CANCELLED,
+}
+
+
+def _compute_sla(
+    created_at,
+    report_status: ReportStatus,
+    response_time_hours: int,
+    escalate_after_hours: int,
+) -> tuple[str | None, float | None]:
+    """
+    Return (sla_status, sla_hours_elapsed) for a single report.
+
+    Terminal reports (resolved / declined / completed / rejected / cancelled)
+    return (None, None) — SLA no longer applies.
+    Active reports are classified as 'on_track', 'overdue', or 'escalated'.
+    """
+    if report_status in _SLA_TERMINAL_STATUSES or created_at is None:
+        return None, None
+
+    from datetime import datetime, timezone
+    now = datetime.now(tz=timezone.utc)
+    ca = created_at
+    if ca.tzinfo is None:
+        ca = ca.replace(tzinfo=timezone.utc)
+    elapsed = (now - ca).total_seconds() / 3600.0
+
+    if elapsed >= escalate_after_hours:
+        sla_status = "escalated"
+    elif elapsed >= response_time_hours:
+        sla_status = "overdue"
+    else:
+        sla_status = "on_track"
+
+    return sla_status, round(elapsed, 1)
+
+
+async def _fetch_sla_settings(db: AsyncSession) -> tuple[int, int]:
+    """Return (response_time_hours, escalate_after_hours) from AdminSettings row 1."""
+    row = (
+        await db.execute(select(AdminSettings).where(AdminSettings.id == 1))
+    ).scalar_one_or_none()
+    if row:
+        return row.response_time_hours, row.escalate_after_hours
+    return 24, 72  # safe defaults if row absent
+
+
 async def _build_report_list(
     db: AsyncSession,
     reports: Sequence[Report],
 ) -> list[ReportResponse]:
     report_ids = [r.id for r in reports]
     upvote_map = await _bulk_upvote_counts(db, report_ids)
+    response_time_h, escalate_after_h = await _fetch_sla_settings(db)
     items: list[ReportResponse] = []
     for r in reports:
         item = ReportResponse.model_validate(r)
         item.upvote_count = upvote_map.get(r.id, 0)
+        item.sla_status, item.sla_hours_elapsed = _compute_sla(
+            r.created_at, r.status, response_time_h, escalate_after_h
+        )
         items.append(item)
     return items
 
@@ -322,6 +381,10 @@ async def get_report(
     report = await _fetch_report_or_404(db, report_id)
     response = ReportResponse.model_validate(report)
     response.upvote_count = await report_service.get_upvote_count(db, report.id)
+    response_time_h, escalate_after_h = await _fetch_sla_settings(db)
+    response.sla_status, response.sla_hours_elapsed = _compute_sla(
+        report.created_at, report.status, response_time_h, escalate_after_h
+    )
     return response
 
 

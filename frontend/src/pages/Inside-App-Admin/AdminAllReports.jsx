@@ -778,6 +778,18 @@ export default function AdminAllReports() {
                           <span className={`status-pill ${toClass(r.status ?? "")}`}>
                             {STATUS_LABELS[r.status] ?? r.status ?? "—"}
                           </span>
+                          {r.sla_status === "overdue" && (
+                            <span style={{ display:"inline-block", marginLeft:4, padding:"1px 6px", borderRadius:10, fontSize:"0.68rem", fontWeight:600, background:"#f59e0b", color:"#fff", verticalAlign:"middle" }}>Overdue</span>
+                          )}
+                          {r.sla_status === "escalated" && (
+                            <span style={{ display:"inline-block", marginLeft:4, padding:"1px 6px", borderRadius:10, fontSize:"0.68rem", fontWeight:600, background:"#ef4444", color:"#fff", verticalAlign:"middle" }}>Escalated</span>
+                          )}
+                          {r.requires_admin_review && (
+                            <span
+                              title={r.review_reason ?? "Flagged for manual review"}
+                              style={{ display:"inline-block", marginLeft:4, padding:"1px 6px", borderRadius:10, fontSize:"0.68rem", fontWeight:600, background:"#1565c0", color:"#fff", verticalAlign:"middle", cursor:"help" }}
+                            >Review</span>
+                          )}
                         </td>
 
                         <td className="td-date">

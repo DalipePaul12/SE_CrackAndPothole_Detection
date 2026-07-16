@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.middleware.audit_middleware import AuditMiddleware
+from app.services.cleanup_service import start_cleanup_loop
 from app.middleware.error_handler import (
     integrity_error_handler,
     unhandled_exception_handler,
@@ -77,6 +78,10 @@ async def lifespan(app: FastAPI):
         app.state.models_ready = False
         app.state.models_error = None
         logger.info("AI_ENABLED=False — skipping model preload.")
+
+    # Fire-and-forget data-retention cleanup loop (24 h interval).
+    asyncio.create_task(start_cleanup_loop())
+    logger.info("Data-retention cleanup loop scheduled.")
 
     logger.info("Startup complete — server is accepting connections.")
     yield

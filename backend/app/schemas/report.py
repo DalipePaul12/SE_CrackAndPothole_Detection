@@ -184,6 +184,12 @@ class ReportResponse(AppBaseModel):
 
     media_attachments: List[MediaAttachmentResponse] = []
 
+    # ── SLA (computed server-side, not stored in DB) ──────────────────────────
+    # None for terminal statuses (resolved, declined, completed, rejected, cancelled).
+    # "on_track" | "overdue" | "escalated" for active reports.
+    sla_status:        Optional[str]   = None
+    sla_hours_elapsed: Optional[float] = None
+
     # ── Side-effect warnings (non-fatal, included when a background task fails)
     warnings: Optional[List[str]] = None
 

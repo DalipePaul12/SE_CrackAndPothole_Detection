@@ -20,6 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings, LOW_CONFIDENCE_TRIAGE_THRESHOLDS
 from app.models.enums import DamageType, ReportStatus, SeverityLevel
 from app.models.report import Report
 from app.models.report_upvote import ReportUpvote
@@ -51,6 +52,44 @@ async def create_report(
             except ValueError:
                 pass  # unrecognised enum value — leave as None
 
+    # ── Auto-assign stub ──────────────────────────────────────────────────────
+    # When auto_assign is enabled in AdminSettings, reports would be
+    # automatically routed to a contractor based on a barangay routing table.
+    # That routing table is not yet configured, so this is intentionally a
+    # no-op: the flag is checked and logged, but no assignment is made.
+    if _cfg and getattr(_cfg, "auto_assign", False):
+        pass  # TODO: route report to contractor via barangay routing table
+
+    # ── Confidence-based auto-triage ──────────────────────────────────────────
+    # Per-damage-type thresholds (config.LOW_CONFIDENCE_TRIAGE_THRESHOLDS) gate
+    # whether an accepted detection still needs a human eye.  Purely additive:
+    # an existing True flag / reason from the detection pipeline is preserved.
+    #
+    # Null handling: missing confidence OR missing damage type is treated as
+    # low-confidence — do not silently pass an unverifiable detection.
+    _effective_requires_review = bool(data.requires_admin_review)
+    _effective_review_reason   = data.review_reason
+
+    _conf  = data.ai_confidence
+    _dtype = data.ai_damage_type.value if data.ai_damage_type is not None else None
+
+    if _conf is None or _dtype is None:
+        # Cannot evaluate confidence without both values — flag unconditionally.
+        _effective_requires_review = True
+        if not _effective_review_reason:
+            _effective_review_reason = (
+                "Missing confidence data — flagged for manual review"
+            )
+    else:
+        _thresh = LOW_CONFIDENCE_TRIAGE_THRESHOLDS.get(_dtype, 0.5)
+        if _conf < _thresh:
+            _effective_requires_review = True
+            if not _effective_review_reason:
+                _effective_review_reason = (
+                    f"Low AI detection confidence for {_dtype} "
+                    f"({_conf:.2f} < {_thresh:.2f})"
+                )
+
     report = Report(
         owner_id=owner_id,
         latitude=data.latitude,
@@ -79,8 +118,8 @@ async def create_report(
         capture_metadata=data.capture_metadata,
 
         # ── Admin review flags ──────────────────────────────────────────────
-        requires_admin_review=data.requires_admin_review,
-        review_reason=data.review_reason,
+        requires_admin_review=_effective_requires_review,
+        review_reason=_effective_review_reason,
 
         # ── Legal disclaimer ────────────────────────────────────────────────
         disclaimer_accepted=data.disclaimer_accepted,

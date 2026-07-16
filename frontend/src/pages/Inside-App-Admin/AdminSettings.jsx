@@ -25,6 +25,10 @@ function fromApi(d) {
     timezone:                 d.timezone,
     contactEmail:             d.contact_email,
     defaultSeverity:          d.default_severity,
+    autoAssign:               d.auto_assign,
+    responseTimeHours:        d.response_time_hours,
+    escalateAfterHours:       d.escalate_after_hours,
+    dataRetentionDays:        d.data_retention_days,
     defaultLat:               d.default_lat,
     defaultLng:               d.default_lng,
     defaultZoom:              d.default_zoom,
@@ -50,6 +54,10 @@ function toApi(s) {
     timezone:                  s.timezone,
     contact_email:             s.contactEmail,
     default_severity:          s.defaultSeverity,
+    auto_assign:               s.autoAssign,
+    response_time_hours:       s.responseTimeHours,
+    escalate_after_hours:      s.escalateAfterHours,
+    data_retention_days:       s.dataRetentionDays,
     default_lat:               s.defaultLat,
     default_lng:               s.defaultLng,
     default_zoom:              s.defaultZoom,
@@ -71,6 +79,8 @@ function toApi(s) {
 const DEFAULTS = {
   orgName: "Snap2Fix", municipality: "Panghulo", timezone: "Asia/Manila",
   contactEmail: "admin@snap2fix.gov", defaultSeverity: "medium",
+  autoAssign: true, responseTimeHours: 24, escalateAfterHours: 72,
+  dataRetentionDays: 365,
   defaultLat: 14.5995, defaultLng: 120.9842, defaultZoom: 13,
   emailAlerts: true, pushAlerts: true, digestFrequency: "daily", criticalAlertSound: true,
   require2FA: false, passwordMinLength: 8, sessionTimeout: 60,
@@ -344,6 +354,54 @@ const AdminSettings = () => {
                     Applied automatically when ML detection returns no severity result.
                   </span>
                 </div>
+
+                <div className="form-group">
+                  <label>Response Time (Hours)</label>
+                  <input
+                    className="adm-input"
+                    type="number"
+                    min="1"
+                    max="8760"
+                    value={settings.responseTimeHours}
+                    onChange={(e) => handleChange("responseTimeHours", Number(e.target.value))}
+                    disabled={loading}
+                  />
+                  <span className="field-hint">
+                    Reports open longer than this are marked <strong>Overdue</strong>.
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <label>Escalation Threshold (Hours)</label>
+                  <input
+                    className="adm-input"
+                    type="number"
+                    min="1"
+                    max="8760"
+                    value={settings.escalateAfterHours}
+                    onChange={(e) => handleChange("escalateAfterHours", Number(e.target.value))}
+                    disabled={loading}
+                  />
+                  <span className="field-hint">
+                    Reports open longer than this are marked <strong>Escalated</strong>.
+                  </span>
+                </div>
+
+                <div className="form-group full-width">
+                  <label className="toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={settings.autoAssign}
+                      onChange={(e) => handleChange("autoAssign", e.target.checked)}
+                      disabled={loading}
+                    />
+                    <span className="toggle-slider"></span>
+                    Auto-Assign Reports to Contractors
+                  </label>
+                  <span className="field-hint" style={{ marginTop: 4, display: "block" }}>
+                    Auto-assignment requires a barangay routing table — not yet configured.
+                  </span>
+                </div>
               </div>
 
               <div className="danger-zone">
@@ -511,6 +569,22 @@ const AdminSettings = () => {
                     disabled={loading}
                   />
                 </div>
+                <div className="form-group">
+                  <label>Data Retention (Days)</label>
+                  <input
+                    className="adm-input"
+                    type="number"
+                    min="1"
+                    max="3650"
+                    value={settings.dataRetentionDays}
+                    onChange={(e) => handleChange("dataRetentionDays", Number(e.target.value))}
+                    disabled={loading}
+                  />
+                  <span className="field-hint">
+                    Resolved reports older than this are automatically deleted (runs every 24 h).
+                  </span>
+                </div>
+
                 <div className="form-group full-width">
                   <label className="toggle-label">
                     <input
