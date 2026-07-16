@@ -17,7 +17,7 @@ from app.middleware.auth_middleware import get_current_user, require_admin
 from app.middleware.rate_limiter import limiter
 from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.user import PasswordChangeRequest, UserPublic, UserResponse, UserUpdate
+from app.schemas.user import DeleteAccountRequest, PasswordChangeRequest, UserPublic, UserResponse, UserUpdate
 from app.services import auth_service, user_service
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -68,11 +68,19 @@ async def change_password(
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
 async def request_account_deletion(
+    request: Request,
+    data: DeleteAccountRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """RA 10173 — marks account for deletion. PII anonymised by background job."""
+    if not auth_service.verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect password. Please try again.",
+        )
     await user_service.request_deletion(db, current_user)
 
 

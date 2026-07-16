@@ -194,7 +194,9 @@ export const api = {
   },
   put:    (url, body)         => request(url, { method: "PUT",   headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   patch:  (url, body)         => request(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
-  delete: (url)               => request(url, { method: "DELETE" }),
+  delete: (url, body)         => request(url, body
+    ? { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : { method: "DELETE" }),
 
   /**
    * download() — GET a binary response (blob) with full auth-refresh support.

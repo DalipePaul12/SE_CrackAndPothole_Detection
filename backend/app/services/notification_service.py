@@ -134,16 +134,44 @@ async def notify_background(
             )
             db.add(notif)
             await db.commit()
+            await db.refresh(notif)  # populate id + created_at for WS payload
             logger.info("Background notification created for user_id=%d", user_id)
 
-            # ── Respect email_alerts admin setting ────────────────────────────
+            # ── Respect push_alerts / email_alerts admin settings ─────────────
+            # Fail open: if AdminSettings is unavailable, always deliver.
             try:
                 from sqlalchemy import select as _sel
                 from app.models.admin_settings import AdminSettings as _AS
                 _cfg      = (await db.execute(_sel(_AS).where(_AS.id == 1))).scalar_one_or_none()
+                _push_on  = _cfg.push_alerts  if _cfg is not None else True
                 _email_on = _cfg.email_alerts if _cfg is not None else True
             except Exception:
-                _email_on = True  # fail open
+                _push_on = _email_on = True  # fail open
+
+            # ── WebSocket push (mirrors notify() lines 62-83) ─────────────────
+            if _push_on:
+                try:
+                    from app.routers.ws import manager
+
+                    await manager.send_to_user(
+                        user_id=user_id,
+                        data={
+                            "event":      "notification",
+                            "id":         notif.id,
+                            "title":      notif.title,
+                            "message":    notif.message,
+                            "type":       notif.type.value,
+                            "report_id":  notif.report_id,
+                            "is_read":    notif.is_read,
+                            "created_at": notif.created_at.isoformat(),
+                        },
+                    )
+                    logger.info("Background WS notification sent to user_id=%d", user_id)
+                except Exception:
+                    logger.exception(
+                        "Background WS push failed for user_id=%d (notification still saved)",
+                        user_id,
+                    )
 
             if _email_on:
                 # ── Send email notification ─────────────────────────────────

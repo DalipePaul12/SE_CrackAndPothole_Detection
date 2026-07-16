@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import "./Settings.css";
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
@@ -14,18 +15,13 @@ import {
   Moon,
   Sun,
   Monitor,
-  Globe,
   Trash2,
   LogOut,
-  Download,
-  Smartphone,
-  Mail,
   Volume2,
   VolumeX,
   Check,
   X,
   Lock,
-  KeyRound,
   UserCog,
   AlertTriangle,
   Info,
@@ -95,29 +91,40 @@ function Settings() {
   };
   const removeToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
-  const [activeTheme, setActiveTheme] = useState(theme || "dark");
-  const [language, setLanguage] = useState("en");
+  // Persist the 3-way preference (light/dark/auto) independently of the
+  // resolved theme that ThemeContext manages.
+  const [activeTheme, setActiveTheme] = useState(
+    () => localStorage.getItem("themePreference") || theme || "light"
+  );
 
-  const [notifs, setNotifs] = useState({
-    push: false,
-    email: false,
-    system: true,
-    sound: true,
-    marketing: false,
+  // Sound preference — stored in localStorage, no backend needed.
+  // Key "notificationSoundEnabled" is read by the notification system
+  // when playing sounds on incoming WS events.
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const stored = localStorage.getItem("notificationSoundEnabled");
+    return stored === null ? true : stored === "true";
   });
 
-  const toggleNotif = (key) => {
-    setNotifs((prev) => ({ ...prev, [key]: !prev[key] }));
-    showToast(`${key.replace(/_/g, " ")} notifications ${notifs[key] ? "disabled" : "enabled"}.`, "info");
+  const toggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem("notificationSoundEnabled", String(next));
+      showToast(`Notification sound ${next ? "enabled" : "disabled"}.`, "info");
+      return next;
+    });
   };
+
+  // ── Delete-account confirmation state ──────────────────────────────────────
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword]   = useState("");
+  const [deleteShowPw, setDeleteShowPw]       = useState(false);
+  const [deleteError, setDeleteError]         = useState("");
+  const [deleteLoading, setDeleteLoading]     = useState(false);
 
   const [pwData, setPwData] = useState({ current: "", new: "", confirm: "" });
   const [showPw, setShowPw] = useState({ current: false, new: false, confirm: false });
   const [pwError, setPwError] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
-
-  const [twoFactor, setTwoFactor] = useState(false);
-  const [profileVisible, setProfileVisible] = useState(true);
 
   const validatePassword = () => {
     if (!pwData.current) return "Enter your current password.";
@@ -145,31 +152,38 @@ function Settings() {
     }
   };
 
-  const handleExportData = () => {
-    showToast("Your data export request has been queued. Check your email.", "info");
-  };
-
   const handleDeleteAccount = () => {
-    setConfirmAction("delete");
-    setShowConfirm(true);
+    setDeletePassword("");
+    setDeleteError("");
+    setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
-    const res = await deleteMyAccount();
-    if (!res.success) {
-      showToast(res.error || "Failed to delete account. Please try again.", "error");
-      setShowConfirm(false);
-      setConfirmAction(null);
+    if (!deletePassword) {
+      setDeleteError("Please enter your password to confirm deletion.");
       return;
     }
-    setShowConfirm(false);
-    setConfirmAction(null);
+    setDeleteLoading(true);
+    setDeleteError("");
+    const res = await deleteMyAccount(deletePassword);
+    if (!res.success) {
+      setDeleteError(res.error || "Incorrect password. Please try again.");
+      setDeleteLoading(false);
+      return;
+    }
+    setShowDeleteModal(false);
     await logout();
     navigate("/", { replace: true });
   };
 
   useEffect(() => {
-    if (activeTheme !== theme) setTheme(activeTheme);
+    localStorage.setItem("themePreference", activeTheme);
+    if (activeTheme === "auto") {
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setTheme(isDark ? "dark" : "light");
+    } else {
+      setTheme(activeTheme);
+    }
   }, [activeTheme]);
 
   return (
@@ -182,6 +196,7 @@ function Settings() {
           <p>Manage your preferences, security, and account details.</p>
         </header>
 
+        {/* ── Appearance ─────────────────────────────────────────── */}
         <section className="st-card">
           <div className="st-card__head">
             <Monitor size={18} />
@@ -197,8 +212,8 @@ function Settings() {
               <div className="st-seg">
                 {[
                   { key: "light", label: "Light", icon: <Sun size={14} /> },
-                  { key: "dark", label: "Dark", icon: <Moon size={14} /> },
-                  { key: "auto", label: "Auto", icon: <Monitor size={14} /> },
+                  { key: "dark",  label: "Dark",  icon: <Moon size={14} /> },
+                  { key: "auto",  label: "Auto",  icon: <Monitor size={14} /> },
                 ].map((t) => (
                   <button
                     key={t.key}
@@ -212,28 +227,10 @@ function Settings() {
                 ))}
               </div>
             </SettingRow>
-
-            <SettingRow
-              icon={<Globe size={18} />}
-              title="Language"
-              desc="Select your preferred language."
-            >
-              <select
-                className="st-select"
-                value={language}
-                onChange={(e) => {
-                  setLanguage(e.target.value);
-                  showToast("Language preference saved.", "success");
-                }}
-              >
-                <option value="en">English</option>
-                <option value="tl">Filipino</option>
-                <option value="es">Spanish</option>
-              </select>
-            </SettingRow>
           </div>
         </section>
 
+        {/* ── Notifications ───────────────────────────────────────── */}
         <section className="st-card">
           <div className="st-card__head">
             <Bell size={18} />
@@ -241,85 +238,27 @@ function Settings() {
           </div>
           <div className="st-card__body">
             <SettingRow
-              icon={<Smartphone size={18} />}
-              title="Push Notifications"
-              desc="Instant alerts on your device."
-            >
-              <Toggle checked={notifs.push} onChange={() => toggleNotif("push")} ariaLabel="Push notifications" />
-            </SettingRow>
-
-            <SettingRow
-              icon={<Mail size={18} />}
-              title="Email Summaries"
-              desc="Daily or weekly digest emails."
-            >
-              <Toggle checked={notifs.email} onChange={() => toggleNotif("email")} ariaLabel="Email summaries" />
-            </SettingRow>
-
-            <SettingRow
-              icon={<Bell size={18} />}
-              title="System Alerts"
-              desc="Important account & system changes."
-            >
-              <Toggle checked={notifs.system} onChange={() => toggleNotif("system")} ariaLabel="System alerts" />
-            </SettingRow>
-
-            <SettingRow
-              icon={notifs.sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              icon={soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               title="Notification Sound"
               desc="Play a sound when notifications arrive."
             >
-              <Toggle checked={notifs.sound} onChange={() => toggleNotif("sound")} ariaLabel="Notification sound" />
-            </SettingRow>
-
-            <SettingRow
-              icon={<Mail size={18} />}
-              title="Marketing & Updates"
-              desc="New features, tips, and community news."
-            >
-              <Toggle checked={notifs.marketing} onChange={() => toggleNotif("marketing")} ariaLabel="Marketing emails" />
+              <Toggle
+                checked={soundEnabled}
+                onChange={toggleSound}
+                ariaLabel="Notification sound"
+              />
             </SettingRow>
           </div>
         </section>
 
+        {/* ── Security ────────────────────────────────────────────── */}
         <section className="st-card">
           <div className="st-card__head">
             <Shield size={18} />
-            <h2>Privacy & Security</h2>
+            <h2>Security</h2>
           </div>
 
           <div className="st-card__body">
-            <SettingRow
-              icon={<Eye size={18} />}
-              title="Profile Visibility"
-              desc="Allow others to see your report history."
-            >
-              <Toggle
-                checked={profileVisible}
-                onChange={() => {
-                  setProfileVisible((v) => !v);
-                  showToast(`Profile is now ${profileVisible ? "private" : "public"}.`, "info");
-                }}
-                ariaLabel="Profile visibility"
-              />
-            </SettingRow>
-
-            <SettingRow
-              icon={<KeyRound size={18} />}
-              title="Two-Factor Authentication"
-              desc="Add an extra layer of security."
-            >
-              <button
-                className="st-btn st-btn--small st-btn--outline"
-                onClick={() => {
-                  setTwoFactor((v) => !v);
-                  showToast(twoFactor ? "2FA disabled." : "2FA setup started — check your email.", "info");
-                }}
-              >
-                {twoFactor ? "Disable" : "Enable"}
-              </button>
-            </SettingRow>
-
             <div className="st-password-block">
               <div className="st-password-block__title">
                 <Lock size={16} />
@@ -419,6 +358,7 @@ function Settings() {
           </div>
         </section>
 
+        {/* ── Data & Account ──────────────────────────────────────── */}
         <section className="st-card">
           <div className="st-card__head">
             <UserCog size={18} />
@@ -427,19 +367,9 @@ function Settings() {
 
           <div className="st-card__body">
             <SettingRow
-              icon={<Download size={18} />}
-              title="Export Your Data"
-              desc="Download a copy of your reports and profile data."
-            >
-              <button className="st-btn st-btn--small st-btn--outline" onClick={handleExportData}>
-                Export
-              </button>
-            </SettingRow>
-
-            <SettingRow
               icon={<LogOut size={18} />}
               title="Log Out"
-              desc="Sign out from all devices."
+              desc="Sign out of this session."
             >
               <button
                 className="st-btn st-btn--small st-btn--outline"
@@ -465,6 +395,7 @@ function Settings() {
           </div>
         </section>
 
+        {/* ── About ───────────────────────────────────────────────── */}
         <section className="st-card st-card--center">
           <div className="st-about">
             <img src="/snap.jpg" alt="Snap2Fix Logo" className="st-about__logo" />
@@ -487,36 +418,21 @@ function Settings() {
         </section>
       </div>
 
+      {/* ── Password / Logout confirm modal ──────────────────────── */}
       {showConfirm && (
         <ConfirmChangesModal
-          title={
-            confirmAction === "password"
-              ? "Update Password?"
-              : confirmAction === "delete"
-              ? "Delete Account?"
-              : "Log Out?"
-          }
+          title={confirmAction === "password" ? "Update Password?" : "Log Out?"}
           message={
             confirmAction === "password"
               ? "Your new password will take effect immediately on all devices."
-              : confirmAction === "delete"
-              ? "This action is irreversible. All your reports and data will be permanently removed."
-              : "You will be signed out from this session."
+              : "You will be signed out of this session."
           }
-          confirmText={
-            confirmAction === "password"
-              ? "Update"
-              : confirmAction === "delete"
-              ? "Delete"
-              : "Log Out"
-          }
-          variant={confirmAction === "delete" ? "danger" : "primary"}
+          confirmText={confirmAction === "password" ? "Update" : "Log Out"}
+          variant="primary"
           onCancel={() => { setShowConfirm(false); setConfirmAction(null); }}
           onConfirm={
             confirmAction === "password"
               ? handleChangePassword
-              : confirmAction === "delete"
-              ? confirmDelete
               : async () => {
                   setShowConfirm(false);
                   setConfirmAction(null);
@@ -525,6 +441,71 @@ function Settings() {
                 }
           }
         />
+      )}
+
+      {/* ── Delete account modal (password re-entry) ──────────────── */}
+      {showDeleteModal && createPortal(
+        <div
+          className="st-del-overlay"
+          onClick={() => { if (!deleteLoading) { setShowDeleteModal(false); setDeletePassword(""); setDeleteError(""); } }}
+        >
+          <div className="st-del-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="st-del-modal__icon" aria-hidden="true">
+              <Trash2 size={28} />
+            </div>
+            <h3 className="st-del-modal__title">Delete Account?</h3>
+            <p className="st-del-modal__msg">
+              This is permanent and cannot be undone. All your reports and data will be removed.
+              Enter your password to confirm.
+            </p>
+
+            {deleteError && (
+              <div className="st-inline-error">
+                <AlertTriangle size={14} />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <div className="st-field">
+              <label>Password</label>
+              <div className="st-input-wrap">
+                <input
+                  type={deleteShowPw ? "text" : "password"}
+                  value={deletePassword}
+                  onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(""); }}
+                  placeholder="Enter your current password"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter" && !deleteLoading) confirmDelete(); }}
+                />
+                <button
+                  type="button"
+                  className="st-input__eye"
+                  onClick={() => setDeleteShowPw((s) => !s)}
+                >
+                  {deleteShowPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="st-del-modal__actions">
+              <button
+                className="st-btn st-btn--outline"
+                onClick={() => { setShowDeleteModal(false); setDeletePassword(""); setDeleteError(""); }}
+                disabled={deleteLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className="st-btn st-btn--danger"
+                onClick={confirmDelete}
+                disabled={deleteLoading || !deletePassword}
+              >
+                {deleteLoading ? "Deleting…" : "Delete Account"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </>
   );

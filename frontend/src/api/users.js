@@ -33,8 +33,8 @@ export const changePassword = async (current_password, new_password) => {
   };
 };
 
-export const deleteMyAccount = async () => {
-  const res = await api.delete("/users/me");
+export const deleteMyAccount = async (current_password) => {
+  const res = await api.delete("/users/me", { current_password });
 
   return {
     success: res?.success ?? false,

@@ -76,6 +76,10 @@ class PasswordChangeRequest(AppBaseModel):
         return validate_password(v)
 
 
+class DeleteAccountRequest(AppBaseModel):
+    current_password: str
+
+
 # ── Response schemas ───────────────────────────────────────────────────────────
 
 class UserPublic(AppBaseModel):

@@ -278,31 +278,6 @@ html, body { margin: 0; padding: 0; background: var(--st-bg); }
   color: var(--st-primary);
 }
 
-/* ── Select ──────────────────────────────────── */
-.st-select {
-  padding: 0.35rem 0.7rem;
-  border: 1.5px solid var(--st-border);
-  border-radius: var(--st-radius-pill);
-  font-size: 0.74rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--st-text);
-  background: var(--st-bg);
-  cursor: pointer;
-  outline: none;
-  transition: var(--st-transition);
-  appearance: none;
-  padding-right: 1.8rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2352735f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.55rem center;
-}
-
-body.dark .st-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2395c9a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-}
-
-.st-select:focus { border-color: var(--st-primary); }
 
 /* ── Toggle Switch ───────────────────────────── */
 .st-toggle {
@@ -502,6 +477,61 @@ body.dark .st-select {
 @keyframes toastOut {
   from { transform: translateX(0); opacity: 1; }
   to   { transform: translateX(110%); opacity: 0; }
+}
+
+/* ── Delete-account modal ────────────────────── */
+.st-del-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.st-del-modal {
+  background: var(--st-card);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-lg);
+  padding: 1.75rem 1.5rem 1.5rem;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: var(--st-shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.st-del-modal__icon {
+  color: var(--st-danger);
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.25rem;
+}
+
+.st-del-modal__title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--st-text);
+  margin: 0;
+  text-align: center;
+}
+
+.st-del-modal__msg {
+  font-size: 0.8rem;
+  color: var(--st-muted);
+  line-height: 1.55;
+  margin: 0;
+  text-align: center;
+}
+
+.st-del-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
 }
 
 /* ── About / App Info ────────────────────────── */
