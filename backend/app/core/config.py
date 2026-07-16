@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
 
-    DATABASE_URL: str
+    DATABASE_URL: str = ""
     SUPABASE_DATABASE_URL: str = ""
 
     SUPABASE_URL: str = ""
@@ -68,10 +68,10 @@ class Settings(BaseSettings):
     MAIL_PORT: int = 465
     RESEND_API_KEY: Optional[str] = None
 
-    MAX_IMAGE_SIZE_MB: int = 50
-    MAX_VIDEO_SIZE_MB: int = 150
+    MAX_IMAGE_SIZE_MB: int = 45
+    MAX_VIDEO_SIZE_MB: int = 45
     ALLOWED_IMAGE_TYPES: List[str] = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
-    ALLOWED_VIDEO_TYPES: List[str] = ["video/mp4", "video/quicktime"]
+    ALLOWED_VIDEO_TYPES: List[str] = ["video/mp4", "video/quicktime", "video/webm"]
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
 
     BACKEND_CORS_ORIGINS: str = ""

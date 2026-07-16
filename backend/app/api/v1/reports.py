@@ -356,6 +356,46 @@ async def get_my_reports(
     return ReportListResponse(total=total, page=page, page_size=page_size, results=results)
 
 
+@router.get("/mine/stats")
+@limiter.limit("60/minute")
+async def get_my_report_stats(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns per-status counts for the current user's reports via a single
+    aggregate query. Used by the MySubmissions stat cards so they reflect
+    the true total across all pages, not just the current page.
+    """
+    row = (await db.execute(
+        select(
+            func.count().label("total"),
+            func.count(1).filter(Report.status == ReportStatus.PENDING.value).label("pending"),
+            func.count(1).filter(Report.status == ReportStatus.VERIFIED.value).label("verified"),
+            func.count(1).filter(Report.status == ReportStatus.IN_PROGRESS.value).label("in_progress"),
+            func.count(1).filter(Report.status == ReportStatus.RESOLVED.value).label("resolved"),
+            func.count(1).filter(Report.status == ReportStatus.DECLINED.value).label("declined"),
+            func.count(1).filter(Report.ai_severity == SeverityLevel.critical.value).label("critical"),
+        ).where(Report.owner_id == current_user.id)
+    )).one()
+
+    total    = row.total    or 0
+    resolved = row.resolved or 0
+    rep_score = round((resolved / total) * 100) if total > 0 else 0
+
+    return {
+        "total":       total,
+        "pending":     row.pending     or 0,
+        "verified":    row.verified    or 0,
+        "in_progress": row.in_progress or 0,
+        "resolved":    resolved,
+        "declined":    row.declined    or 0,
+        "critical":    row.critical    or 0,
+        "rep_score":   rep_score,
+    }
+
+
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(
     comment_id: int,

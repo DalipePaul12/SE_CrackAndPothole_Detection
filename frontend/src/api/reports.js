@@ -247,6 +247,11 @@ export async function generateReportSummary(reportId) {
   return unwrap(res);
 }
 
+export async function getMyReportStats() {
+  const res = await api.get("/reports/mine/stats");
+  return unwrap(res);
+}
+
 /**
  * GET /reports/{reportId}/project
  * Returns the project associated with this report.

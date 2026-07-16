@@ -6,6 +6,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useReports } from "../../hooks/useReports";
 import { useReportSummary } from "../../hooks/useReportSummary";
+import { useReportStats } from "../../hooks/useReportStats";
 import { updateReport } from "../../api/reports";
 import { normalizeStatus } from "../../utils/normalizeStatus";
 import {
@@ -1182,14 +1183,8 @@ function MySubmissions() {
 
   const hasActiveFilters = typeFilter !== "All" || sevFilter !== "All" || statusFilter !== "All" || search.trim();
 
-  const stats = useMemo(() => ({
-    total:      reports.length,
-    pending:    reports.filter((r) => normalizeStatus(r.status) === "PENDING").length,
-    verified:   reports.filter((r) => normalizeStatus(r.status) === "VERIFIED").length,
-    inProgress: reports.filter((r) => normalizeStatus(r.status) === "IN_PROGRESS").length,
-    resolved:   reports.filter((r) => normalizeStatus(r.status) === "RESOLVED").length,
-    declined:   reports.filter((r) => normalizeStatus(r.status) === "DECLINED").length,
-  }), [reports]);
+  // Remote aggregate stats — independent of pagination, fetched once on mount.
+  const { stats: remoteStats, loading: statsLoading } = useReportStats();
 
   // Called after AISummaryCard successfully generates a summary. We don't
   // have the summary text itself here (it lives in the hook's local state),
@@ -1240,19 +1235,27 @@ function MySubmissions() {
 
             <div className="sub-mini-stats">
               <div className="sub-mini-stat stat-total">
-                <span className="sub-mini-stat-count">{stats.total}</span>
+                <span className="sub-mini-stat-count">
+                  {statsLoading ? "—" : (remoteStats?.total ?? "—")}
+                </span>
                 <span className="sub-mini-stat-label">Total Posts</span>
               </div>
               <div className="sub-mini-stat stat-resolved">
-                <span className="sub-mini-stat-count">{stats.resolved}</span>
+                <span className="sub-mini-stat-count">
+                  {statsLoading ? "—" : (remoteStats?.resolved ?? "—")}
+                </span>
                 <span className="sub-mini-stat-label">Resolved</span>
               </div>
               <div className="sub-mini-stat stat-progress">
-                <span className="sub-mini-stat-count">{stats.inProgress}</span>
+                <span className="sub-mini-stat-count">
+                  {statsLoading ? "—" : (remoteStats?.in_progress ?? "—")}
+                </span>
                 <span className="sub-mini-stat-label">In Progress</span>
               </div>
               <div className="sub-mini-stat stat-score">
-                <span className="sub-mini-stat-count">{stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0}%</span>
+                <span className="sub-mini-stat-count">
+                  {statsLoading ? "—" : `${remoteStats?.rep_score ?? 0}%`}
+                </span>
                 <span className="sub-mini-stat-label">Rep Score</span>
               </div>
             </div>

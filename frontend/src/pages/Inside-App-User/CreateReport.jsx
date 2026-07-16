@@ -46,6 +46,7 @@ import {
   DEFAULT_CITY,
   DEFAULT_BARANGAY,
 } from "../../utils/geolocationUtils";
+import { readExifGps } from "../../utils/exifUtils";
 
 // ─── Constants (UNCHANGED) ────────────────────────────────────────────────────
 const DAMAGE_TYPE_BACKEND     = { POTHOLE: "pothole", CRACK: "crack" };
@@ -490,6 +491,7 @@ function CreateReport({ onClose }) {
   const [detectionNote,   setDetectionNote]   = useState(null);
 
   const [coords,          setCoords]          = useState(null);
+  const [locationSource,  setLocationSource]  = useState(null); // 'exif' | null
   const [city,            setCity]            = useState(DEFAULT_CITY);
   const [barangay,        setBarangay]        = useState("");
   const [streetName,      setStreetName]      = useState("");
@@ -985,6 +987,7 @@ if (ai_validation && typeof ai_validation === "object") {
       async ({ coords: c }) => {
         const lat = c.latitude, lng = c.longitude;
         setCoords({ lat, lng });
+        setLocationSource(null); // live GPS wins — clear any EXIF flag
         try {
           const res  = await fetch(NOMINATIM_URL(lat, lng));
           const data = await res.json();
@@ -1026,8 +1029,37 @@ if (ai_validation && typeof ai_validation === "object") {
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setFormError("");
+
+    // ── EXIF GPS fallback (gallery uploads only) ──────────────────────────
+    // If browser GPS already set coords, skip entirely — live GPS wins.
+    // If coords is still null, attempt to read GPS tags from the image EXIF.
+    if (!coords) {
+      const gps = await readExifGps(f);
+      if (gps) {
+        setCoords({ lat: gps.lat, lng: gps.lng });
+        setLocationSource("exif");
+        try {
+          const res  = await fetch(NOMINATIM_URL(gps.lat, gps.lng));
+          const data = await res.json();
+          const addr = data.address || {};
+          setCity(addr.city || addr.town || addr.municipality || DEFAULT_CITY);
+          setBarangay(detectBarangay(gps.lat, gps.lng, addr));
+          setStreetName(
+            [addr.road || addr.street || addr.pedestrian || "", addr.house_number]
+              .filter(Boolean).join(" ").trim() ||
+            `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}`
+          );
+        } catch {
+          setCity(DEFAULT_CITY);
+          setBarangay(detectBarangay(gps.lat, gps.lng));
+          setStreetName(`${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}`);
+        }
+      }
+      // If no GPS found, leave coords null — blocked-submission path is unchanged.
+    }
+
     await runFullAnalysis(f);
-  }, [runFullAnalysis]);
+  }, [coords, runFullAnalysis]);
 
   const clearMedia = useCallback((e) => {
     e?.stopPropagation();
@@ -1056,7 +1088,7 @@ if (ai_validation && typeof ai_validation === "object") {
         { setFormError("No damage detected. Please upload a clear photo/video of road damage."); return; }
     }
     if (!barangay)    { setFormError("Please select a Barangay."); return; }
-    if (!coords)      { setFormError("GPS coordinates required. Please allow location access."); return; }
+    if (!coords)      { setFormError("GPS coordinates required. Please allow location access, or upload a geotagged photo (taken with location enabled on your phone)."); return; }
     if (!disclaimerAccepted) { setFormError("Please accept the legal disclaimer to proceed."); return; }
     setFormError("");
     setShowSubmitModal(true);
@@ -1683,6 +1715,29 @@ const showMask = analysisComplete &&
                 {coords ? <FaMapMarkerAlt /> : <FaSpinner className="spin-icon" />}
               </div>
             </div>
+            {locationSource === "exif" && (
+              <div className="exif-location-banner" role="status" style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                marginTop: "6px", padding: "8px 12px",
+                background: "rgba(59,130,246,0.10)", border: "1px solid rgba(59,130,246,0.35)",
+                borderRadius: "8px", color: "#1d4ed8", fontSize: "0.78rem", lineHeight: 1.4,
+              }}>
+                <FaExclamationCircle style={{ flexShrink: 0, color: "#2563eb" }} aria-hidden="true" />
+                <span style={{ flex: 1 }}>Location from photo — please confirm this is where the damage is.</span>
+                <button
+                  type="button"
+                  onClick={() => { setLocationSource(null); fetchLocation(); }}
+                  disabled={locationLoading}
+                  style={{
+                    flexShrink: 0, background: "none", border: "1px solid #3b82f6",
+                    borderRadius: "6px", color: "#1d4ed8", fontSize: "0.75rem",
+                    padding: "3px 8px", cursor: "pointer", whiteSpace: "nowrap",
+                  }}
+                >
+                  Use live GPS
+                </button>
+              </div>
+            )}
             <div className="snap-form-row" style={{ marginTop: 6 }}>
               <div className="snap-form-group half">
                 <label htmlFor="city-input">CITY</label>
