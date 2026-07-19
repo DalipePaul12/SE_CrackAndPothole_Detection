@@ -14,6 +14,12 @@ class AuditLog(Base):
         nullable=True, index=True
     )
 
+    # Role of the acting user AT THE TIME of the action.
+    # Stored here rather than derived by joining users.role because roles can
+    # change after the fact — a user promoted to superadmin would otherwise
+    # appear to have always been a superadmin in historical audit queries.
+    performed_by_role = Column(String(32), nullable=True)
+
     # Action performed — e.g. USER_LOGIN | REPORT_CREATED | STATUS_CHANGED
     action = Column(String, nullable=False, index=True)
 

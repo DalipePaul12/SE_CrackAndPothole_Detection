@@ -85,6 +85,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 async with db.begin():
                     db.add(AuditLog(
                         user_id=user_id,
+                        performed_by_role=user.role.value if user else None,
                         action=action,
                         target_resource=resource,
                         target_id=target_id,

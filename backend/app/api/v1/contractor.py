@@ -140,7 +140,7 @@ async def _notify_admin(
             )
     else:
         result = await db.execute(
-            select(User).where(User.role == UserRole.admin)
+            select(User).where(User.role.in_([UserRole.admin, UserRole.superadmin]))
         )
         admins = result.scalars().all()
         for admin in admins:

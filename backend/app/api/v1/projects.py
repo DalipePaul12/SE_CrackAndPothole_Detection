@@ -63,8 +63,8 @@ async def create_project(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Admin: Create a repair project linked to a report."""
-    if current_user.role != UserRole.admin:
+    """Admin/superadmin: Create a repair project linked to a report."""
+    if current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     result = await db.execute(select(Report).where(Report.id == data.report_id))
@@ -116,7 +116,7 @@ async def update_project_status(
     current_user: User = Depends(get_current_user),
 ):
     """Update project progress and status."""
-    if current_user.role not in (UserRole.admin, UserRole.contractor):
+    if current_user.role not in (UserRole.admin, UserRole.superadmin, UserRole.contractor):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     project = await _get_project_or_404(db, project_id)
@@ -375,7 +375,7 @@ async def delete_project(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role != UserRole.admin:
+    if current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     project = await _get_project_or_404(db, project_id)

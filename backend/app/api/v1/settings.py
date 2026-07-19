@@ -144,6 +144,7 @@ async def reset_report_statuses(
     )
     db.add(AuditLog(
         user_id=current_user.id,
+        performed_by_role=current_user.role.value,
         action="BULK_RESET_REPORT_STATUSES",
         target_resource="reports",
         target_id=None,

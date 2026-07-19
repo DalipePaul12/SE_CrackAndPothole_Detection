@@ -406,7 +406,7 @@ async def delete_comment(
     comment = result.scalar_one_or_none()
     if not comment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found.")
-    if comment.user_id != current_user.id and current_user.role != UserRole.admin:
+    if comment.user_id != current_user.id and current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized.")
     await db.delete(comment)
     await db.commit()
@@ -528,6 +528,7 @@ async def update_report(
         # ── Audit log: citizen self-edit ──────────────────────────────────────
         db.add(AuditLog(
             user_id=current_user.id,
+            performed_by_role=current_user.role.value,
             action="REPORT_OWNER_EDITED",
             target_resource="reports",
             target_id=report_id,
@@ -698,6 +699,7 @@ async def delete_report(
         # ── Audit log: citizen self-withdraw ──────────────────────────────────
         db.add(AuditLog(
             user_id=current_user.id,
+            performed_by_role=current_user.role.value,
             action="REPORT_OWNER_WITHDRAWN",
             target_resource="reports",
             target_id=report_id,

@@ -10,6 +10,7 @@ PATCH  /users/{public_id}/role  — admin: change user role
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -17,7 +18,7 @@ from app.middleware.auth_middleware import get_current_user, require_admin
 from app.middleware.rate_limiter import limiter
 from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.user import DeleteAccountRequest, PasswordChangeRequest, UserPublic, UserResponse, UserUpdate
+from app.schemas.user import PasswordChangeRequest, UserPublic, UserResponse, UserUpdate
 from app.services import auth_service, user_service
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -68,19 +69,11 @@ async def change_password(
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
-@limiter.limit("5/minute")
 async def request_account_deletion(
-    request: Request,
-    data: DeleteAccountRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """RA 10173 — marks account for deletion. PII anonymised by background job."""
-    if not auth_service.verify_password(data.current_password, current_user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect password. Please try again.",
-        )
     await user_service.request_deletion(db, current_user)
 
 
@@ -110,12 +103,47 @@ async def change_user_role(
     public_id: UUID,
     role: UserRole,
     db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ):
-    """Admin only — change a user's role."""
+    """Admin/superadmin — change a user's role.
+
+    Guards:
+    • Self-modification is never allowed (prevents accidental lockout).
+    • Only a superadmin may assign the superadmin role.
+    • The last active superadmin cannot be demoted.
+    """
+    # Guard: no self-role changes (applies to both admin and superadmin).
+    if current_user.public_id == public_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot modify your own role.",
+        )
+
+    # Guard: only superadmin may grant the superadmin role.
+    if role == UserRole.superadmin and current_user.role != UserRole.superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only a super admin can assign the super admin role.",
+        )
+
     user = await user_service.get_by_public_id(db, public_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    # Guard: prevent demoting the last active superadmin.
+    if user.role == UserRole.superadmin and role != UserRole.superadmin:
+        count_result = await db.execute(
+            select(func.count()).select_from(User).where(
+                User.role == UserRole.superadmin,
+                User.is_active == True,  # noqa: E712
+            )
+        )
+        if (count_result.scalar() or 0) <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot demote the last remaining super admin.",
+            )
+
     user.role = role
     await db.commit()
     await db.refresh(user)
