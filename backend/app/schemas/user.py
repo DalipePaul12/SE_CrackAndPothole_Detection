@@ -114,3 +114,22 @@ class UserResponse(AppBaseModel):
     created_at: datetime
     updated_at: datetime
     last_login_at: Optional[datetime] = None
+
+
+class AdminUserResponse(AppBaseModel):
+    """Trimmed user record returned to admin/superadmin for the user list."""
+    public_id: UUID
+    email: EmailStr
+    full_name: str
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+    last_login_at: Optional[datetime] = None
+    contact_number: Optional[str] = None
+
+
+class AdminUserListResponse(AppBaseModel):
+    total: int
+    page: int
+    page_size: int
+    results: list[AdminUserResponse]

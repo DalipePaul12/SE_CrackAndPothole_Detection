@@ -2,10 +2,11 @@ import "./AdminSidebar.css";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useDarkMode } from "../hooks/useDarkMode";
+import { useAuthContext } from "../pages/Contexts/AuthContext.jsx";
 
 import {
   LayoutDashboard, BookOpen, Map, ClipboardList, BookText, GitBranch,
-  Sun, Moon, ChevronLeft, ChevronRight, LogOut, Settings
+  Sun, Moon, ChevronLeft, ChevronRight, LogOut, Settings, Users
 } from "lucide-react";
 
 /* ── Logo using /snap.jpg with SVG fallback ── */
@@ -47,6 +48,8 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { isDark, toggle } = useDarkMode();
+  const { user } = useAuthContext();
+  const isSuperAdmin = user?.role === "superadmin";
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
   useEffect(() => {
@@ -121,6 +124,23 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
               </Link>
             );
           })}
+
+          {/* User Management — superadmin only */}
+          {isSuperAdmin && (() => {
+            const isActive = location.pathname === "/adminpanel/users";
+            return (
+              <Link
+                to="/adminpanel/users"
+                onClick={onClose}
+                className={`admin-nav-link ${isActive ? "active" : ""}`}
+                title={isCollapsed ? "User Management" : ""}
+              >
+                <Users size={20} strokeWidth={isActive ? 2.5 : 2} />
+                <span className={isCollapsed ? "hidden" : ""}>User Management</span>
+                {isCollapsed && isActive && <span className="admin-active-dot" />}
+              </Link>
+            );
+          })()}
         </div>
       </nav>
 

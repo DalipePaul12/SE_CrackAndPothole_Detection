@@ -30,7 +30,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 # ── Routers — imported after logging so their module-level loggers work ──────
-from app.api.v1 import auth, analytics, cctv, chatbot, contractor, media, ml, notifications, projects, reports, users
+from app.api.v1 import auth, analytics, audit_logs, cctv, chatbot, contractor, media, ml, notifications, projects, reports, users
 from app.api.v1 import settings as settings_router
 from app.routers import comments, ws
 
@@ -151,6 +151,7 @@ app.include_router(projects.router,      prefix=PREFIX)
 app.include_router(contractor.router,    prefix=PREFIX)
 app.include_router(comments.router,      prefix=PREFIX)
 app.include_router(analytics.router,     prefix=PREFIX)
+app.include_router(audit_logs.router,    prefix=PREFIX)
 app.include_router(cctv.router,          prefix=PREFIX)
 app.include_router(media.router,         prefix=PREFIX)
 app.include_router(ml.router,            prefix=PREFIX)
