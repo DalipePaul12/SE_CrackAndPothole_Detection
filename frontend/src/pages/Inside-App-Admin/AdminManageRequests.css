@@ -1601,3 +1601,66 @@
     min-width: 7rem;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   BULK ACTION BAR
+══════════════════════════════════════════════════════════════ */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  padding: 12px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  flex-wrap: wrap;
+}
+
+.bulk-count {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-right: 8px;
+}
+
+.bulk-btn {
+  padding: 7px 14px;
+  border-radius: 100px;
+  border: none;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.bulk-btn:hover  { transform: translateY(-1px); opacity: 0.9; }
+.bulk-btn:active { transform: translateY(0); }
+
+.b-complete { background: var(--success, #16a34a); color: #fff; }
+.b-reject   { background: var(--danger,  #ef4444); color: #fff; }
+.b-clear    { background: var(--bg-secondary); color: var(--subtext); border: 1px solid var(--border); }
+
+/* ── Checkbox column ── */
+.amr-cb-col {
+  width: 40px;
+  text-align: center;
+  padding-right: 4px !important;
+}
+
+.amr-cb {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+/* ── Selected row highlight ── */
+.amr-row-checked {
+  background: var(--primary-subtle, rgba(22,163,74,0.06)) !important;
+}

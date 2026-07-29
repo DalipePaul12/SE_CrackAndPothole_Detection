@@ -2074,3 +2074,42 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
   .vmr-header, .vmr-body { padding-left: 16px; padding-right: 16px; }
   .vmr-tabs { padding: 0 12px; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   EXPORT BUTTONS
+══════════════════════════════════════════════════════════════ */
+.export-btns-wrap {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.18s, opacity 0.18s;
+}
+
+.btn-export:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-export:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-export--all {
+  background: var(--bg-secondary);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+}
+.btn-export--all:hover:not(:disabled) { background: var(--primary-subtle); border-color: var(--primary); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }

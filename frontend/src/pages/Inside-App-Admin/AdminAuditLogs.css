@@ -1,0 +1,238 @@
+/* AdminAuditLogs.css
+   Net-new classes prefixed .aal-
+   All reused classes (.aum-*, .adm-table, .adm-pagination, .aar-toast)
+   come from AdminUserManagement.css which is imported in the JSX.
+*/
+
+/* ── Filter bar extras ───────────────────────────────────────────────────────── */
+
+.aal-filters {
+  flex-wrap: wrap;
+}
+
+.aal-filter-input {
+  flex: 1 1 180px;
+  min-width: 140px;
+  max-width: 260px;
+  position: static; /* override .aum-search-wrap absolute positioning */
+  padding: 0.45rem 0.75rem;
+}
+
+.aal-date-range {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.aal-date-input {
+  width: 140px;
+  min-width: 110px;
+  position: static;
+  padding: 0.45rem 0.6rem;
+}
+
+.aal-date-sep {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ── Table columns ───────────────────────────────────────────────────────────── */
+
+.aal-ts {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  min-width: 140px;
+}
+
+.aal-user-id {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.aal-action {
+  font-weight: 600;
+  font-size: 0.84rem;
+  color: var(--text);
+  max-width: 240px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.aal-resource {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.aal-target-id {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.aal-muted {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+/* ── View details button ─────────────────────────────────────────────────────── */
+
+.aal-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary, #1b5e3f);
+  background: var(--primary-light, #e8f5e9);
+  border: 1px solid transparent;
+  border-radius: var(--adm-radius-md, 8px);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.aal-view-btn:hover {
+  background: #d0edda;
+  border-color: var(--primary, #1b5e3f);
+}
+.dark .aal-view-btn {
+  background: #1b3a1e;
+  color: #81c784;
+}
+.dark .aal-view-btn:hover {
+  background: #224526;
+}
+
+/* ── Details modal ───────────────────────────────────────────────────────────── */
+
+/* Reuses .aum-modal-overlay for the backdrop */
+
+.aal-details-modal {
+  background: var(--card, #fff);
+  border-radius: var(--adm-radius-xl, 16px);
+  padding: 1.75rem 2rem;
+  max-width: 560px;
+  width: 100%;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  animation: aum-modal-in 0.18s ease;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.aal-details-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.aal-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border, #dde3e7);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.aal-close-btn:hover {
+  background: var(--card-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text);
+}
+
+/* Definition list grid */
+.aal-details-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.55rem 1rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+}
+
+.aal-details-grid dt {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.aal-details-grid dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-word;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.aal-action-raw {
+  font-family: monospace;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.aal-action-human {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.aal-ua {
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+  word-break: break-all !important;
+}
+
+/* JSON block */
+.aal-details-json-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0 0 0.5rem;
+}
+
+.aal-details-json {
+  background: var(--card-hover, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border, #dde3e7);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  line-height: 1.55;
+}
+.dark .aal-details-json {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .aal-filters { flex-direction: column; align-items: stretch; }
+  .aal-filter-input { max-width: 100%; }
+  .aal-date-range { flex-direction: row; }
+  .aal-date-input { flex: 1; }
+  .aal-details-modal { padding: 1.25rem; }
+  .aal-details-grid { grid-template-columns: 110px 1fr; }
+}

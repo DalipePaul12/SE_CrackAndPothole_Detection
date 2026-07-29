@@ -11,7 +11,7 @@ import Navbar      from "./components/Navbar.jsx";
 import { NotificationProvider } from "./pages/Contexts/NotificationContext.jsx";
 import { useAuthContext }        from "./pages/Contexts/AuthContext.jsx";
 
-// Layouts (NEW - import your layout components)
+// Layouts
 import UserLayout        from "./components/UserLayout.jsx";
 import AdminLayout       from "./components/AdminLayout.jsx";
 import ContractorLayout  from "./components/ContractorLayout.jsx";
@@ -21,14 +21,14 @@ import HomePage  from "./pages/LandingPage/HomePage.jsx";
 import AboutPage from "./pages/LandingPage/AboutPage.jsx";
 
 // Inside App — User
-import Dashboard     from "./pages/Inside-App-User/Dashboard.jsx";
-import AllReports    from "./pages/Inside-App-User/AllReports.jsx";
-import MapView       from "./pages/Inside-App-User/MapView.jsx";
-import MyProfile     from "./pages/Inside-App-User/MyProfile.jsx";
-import MySubmissions    from "./pages/Inside-App-User/MySubmissions.jsx";
-import ProjectTracking  from "./pages/ProjectTracking.jsx";
-import Notifications from "./pages/Inside-App-User/Notifications.jsx";
-import Settings      from "./pages/Inside-App-User/Settings.jsx";
+import Dashboard       from "./pages/Inside-App-User/Dashboard.jsx";
+import AllReports      from "./pages/Inside-App-User/AllReports.jsx";
+import MapView         from "./pages/Inside-App-User/MapView.jsx";
+import MyProfile       from "./pages/Inside-App-User/MyProfile.jsx";
+import MySubmissions   from "./pages/Inside-App-User/MySubmissions.jsx";
+import ProjectTracking from "./pages/ProjectTracking.jsx";
+import Notifications   from "./pages/Inside-App-User/Notifications.jsx";
+import Settings        from "./pages/Inside-App-User/Settings.jsx";
 
 // Inside App — Contractor
 import ContractorDashboard         from "./pages/Inside-App-Contractor/ContractorDashboard.jsx";
@@ -46,9 +46,12 @@ import AdminManageRequests from "./pages/Inside-App-Admin/AdminManageRequests.js
 import AdminManageReports  from "./pages/Inside-App-Admin/AdminManageReports.jsx";
 import AdminStreetReports  from "./pages/Inside-App-Admin/AdminStreetReports.jsx";
 import AdminSettings       from "./pages/Inside-App-Admin/AdminSettings.jsx";
+import AdminUserManagement from "./pages/Inside-App-Admin/AdminUserManagement.jsx";
+import AdminAuditLogs      from "./pages/Inside-App-Admin/AdminAuditLogs.jsx";
 
 // Errors
 import NotFound from "./pages/NotFound.jsx";
+
 // ─── Route guards ─────────────────────────────────────────────────────────────
 
 function PrivateRoute({ children }) {
@@ -58,15 +61,22 @@ function PrivateRoute({ children }) {
 
 function AdminRoute({ children }) {
   const { isAuthenticated, user } = useAuthContext();
-  if (!isAuthenticated)          return <Navigate to="/"          replace />;
-  if (user?.role !== "admin" && user?.role !== "superadmin")    return <Navigate to="/dashboard" replace />;
+  if (!isAuthenticated) return <Navigate to="/" replace />;
+  if (user?.role !== "admin" && user?.role !== "superadmin") return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
+function SuperAdminRoute({ children }) {
+  const { isAuthenticated, user } = useAuthContext();
+  if (!isAuthenticated)            return <Navigate to="/"           replace />;
+  if (user?.role !== "superadmin") return <Navigate to="/adminpanel" replace />;
   return children;
 }
 
 function ContractorRoute({ children }) {
   const { isAuthenticated, user } = useAuthContext();
-  if (!isAuthenticated)             return <Navigate to="/"                        replace />;
-  if (user?.role !== "contractor")  return <Navigate to="/dashboard"               replace />;
+  if (!isAuthenticated)            return <Navigate to="/"          replace />;
+  if (user?.role !== "contractor") return <Navigate to="/dashboard" replace />;
   return children;
 }
 
@@ -77,7 +87,7 @@ function UserLayoutGuard() {
   return (
     <PrivateRoute>
       <UserLayout>
-        <Outlet />  {/* Renders the matched child route */}
+        <Outlet />
       </UserLayout>
     </PrivateRoute>
   );
@@ -136,14 +146,14 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
 
           {/* ── User dashboard WITH sidebar layout ─────────────────────── */}
           <Route element={<UserLayoutGuard />}>
-            <Route path="/dashboard"               element={<Dashboard />} />
-            <Route path="/dashboard/reports"       element={<AllReports />} />
-            <Route path="/dashboard/mapview"       element={<MapView />} />
-            <Route path="/dashboard/profile"       element={<MyProfile />} />
-            <Route path="/dashboard/submissions"                   element={<MySubmissions />} />
-            <Route path="/dashboard/submissions/:reportId/track" element={<ProjectTracking />} />
-            <Route path="/dashboard/notifications" element={<Notifications />} />
-            <Route path="/dashboard/settings"      element={<Settings />} />
+            <Route path="/dashboard"                              element={<Dashboard />} />
+            <Route path="/dashboard/reports"                      element={<AllReports />} />
+            <Route path="/dashboard/mapview"                      element={<MapView />} />
+            <Route path="/dashboard/profile"                      element={<MyProfile />} />
+            <Route path="/dashboard/submissions"                  element={<MySubmissions />} />
+            <Route path="/dashboard/submissions/:reportId/track"  element={<ProjectTracking />} />
+            <Route path="/dashboard/notifications"                element={<Notifications />} />
+            <Route path="/dashboard/settings"                     element={<Settings />} />
           </Route>
 
           {/* ── Admin panel WITH sidebar layout ────────────────────────── */}
@@ -155,6 +165,15 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
             <Route path="/adminpanel/managereports" element={<AdminManageReports />} />
             <Route path="/adminpanel/managestreets" element={<AdminStreetReports />} />
             <Route path="/adminpanel/settings"      element={<AdminSettings />} />
+            {/* Superadmin-only — 3-layer guard: sidebar hidden + route guard + backend require_superadmin */}
+            <Route
+              path="/adminpanel/users"
+              element={<SuperAdminRoute><AdminUserManagement /></SuperAdminRoute>}
+            />
+            <Route
+              path="/adminpanel/audit-logs"
+              element={<SuperAdminRoute><AdminAuditLogs /></SuperAdminRoute>}
+            />
           </Route>
 
           {/* ── Contractor panel WITH sidebar layout ───────────────────── */}
@@ -167,8 +186,7 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
             <Route path="/contractorpanel/profile"             element={<ContractorProfile />} />
           </Route>
 
-          {/* ── Fallback — must stay last so it never shadows the routes
-                 above (including the role-gated user/admin routes) ─────── */}
+          {/* ── Fallback — must stay last ───────────────────────────────── */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </NotificationProvider>

@@ -7,7 +7,8 @@ import { sendNotification } from "../../api/notifications";
 import {
   Check, X, Mail, Camera, Video, MapPin, CheckCircle, XCircle,
   User, AlertTriangle, Calendar, Clock, ChevronDown, Navigation,
-  FileText, Image, MessageSquare, Activity, Shield, Send
+  FileText, Image, MessageSquare, Activity, Shield, Send, Download,
+  Loader2,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
@@ -44,6 +45,10 @@ export default function AdminManageRequests() {
   const [messageDialog, setMessageDialog] = useState(null);
   const [actionLoading, setActionLoading] = useState(new Set());
   const [toast,         setToast]         = useState(null);
+  const [checked,        setChecked]       = useState(new Set()); // bulk selection
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkDeclineOpen, setBulkDeclineOpen] = useState(false);
+  const [bulkLoading,    setBulkLoading]   = useState(false);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -126,12 +131,55 @@ export default function AdminManageRequests() {
     setMessageDialog(null);
   };
 
+  const toggleCheck = (id) =>
+    setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const checkAll = () => setChecked(
+    filtered.length > 0 && filtered.every(r => checked.has(r.id))
+      ? new Set()
+      : new Set(filtered.map(r => r.id))
+  );
+
+  const handleBulkConfirm = async () => {
+    setBulkLoading(true);
+    const ids = [...checked];
+    await Promise.all(ids.map(id => updateReport(id, { status: REPORT_STATUS.VERIFIED })));
+    setReports(prev => prev.filter(r => !checked.has(r.id)));
+    setChecked(new Set());
+    setBulkConfirmOpen(false);
+    setBulkLoading(false);
+    showToast(`${ids.length} report${ids.length !== 1 ? "s" : ""} confirmed`);
+  };
+
+  const handleBulkDecline = async (reason) => {
+    setBulkLoading(true);
+    const ids = [...checked];
+    await Promise.all(ids.map(id => updateReport(id, {
+      status:         REPORT_STATUS.DECLINED,
+      decline_reason: reason.trim(),
+    })));
+    setReports(prev => prev.filter(r => !checked.has(r.id)));
+    setChecked(new Set());
+    setBulkDeclineOpen(false);
+    setBulkLoading(false);
+    showToast(`${ids.length} report${ids.length !== 1 ? "s" : ""} declined`);
+  };
+
   return (
     <>
       {toast && (
         <div className={`amr-toast amr-toast--${toast.type}`}>
           {toast.msg}
         </div>
+      )}
+
+      {checked.size > 0 && (
+        <RequestsBulkBar
+          count={checked.size}
+          onConfirm={() => setBulkConfirmOpen(true)}
+          onDecline={() => setBulkDeclineOpen(true)}
+          onClear={() => setChecked(new Set())}
+        />
       )}
 
       <div className="admin-manage-container">
@@ -173,6 +221,14 @@ export default function AdminManageRequests() {
           <table className="submissions-table">
             <thead>
               <tr>
+                <th className="amr-cb-col">
+                  <input
+                    type="checkbox"
+                    className="amr-cb"
+                    checked={filtered.length > 0 && filtered.every(r => checked.has(r.id))}
+                    onChange={checkAll}
+                  />
+                </th>
                 <th>Report</th>
                 <th>Type</th>
                 <th>Date</th>
@@ -182,7 +238,7 @@ export default function AdminManageRequests() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="5" className="no-data">Loading…</td></tr>
+                <tr><td colSpan="6" className="no-data">Loading…</td></tr>
               ) : filtered.length > 0 ? (
                 filtered.map((r) => {
 
@@ -191,9 +247,17 @@ export default function AdminManageRequests() {
                   return (
                     <tr
                       key={r.id}
-                      className="amr-clickable-row"
+                      className={`amr-clickable-row${checked.has(r.id) ? " amr-row-checked" : ""}`}
                       onClick={() => setSelected(r)}
                     >
+                      <td className="amr-cb-col" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="amr-cb"
+                          checked={checked.has(r.id)}
+                          onChange={() => toggleCheck(r.id)}
+                        />
+                      </td>
                       <td>
                         <div className="report-cell">
                           {thumb && !mediaIsVideo && (
@@ -254,7 +318,7 @@ export default function AdminManageRequests() {
                   );
                 })
               ) : (
-                <tr><td colSpan="5" className="no-data">No pending requests</td></tr>
+                <tr><td colSpan="6" className="no-data">No pending requests</td></tr>
               )}
             </tbody>
           </table>
@@ -331,7 +395,68 @@ export default function AdminManageRequests() {
           onCancel={() => setMessageDialog(null)}
         />
       )}
+
+      {bulkConfirmOpen && (
+        <ConfirmActionDialog
+          title={`Confirm ${checked.size} Report${checked.size !== 1 ? "s" : ""}`}
+          message={`Are you sure you want to confirm all ${checked.size} selected report${checked.size !== 1 ? "s" : ""}? They will be moved to In Progress.`}
+          confirmLabel="Yes, Confirm All"
+          confirmClass="amr-dialog-confirm"
+          onConfirm={handleBulkConfirm}
+          onCancel={() => setBulkConfirmOpen(false)}
+          loading={bulkLoading}
+        />
+      )}
+
+      {bulkDeclineOpen && (
+        <BulkDeclineDialog
+          count={checked.size}
+          onDecline={handleBulkDecline}
+          onCancel={() => setBulkDeclineOpen(false)}
+          loading={bulkLoading}
+        />
+      )}
     </>
+  );
+}
+
+function RequestsBulkBar({ count, onConfirm, onDecline, onClear }) {
+  return (
+    <div className="bulk-bar">
+      <span className="bulk-count">{count} selected</span>
+      <button className="bulk-btn b-complete" onClick={onConfirm}><Check size={13} /> Confirm All</button>
+      <button className="bulk-btn b-reject"   onClick={onDecline}><X size={13} /> Decline All</button>
+      <button className="bulk-btn b-clear"    onClick={onClear}><X size={13} /> Clear</button>
+    </div>
+  );
+}
+
+function BulkDeclineDialog({ count, onDecline, onCancel, loading }) {
+  const [reason, setReason] = useState("");
+  const valid = reason.trim().length >= 5;
+  return (
+    <div className="amr-dialog-overlay" onClick={onCancel}>
+      <div className="amr-dialog" onClick={e => e.stopPropagation()}>
+        <div className="amr-dialog-icon amr-dialog-icon--decline"><XCircle size={28} /></div>
+        <h3 className="amr-dialog-title">Decline {count} Report{count !== 1 ? "s" : ""}</h3>
+        <p className="amr-dialog-msg">
+          Provide a reason that will be applied to all {count} selected report{count !== 1 ? "s" : ""}.
+        </p>
+        <textarea
+          className="amr-dialog-textarea"
+          placeholder="Enter decline reason (min 5 characters)…"
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          rows={4}
+        />
+        <div className="amr-dialog-actions">
+          <button className="amr-dialog-cancel"  onClick={onCancel}  disabled={loading}>Cancel</button>
+          <button className="amr-dialog-decline" onClick={() => onDecline(reason)} disabled={!valid || loading}>
+            {loading ? "Declining…" : `Decline ${count} Report${count !== 1 ? "s" : ""}`}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

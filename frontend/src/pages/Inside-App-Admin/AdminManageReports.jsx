@@ -122,6 +122,37 @@ function IcoChevronDown({ size = 16, ...p }) {
 function IcoSliders({ size = 16, ...p }) {
   return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>;
 }
+function IcoDownload({ size = 16, ...p }) {
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+}
+
+// ─── CSV Export ────────────────────────────────────────────────────────────
+function exportCSV(rows, label = "page") {
+  const headers = ["ID", "Status", "Type", "Severity", "Location", "Barangay", "Street", "Reporter", "Contractor", "Date"];
+  const escape  = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines   = [
+    headers.map(escape).join(","),
+    ...rows.map((r) => [
+      `RPT-${String(r.id).padStart(5, "0")}`,
+      r.status ?? "",
+      r.ai_damage_type ?? r.damage_type ?? "",
+      r.ai_severity    ?? r.severity    ?? "",
+      r.location_address ?? r.barangay ?? "",
+      r.barangay ?? "",
+      r.street_name ?? "",
+      r.owner?.full_name ?? "Anonymous",
+      r.assigned_to ?? "",
+      r.created_at ? new Date(r.created_at).toLocaleDateString() : "",
+    ].map(escape).join(",")),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url;
+  a.download = `manage_reports_${label}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function timeAgo(dateStr) {
   if (!dateStr) return "—";
@@ -302,17 +333,14 @@ function StatusTimeline({ currentStatus }) {
   );
 }
 
-function BulkBar({ count, onComplete, onCancel, onClear }) {
+function BulkBar({ count, onComplete, onAssign, onCancel, onClear }) {
   return (
     <div className="bulk-bar">
       <span className="bulk-count">{count} selected</span>
       <button className="bulk-btn b-complete" onClick={onComplete}><IcoCheck size={13} /> Complete All</button>
-      {/* ═════════════════════════════════════════════════════════════════
-          COMMENTED OUT: Assign All — moved to next version
-      ═════════════════════════════════════════════════════════════════ */}
-      {/* <button className="bulk-btn b-assign" onClick={onAssign}><IcoUsers size={13} /> Assign All</button> */}
-      <button className="bulk-btn b-reject" onClick={onCancel}><IcoBan size={13} /> Cancel All</button>
-      <button className="bulk-btn b-clear" onClick={onClear}><IcoX size={13} /> Clear</button>
+      <button className="bulk-btn b-assign"   onClick={onAssign}><IcoUsers size={13} /> Assign All</button>
+      <button className="bulk-btn b-reject"   onClick={onCancel}><IcoBan size={13} /> Cancel All</button>
+      <button className="bulk-btn b-clear"    onClick={onClear}><IcoX size={13} /> Clear</button>
     </div>
   );
 }
@@ -520,6 +548,7 @@ function AdminManageReports() {
   const [projectByReportId, setProjectByReportId] = useState({});
   const [bulkMode,       setBulkMode]       = useState(null);
   const [bulkConfirm,    setBulkConfirm]    = useState(null); // { status, label, verb, danger }
+  const [exportAllLoading, setExportAllLoading] = useState(false);
 
   const [countdown, setCountdown] = useState(30);
   const timerRef = useRef(null);
@@ -626,6 +655,49 @@ function AdminManageReports() {
       return prev;
     });
   }, [patchStatus]);
+
+  const exportAll = useCallback(async () => {
+    setExportAllLoading(true);
+    try {
+      const params = {};
+      if (filterType     !== "All") params.damage_type = filterType.toLowerCase();
+      if (filterSeverity !== "All") params.severity    = filterSeverity;
+      if (filterStatus   !== "All") params.status      = filterStatus;
+
+      const first = await getReports({ ...params, page: 1, page_size: 100 });
+      if (!first.success) { setExportAllLoading(false); return; }
+
+      const serverTotal = first.data?.total ?? 0;
+      const allRows = [...(first.data?.results ?? [])];
+
+      if (serverTotal > 100) {
+        const pageCount = Math.ceil(serverTotal / 100);
+        const pages = await Promise.all(
+          Array.from({ length: pageCount - 1 }, (_, i) =>
+            getReports({ ...params, page: i + 2, page_size: 100 })
+          )
+        );
+        pages.forEach(r => { if (r.success) allRows.push(...(r.data?.results ?? [])); });
+      }
+
+      let rows = allRows;
+      if (search) {
+        const q = search.toLowerCase();
+        rows = rows.filter(r =>
+          String(r.id).includes(q) ||
+          (r.barangay ?? "").toLowerCase().includes(q) ||
+          (r.street_name ?? "").toLowerCase().includes(q) ||
+          (r.owner?.full_name ?? "").toLowerCase().includes(q)
+        );
+      }
+
+      exportCSV(rows, "all");
+    } catch {
+      // silently swallow — export is best-effort
+    } finally {
+      setExportAllLoading(false);
+    }
+  }, [filterType, filterSeverity, filterStatus, search]);
 
   // fetchProjects — builds a report_id → project map for assignment display.
   const fetchProjects = useCallback(async () => {
@@ -777,6 +849,21 @@ function AdminManageReports() {
               <IcoChevronDown size={14} className="filters-chevron" />
             </button>
           </div>
+
+          <div className="export-btns-wrap">
+            <button className="btn-export" onClick={() => exportCSV(reports, "page")}>
+              <IcoDownload size={14} /> Export Page
+            </button>
+            <button
+              className="btn-export btn-export--all"
+              onClick={exportAll}
+              disabled={exportAllLoading}
+            >
+              {exportAllLoading
+                ? <><IcoRefresh size={14} className="spin" /> Exporting…</>
+                : <><IcoDownload size={14} /> Export All</>}
+            </button>
+          </div>
         </div>
 
         {filtersOpen && (
@@ -841,10 +928,7 @@ function AdminManageReports() {
         <BulkBar
           count={selected.size}
           onComplete={() => setBulkConfirm({ status: REPORT_STATUS.RESOLVED,  label: "Mark as Resolved", verb: "resolve",  danger: false })}
-          // ═════════════════════════════════════════════════════════
-          // COMMENTED OUT: onAssign — moved to next version
-          // onAssign={() => setBulkMode("assign")}
-          // ═════════════════════════════════════════════════════════
+          onAssign={() => setBulkMode("assign")}
           onCancel={() => setBulkConfirm({ status: REPORT_STATUS.CANCELLED, label: "Cancel",           verb: "cancel",   danger: true  })}
           onClear={() => setSelected(new Set())}
         />
@@ -1106,30 +1190,19 @@ function AdminManageReports() {
         document.body
       )}
 
-      {/* ═════════════════════════════════════════════════════════════════
-          COMMENTED OUT: AssignModal — moved to next version
-      ═════════════════════════════════════════════════════════════════ */}
-      {/*
-      {(assignReport || bulkMode === "assign") && createPortal(
-        <AssignModal
-          report={assignReport}
-          bulkIds={bulkMode === "assign" ? selectedIds : null}
-          teams={teams}
-          setTeams={setTeams}
-          onClose={() => { setAssignReport(null); setBulkMode(null); }}
-          onAssign={async (id, teamOrWorker) => {
-            if (bulkMode === "assign") {
-              await Promise.all(selectedIds.map(sid => patchStatus(sid, "assigned", { assigned_to: teamOrWorker.name })));
-              setSelected(new Set());
-              setBulkMode(null);
-            } else {
-              await handleAssign(id, teamOrWorker);
-            }
+      {bulkMode === "assign" && (
+        <BulkAssignModal
+          count={selectedIds.length}
+          projectByReportId={projectByReportId}
+          selectedIds={selectedIds}
+          onClose={() => setBulkMode(null)}
+          onDone={() => {
+            setSelected(new Set());
+            setBulkMode(null);
+            fetchProjects();
           }}
-        />,
-        document.body
+        />
       )}
-      */}
 
       {cancelReport && createPortal(
         <CancelModal
@@ -2010,6 +2083,101 @@ function CancelModal({ report: r, onClose, onCancel }) {
         </>
       )}
     </ModalShell>
+  );
+}
+
+function BulkAssignModal({ count, projectByReportId, selectedIds, onClose, onDone }) {
+  const [contractors,   setContractors]   = React.useState([]);
+  const [contractorId,  setContractorId]  = React.useState(null);
+  const [loadingList,   setLoadingList]   = React.useState(true);
+  const [saving,        setSaving]        = React.useState(false);
+  const [error,         setError]         = React.useState(null);
+
+  React.useEffect(() => {
+    getAvailableContractors().then(res => {
+      if (res.success) setContractors(res.data || []);
+      setLoadingList(false);
+    });
+  }, []);
+
+  const handleConfirm = async () => {
+    if (!contractorId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await Promise.all(selectedIds.map(async (id) => {
+        const existing = projectByReportId[id];
+        let projectId  = existing?.id;
+        if (!projectId) {
+          const res = await createProject({ report_id: id });
+          if (!res.success) throw new Error(res.error || "Failed to create project");
+          projectId = res.data?.id;
+        }
+        const res = await assignContractor(projectId, contractorId);
+        if (!res.success) throw new Error(res.error || "Failed to assign contractor");
+      }));
+      onDone();
+    } catch (err) {
+      setError(err.message || "Assignment failed for one or more reports");
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <ModalShell maxWidth={480} onClose={onClose}>
+      <CloseBtn onClose={onClose} />
+      <ModalTitle>
+        <div className="assign-modal-title">
+          <IcoUsers size={20} className="assign-modal-title-icon" />
+          Assign Contractor — {count} report{count !== 1 ? "s" : ""}
+        </div>
+      </ModalTitle>
+
+      {loadingList ? (
+        <p style={{ fontSize: "0.85rem", color: "var(--subtext)", padding: "12px 0" }}>
+          Loading contractors…
+        </p>
+      ) : (
+        <div style={{ marginTop: 12 }}>
+          <label className="completion-label">Select Contractor</label>
+          <select
+            className="completion-comment select-fullwidth"
+            style={{ marginTop: 6 }}
+            value={contractorId ?? ""}
+            onChange={e => setContractorId(Number(e.target.value) || null)}
+          >
+            <option value="">Choose a contractor…</option>
+            {contractors.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.full_name || c.email}
+                {" · "}{c.active_project_count} active
+                {" · "}{c.is_available ? "✓ Available" : "✗ Busy"}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ fontSize: "0.8rem", color: "var(--danger,#ef4444)", marginTop: 8, fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
+
+      <div className="modal-actions-row" style={{ marginTop: 20 }}>
+        <button
+          className="complete-btn modal-action-btn"
+          disabled={!contractorId || saving || loadingList}
+          onClick={handleConfirm}
+        >
+          {saving ? "Assigning…" : "Confirm Assignment"}
+        </button>
+        <button className="admin-decline-btn modal-action-btn modal-decline-btn" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </ModalShell>,
+    document.body
   );
 }
 

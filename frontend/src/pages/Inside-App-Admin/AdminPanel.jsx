@@ -645,9 +645,10 @@ export default function AdminPanel() {
             </span>
             Live Activity Feed
             <span
-              className="ap-panel-link ap-panel-link-disabled"
-              title="Audit log page coming soon"
-              aria-disabled="true"
+              className="ap-panel-link"
+              title="View system audit logs"
+              style={{ cursor: "pointer" }}
+              onClick={() => navigate("/adminpanel/audit-logs")}
             >
               Full log →
             </span>

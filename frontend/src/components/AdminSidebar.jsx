@@ -6,7 +6,7 @@ import { useAuthContext } from "../pages/Contexts/AuthContext.jsx";
 
 import {
   LayoutDashboard, BookOpen, Map, ClipboardList, BookText, GitBranch,
-  Sun, Moon, ChevronLeft, ChevronRight, LogOut, Settings, Users
+  Sun, Moon, ChevronLeft, ChevronRight, LogOut, Settings, Users, ScrollText
 } from "lucide-react";
 
 /* ── Logo using /snap.jpg with SVG fallback ── */
@@ -137,6 +137,23 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
               >
                 <Users size={20} strokeWidth={isActive ? 2.5 : 2} />
                 <span className={isCollapsed ? "hidden" : ""}>User Management</span>
+                {isCollapsed && isActive && <span className="admin-active-dot" />}
+              </Link>
+            );
+          })()}
+
+          {/* Audit Logs — superadmin only */}
+          {isSuperAdmin && (() => {
+            const isActive = location.pathname === "/adminpanel/audit-logs";
+            return (
+              <Link
+                to="/adminpanel/audit-logs"
+                onClick={onClose}
+                className={`admin-nav-link ${isActive ? "active" : ""}`}
+                title={isCollapsed ? "Audit Logs" : ""}
+              >
+                <ScrollText size={20} strokeWidth={isActive ? 2.5 : 2} />
+                <span className={isCollapsed ? "hidden" : ""}>Audit Logs</span>
                 {isCollapsed && isActive && <span className="admin-active-dot" />}
               </Link>
             );
