@@ -53,6 +53,9 @@
 }
 
 @media (max-width: 1023px) {
+    .sidebar-backdrop {
+    bottom: 64px; /* stop above the tab bar */
+  }
   .mobile-menu-btn {
     display: flex;
   }
@@ -60,12 +63,12 @@
     margin-left: 0 !important;
     padding: 16px;
     padding-top: 16px;
+    padding-bottom: 80px; /* NEW — clears the bottom tab bar */
   }
   .user-layout {
     padding-top: 80px;
   }
 }
-
 body.dark .mobile-menu-btn {
   background: linear-gradient(135deg, #1a3d1a, #0f1a10);
 }
@@ -159,7 +162,7 @@ body:not(.dark) .notif-toast-close:hover { color: #1a2e1a; }
 
 @media (max-width: 600px) {
   .notif-toast-stack {
-    bottom: 16px;
+    bottom: 80px; /* was 16px */
     right: 12px;
     left: 12px;
     width: auto;

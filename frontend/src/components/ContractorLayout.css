@@ -7,25 +7,6 @@
   overflow-x: hidden;
 }
 
-/* ── Mobile Hamburger Button ── */
-.contractor-mobile-menu-btn {
-  display: none;
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 1100;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  border: none;
-  background: linear-gradient(135deg, #5bd35b, #2c6a2c);
-  color: white;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
 /* ── Main Content Area ── */
 .contractor-main-content {
   margin-left: var(--admin-sidebar-width);
@@ -43,16 +24,17 @@
   margin-left: var(--admin-sidebar-collapsed-width);
 }
 
-/* ── Responsive ── */
+/* ── Responsive ──
+   Hamburger/drawer stays hidden on mobile: ContractorBottomNav is now the
+   primary mobile nav (its "More" sheet covers profile/theme/logout), so the
+   full-screen drawer would just duplicate it and sit under the bottom nav's
+   z-index, clipping its own footer. Sidebar/hamburger remain for desktop only. */
 @media (max-width: 1023px) {
-  .contractor-mobile-menu-btn {
-    display: flex;
-  }
-
   .contractor-main-content {
     margin-left: 0 !important;
     margin-top: var(--header-height);
     padding: 16px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
     height: calc(100vh - var(--header-height));
     display: flex;
     flex-direction: column;
@@ -62,11 +44,7 @@
 @media (max-width: 480px) {
   .contractor-main-content {
     padding: 12px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
     margin-top: var(--header-height);
   }
-}
-
-/* ── Dark Mode ── */
-body.dark .contractor-mobile-menu-btn {
-  background: linear-gradient(135deg, #1a3d1a, #0f1a10);
 }

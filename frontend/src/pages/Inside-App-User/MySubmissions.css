@@ -2143,10 +2143,11 @@
   }
 
   .sub-modal-header {
-    flex-direction: column;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
     padding-right: 40px;
   }
-
   .sub-detail-grid {
     grid-template-columns: 1fr;
   }
@@ -2181,7 +2182,7 @@
   }
 
   .sub-modal-actions-row {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .sub-mini-stats {
@@ -2277,4 +2278,523 @@
 .sub-track-btn:hover {
   background: var(--primary-subtle2, rgba(27,94,63,0.15));
   border-color: var(--primary);
+}
+
+/* ============================================================
+   MOBILE COMPACT — shrink modal so key info shows without scrolling
+   ============================================================ */
+@media (max-width: 768px) {
+  /* Modal shell */
+  .sub-modal-content {
+    padding: 0.75rem;
+    max-height: 96vh;
+  }
+  .sub-modal-header {
+    margin-bottom: 0.6rem;
+    padding-right: 36px;
+    gap: 10px;
+  }
+  .sub-modal-title {
+    font-size: 1.05rem;
+    margin-bottom: 2px;
+  }
+  .sub-modal-subtitle {
+    font-size: 0.72rem;
+  }
+  .sub-modal-close-btn {
+    width: 28px;
+    height: 28px;
+    top: 10px;
+    right: 10px;
+  }
+  .sub-modal-header-right {
+    gap: 6px;
+  }
+  .sub-modal-actions-row {
+    gap: 4px;
+  }
+  .sub-modal-action-btn {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+  .sub-share-msg {
+    font-size: 0.72rem;
+  }
+
+  /* Status progress — massive space saver */
+  .sub-status-progress {
+    padding: 14px 8px 10px;
+    margin-bottom: 0.75rem;
+  }
+  .sub-step-dot {
+    width: 22px;
+    height: 22px;
+    font-size: 0.6rem;
+  }
+  .sub-step-label {
+    font-size: 0.58rem;
+    margin-top: 4px;
+  }
+  .sub-progress-line {
+    min-width: 8px;
+    margin-bottom: 14px;
+  }
+
+  /* Tabs */
+  .sub-modal-tabs {
+    margin-bottom: 0.75rem;
+    min-height: 38px;
+    gap: 4px;
+    padding: 3px;
+  }
+  .sub-modal-tab {
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    min-height: 32px;
+    gap: 4px;
+  }
+  .sub-modal-tab svg {
+    width: 14px;
+    height: 14px;
+  }
+  .sub-tab-badge {
+    font-size: 0.6rem;
+    padding: 0px 4px;
+    min-width: 16px;
+  }
+
+  /* Detail grid — keep 2 cols but much tighter */
+  .sub-detail-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .sub-detail-item {
+    padding: 8px 10px;
+    gap: 3px;
+    border-radius: var(--radius-md);
+  }
+  .sub-detail-key {
+    font-size: 0.6rem;
+    gap: 4px;
+  }
+  .sub-detail-key svg {
+    width: 11px;
+    height: 11px;
+  }
+  .sub-detail-val {
+    font-size: 0.82rem;
+  }
+
+  /* Confidence bar */
+  .sub-confidence-wrap {
+    gap: 8px;
+  }
+  .sub-confidence-text {
+    font-size: 0.8rem;
+    min-width: 36px;
+  }
+  .sub-confidence-track {
+    height: 5px;
+  }
+
+  /* Description & AI cards */
+  .sub-detail-description {
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .sub-detail-description p {
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+  .sub-ai-summary-card {
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .sub-ai-summary-label {
+    font-size: 0.62rem;
+    margin-bottom: 4px;
+  }
+  .sub-ai-summary-text {
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+  .sub-ai-summary-empty {
+    gap: 10px;
+  }
+  .sub-ai-summary-empty-body {
+    font-size: 0.78rem;
+  }
+  .sub-ai-summary-empty-body svg {
+    width: 14px;
+    height: 14px;
+  }
+  .sub-ai-summary-btn {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+  }
+  .sub-ai-summary-err {
+    font-size: 0.72rem;
+  }
+
+  /* Decline / flag banners */
+  .sub-decline-reason {
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    margin-bottom: 10px;
+  }
+  .sub-ai-flag-badge {
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    margin-bottom: 10px;
+  }
+
+  /* Tooltip */
+  .sub-ai-tooltip-btn {
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    gap: 5px;
+  }
+  .sub-ai-tooltip-popup {
+    width: 260px;
+    padding: 14px;
+    font-size: 0.82rem;
+  }
+
+  /* Timeline */
+  .sub-timeline-item {
+    gap: 10px;
+  }
+  .sub-timeline-icon {
+    width: 28px;
+    height: 28px;
+  }
+  .sub-timeline-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+  .sub-timeline-body {
+    padding: 2px 0 14px;
+  }
+  .sub-timeline-label {
+    font-size: 0.82rem;
+    margin-bottom: 2px;
+  }
+  .sub-timeline-date {
+    font-size: 0.72rem;
+  }
+  .sub-timeline-connector {
+    left: 13px;
+    top: 30px;
+  }
+
+  /* Media tab */
+  .sub-tab-media {
+    gap: 12px;
+  }
+  .sub-media-label {
+    font-size: 0.72rem;
+    margin-bottom: 6px;
+  }
+  .sub-media-label svg {
+    width: 13px;
+    height: 13px;
+  }
+  .sub-modal-media {
+    min-height: 100px;
+    max-height: 180px;
+    border-radius: var(--radius-lg);
+  }
+  .sub-modal-media img,
+  .sub-modal-media video {
+    height: 180px;
+    max-height: 180px;
+  }
+  .sub-zoom-hint {
+    font-size: 0.68rem;
+    margin-top: 6px;
+  }
+  .sub-no-media {
+    min-height: 120px;
+    font-size: 0.82rem;
+    gap: 8px;
+  }
+  .sub-no-media svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Messages tab */
+  .sub-tab-messages {
+    gap: 12px;
+  }
+  .sub-note-composer {
+    padding: 10px;
+    border-radius: var(--radius-lg);
+  }
+  .sub-note-label {
+    font-size: 0.75rem;
+    margin-bottom: 6px;
+  }
+  .sub-note-textarea {
+    padding: 8px 10px;
+    font-size: 0.82rem;
+  }
+  .sub-note-footer {
+    margin-top: 8px;
+    gap: 8px;
+  }
+  .sub-note-char {
+    font-size: 0.7rem;
+  }
+  .sub-note-send-btn {
+    padding: 6px 14px;
+    font-size: 0.78rem;
+    gap: 4px;
+  }
+  .sub-note-send-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+  .sub-thread-label {
+    font-size: 0.7rem;
+    margin-bottom: 4px;
+  }
+  .sub-comment-bubble {
+    padding: 10px 12px;
+    max-width: 92%;
+    border-radius: var(--radius-md);
+  }
+  .sub-bubble-header {
+    margin-bottom: 4px;
+    gap: 8px;
+  }
+  .sub-bubble-author {
+    font-size: 0.72rem;
+    gap: 4px;
+  }
+  .sub-bubble-author svg {
+    width: 11px;
+    height: 11px;
+  }
+  .sub-bubble-date {
+    font-size: 0.68rem;
+  }
+  .sub-bubble-text {
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+  .sub-no-messages {
+    padding: 16px 0;
+    font-size: 0.82rem;
+    gap: 8px;
+  }
+  .sub-no-messages svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sub-modal-content {
+    padding: 0.6rem;
+    border-radius: var(--radius-lg);
+  }
+  .sub-modal-title {
+    font-size: 0.95rem;
+  }
+  .sub-modal-subtitle {
+    font-size: 0.7rem;
+  }
+  .sub-status-progress {
+    padding: 12px 6px 10px;
+  }
+  .sub-step-dot {
+    width: 20px;
+    height: 20px;
+  }
+  .sub-step-label {
+    font-size: 0.55rem;
+  }
+  .sub-progress-line {
+    min-width: 6px;
+    margin-bottom: 12px;
+  }
+  .sub-modal-tab {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    min-height: 30px;
+  }
+  .sub-detail-item {
+    padding: 7px 9px;
+  }
+  .sub-detail-val {
+    font-size: 0.8rem;
+  }
+}
+
+/* Hide floating chatbot while any report modal is open */
+body.report-modal-open .chat-fab {
+  display: none !important;
+}
+
+/* ============================================================
+   HIDE CHATBOT WIDGET WHILE REPORT MODAL IS OPEN
+   ============================================================ */
+body.report-modal-open .chat-fab,
+body.report-modal-open .chat-widget,
+body.report-modal-open .floating-chat,
+body.report-modal-open [class*="chatbot"],
+body.report-modal-open [id*="chatbot"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ============================================================
+   MOBILE MESSENGER-STYLE CHAT
+   ============================================================ */
+@media (max-width: 768px) {
+  /* Tighter messages tab */
+  .sub-tab-messages {
+    gap: 6px;
+  }
+
+  /* Compact admin banner */
+  .sub-admin-updates-banner {
+    padding: 8px 10px !important;
+    margin-bottom: 6px !important;
+    border-radius: var(--radius-md) !important;
+  }
+  .sub-admin-updates-banner p {
+    font-size: 0.65rem !important;
+    margin: 0 0 6px !important;
+    letter-spacing: 0.04em;
+  }
+  .sub-admin-updates-banner > div {
+    margin-bottom: 6px !important;
+    padding-bottom: 6px !important;
+  }
+  .sub-admin-updates-banner > div:last-child {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+    border-bottom: none !important;
+  }
+  .sub-admin-updates-empty {
+    padding: 10px !important;
+    font-size: 0.78rem !important;
+  }
+  .sub-admin-updates-empty svg {
+    width: 18px !important;
+    height: 18px !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Hide the "THREAD (n)" header — Messenger doesn't use section labels */
+  .sub-thread-label {
+    display: none;
+  }
+
+  /* Scrollable thread with small gaps */
+  .sub-comments-thread {
+    gap: 5px;
+    padding-right: 2px;
+  }
+
+  /* Messenger bubbles: smaller, asymmetric radius, no borders */
+  .sub-comment-bubble {
+    padding: 6px 10px;
+    max-width: 88%;
+    border: none !important;
+    box-shadow: none;
+  }
+  .sub-user-bubble {
+    border-radius: 14px 14px 4px 14px;
+    margin-left: auto;
+  }
+  .sub-admin-bubble {
+    border-radius: 14px 14px 14px 4px;
+  }
+
+  .sub-bubble-header {
+    margin-bottom: 1px;
+    gap: 6px;
+  }
+  .sub-bubble-author {
+    font-size: 0.68rem;
+    font-weight: 700;
+  }
+  .sub-bubble-author svg {
+    width: 10px;
+    height: 10px;
+  }
+  .sub-bubble-date {
+    font-size: 0.62rem;
+    opacity: 0.8;
+  }
+  .sub-bubble-text {
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+
+  /* Compact empty state */
+  .sub-no-messages {
+    padding: 12px 0;
+    font-size: 0.8rem;
+    gap: 6px;
+  }
+  .sub-no-messages svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Minimal composer */
+  .sub-note-composer {
+    padding: 8px;
+    border-radius: var(--radius-md);
+    margin-top: 4px;
+  }
+  .sub-note-label {
+    font-size: 0.68rem;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+  }
+  .sub-note-textarea {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    min-height: 36px;
+    resize: none;
+    border-radius: var(--radius-pill);
+  }
+  .sub-note-footer {
+    margin-top: 6px;
+    gap: 6px;
+  }
+  .sub-note-char {
+    font-size: 0.65rem;
+  }
+  .sub-note-send-btn {
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    border-radius: var(--radius-pill);
+  }
+  .sub-note-send-btn svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sub-comment-bubble {
+    padding: 5px 9px;
+    max-width: 90%;
+  }
+  .sub-bubble-text {
+    font-size: 0.8rem;
+  }
+  .sub-note-textarea {
+    font-size: 0.8rem;
+    min-height: 32px;
+  }
 }

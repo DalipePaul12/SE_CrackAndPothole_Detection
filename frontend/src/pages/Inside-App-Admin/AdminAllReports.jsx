@@ -933,6 +933,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const conf        = confVal(r);
   const sev         = severity(r);
   const sevClass    = toClass(sev);
+  const dtype       = damageType(r);
 
   // Fetch completion details lazily when the report is RESOLVED
   useEffect(() => {
@@ -1054,102 +1055,93 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
       : []),
   ];
 
-  return (
+return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content vmr-tabbed-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose} aria-label="Close modal"><X size={18} /></button>
 
-        <div className="modal-hdr">
-          <div className="modal-hdr-left">
-            <span className="modal-id">{padId(r.id)}</span>
+        <div className="vmr-header">
+          <div className="vmr-header-id">
+            <span className="vmr-id-code">{padId(r.id)}</span>
             <span className={`status-pill ${toClass(r.status ?? "")}`}>
               {(STATUS_LABELS[r.status] ?? r.status ?? "").toUpperCase()}
             </span>
             {conf !== null && (
-              <span
-                className="conf-badge-modal"
-                style={{ borderColor: confColor(conf), color: confColor(conf) }}
-              >
+              <span className="conf-badge-modal" style={{ borderColor: confColor(conf), color: confColor(conf) }}>
                 AI {conf}%
               </span>
             )}
           </div>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
-            <X size={18} />
-          </button>
         </div>
 
-        <div className="modal-tabs">
+        <div className="vmr-tabs">
           {TABS.map(({ id, label, icon, badge }) => (
-            <button
-              key={id}
-              className={`tab-btn ${activeTab === id ? "active" : ""}`}
-              onClick={() => setTab(id)}
-            >
+            <button key={id} className={`vmr-tab ${activeTab === id ? "active" : ""}`} onClick={() => setTab(id)}>
               {icon}
               {label}
-              {badge > 0 && <span className="tab-badge">{badge}</span>}
+              {badge > 0 && <span className="vmr-tab-badge">{badge}</span>}
             </button>
           ))}
         </div>
 
-        <div className="modal-content-area">
+        <div className="vmr-body">
 
           {activeTab === "details" && (
-            <div className="tab-pane details-pane">
-              <div className="detail-grid">
-                <div className="detail-card">
-                  <h5 className="detail-card-title"><User size={14} /> Reporter</h5>
-                  <div className="detail-body">
-                    <div className="detail-row"><span>Name</span><strong>{r.owner?.full_name ?? "Anonymous"}</strong></div>
-                    <div className="detail-row"><span>Contact</span><strong>{r.owner?.phone ?? "—"}</strong></div>
-                    <div className="detail-row"><span>Email</span><strong>{r.owner?.email ?? "—"}</strong></div>
-                  </div>
+            <div className="vmr-grid">
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><User size={14} /><span>REPORTER</span></div>
+                <div className="vmr-card-body">
+                  <div className="vmr-row"><span className="vmr-lbl">Name</span><span className="vmr-val">{r.owner?.full_name ?? "Anonymous"}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Contact</span><span className="vmr-val">{r.owner?.phone ?? "—"}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Email</span><span className="vmr-val">{r.owner?.email ?? "—"}</span></div>
                 </div>
+              </div>
 
-                <div className="detail-card">
-                  <h5 className="detail-card-title"><AlertTriangle size={14} /> Damage Info</h5>
-                  <div className="detail-body">
-                    <div className="detail-row"><span>Type</span><strong>{damageType(r)}</strong></div>
-                    <div className="detail-row"><span>Severity</span><span className={`sev-text ${sevClass}`}>{sev.toUpperCase()}</span></div>
-                    {conf !== null && (
-                      <div className="detail-row"><span>AI Confidence</span><span className="conf-text" style={{ color: confColor(conf) }}>{conf}%</span></div>
-                    )}
-                  </div>
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><AlertTriangle size={14} /><span>DAMAGE INFO</span></div>
+                <div className="vmr-card-body">
+                  <div className="vmr-row"><span className="vmr-lbl">Type</span><span className="vmr-val">{dtype}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Severity</span><span className={`sev-pill ${sevClass}`}>{sev}</span></div>
+                  {conf !== null && (
+                    <div className="vmr-row"><span className="vmr-lbl">AI Confidence</span><span className="vmr-val" style={{ color: confColor(conf) }}>{conf}%</span></div>
+                  )}
                 </div>
+              </div>
 
-                <div className="detail-card">
-                  <h5 className="detail-card-title"><MapPin size={14} /> Location</h5>
-                  <div className="detail-body">
-                    <div className="detail-row"><span>Address</span><strong>{r.location_address ?? "—"}</strong></div>
-                    <div className="detail-row"><span>Street</span><strong>{r.street_name ?? "—"}</strong></div>
-                    <div className="detail-row"><span>Barangay</span><strong>{r.barangay ?? "—"}</strong></div>
-                  </div>
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><MapPin size={14} /><span>LOCATION</span></div>
+                <div className="vmr-card-body">
+                  <div className="vmr-row"><span className="vmr-lbl">Address</span><span className="vmr-val">{r.location_address ?? "—"}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Street</span><span className="vmr-val">{r.street_name ?? "—"}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Barangay</span><span className="vmr-val">{r.barangay ?? "—"}</span></div>
                 </div>
+              </div>
 
-                <div className="detail-card">
-                  <h5 className="detail-card-title"><Calendar size={14} /> Timeline</h5>
-                  <div className="detail-body">
-                    <div className="detail-row"><span>Submitted</span><strong>{fmtDate(r.created_at)}</strong></div>
-                    <div className="detail-row"><span>Updated</span><strong>{fmtDate(r.updated_at)}</strong></div>
-                  </div>
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><Calendar size={14} /><span>TIMELINE</span></div>
+                <div className="vmr-card-body">
+                  <div className="vmr-row"><span className="vmr-lbl">Submitted</span><span className="vmr-val">{fmtDate(r.created_at)}</span></div>
+                  <div className="vmr-row"><span className="vmr-lbl">Updated</span><span className="vmr-val">{fmtDate(r.updated_at)}</span></div>
                 </div>
               </div>
 
               {r.description && (
-                <div className="detail-desc-card">
-                  <h5 className="detail-card-title"><FileText size={14} /> Description</h5>
-                  <p>{r.description}</p>
+                <div className="vmr-card vmr-card--full">
+                  <div className="vmr-card-hdr"><FileText size={14} /><span>DESCRIPTION</span></div>
+                  <div className="vmr-card-body"><p className="vmr-desc-text">{r.description}</p></div>
                 </div>
               )}
 
               {r.status === REPORT_STATUS.DECLINED && r.decline_reason && (
-                <div className="decline-notice">
-                  <Ban size={16} />
-                  <strong>Decline Reason:</strong> {r.decline_reason}
+                <div className="vmr-card vmr-card--full vmr-card--danger">
+                  <div className="vmr-card-body vmr-decline-body">
+                    <Ban size={16} />
+                    <span><strong>Decline Reason:</strong> {r.decline_reason}</span>
+                  </div>
                 </div>
               )}
 
-              <div className="modal-map-link">
+              <div className="vmr-card--full vmr-map-btn-wrap">
                 <button
                   className="btn-view-map"
                   onClick={() => navigate("/adminpanel/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } })}
@@ -1161,71 +1153,56 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
           )}
 
           {activeTab === "media" && (
-            <div className="tab-pane media-pane">
+            <div className="vmr-media-tab">
               {attachments.length === 0 ? (
-                <div className="no-media-state">
-                  <span><Image size={32} /></span>
-                  <p>No media attachments for this report</p>
-                </div>
+                <div className="vmr-media-empty"><Image size={48} /><p>No media attachments for this report</p></div>
               ) : (
-                <div className="media-grid">
-                  {attachments.map((att, i) => {
-                    const url   = imgErrors[i] ? null : mediaUrl(att);
-                    const label = i === 0 ? <><Camera size={14} /> Damage Photo</>
-                      : <><Paperclip size={14} /> Attachment {i + 1}</>;
-                    return (
-                      <div key={i} className="media-item-card">
-                        <p className="media-item-label">{label}</p>
-                        {url ? (
-                          att.media_type === "video"
-                            ? <video src={url} controls className="media-display" />
-                            : <img src={url} alt={`Attachment ${i + 1}`} className="media-display"
-                                onError={() => setImgErrors((p) => ({ ...p, [i]: true }))} />
-                        ) : (
-                          <div className="media-unavail">Media unavailable</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                attachments.map((att, i) => {
+                  const url = imgErrors[i] ? null : mediaUrl(att);
+                  return url ? (
+                    att.media_type === "video"
+                      ? <video key={i} src={url} controls className="vmr-media-main" />
+                      : <img key={i} src={url} alt={`Attachment ${i + 1}`} className="vmr-media-main"
+                          onError={() => setImgErrors((p) => ({ ...p, [i]: true }))} />
+                  ) : (
+                    <div key={i} className="vmr-media-empty"><Image size={32} /><p>Media unavailable</p></div>
+                  );
+                })
               )}
             </div>
           )}
 
           {activeTab === "notes" && (
-            <div className="tab-pane notes-pane">
-              <div className="notes-timeline">
+            <div className="vmr-notes-tab">
+              <div className="vmr-notes-timeline">
                 {comments.length === 0 ? (
-                  <div className="no-notes">
-                    <span><StickyNote size={32} /></span>
-                    <p>No admin notes yet. Be the first to add one.</p>
-                  </div>
+                  <div className="vmr-media-empty"><StickyNote size={32} /><p>No admin notes yet. Be the first to add one.</p></div>
                 ) : (
                   comments.map((c, i) => (
-                    <div key={c.id ?? i} className="note-entry">
-                      <div className="note-line" />
-                      <div className="note-dot" />
-                      <div className="note-body">
-                        <div className="note-meta">
-                          <span className="note-author">{c.user?.full_name ?? "Admin"}</span>
-                          <span className="note-date">{fmtDate(c.created_at)}</span>
+                    <div key={c.id ?? i} className="vmr-note-entry">
+                      <div className="vmr-note-dot" />
+                      <div className="vmr-note-body">
+                        <div className="vmr-note-meta">
+                          <span className="vmr-note-author">{c.user?.full_name ?? "Admin"}</span>
+                          <span className="vmr-note-date">{fmtDate(c.created_at)}</span>
                         </div>
-                        <p className="note-text">{c.content}</p>
+                        <p className="vmr-note-text">{c.content}</p>
                       </div>
                     </div>
                   ))
                 )}
               </div>
-              <div className="notes-compose">
+              <div className="vmr-card vmr-notes-compose">
                 <textarea
+                  className="vmr-notes-textarea"
                   placeholder="Add an admin note…"
                   value={newNote}
                   onChange={(e) => setNewNote(e.target.value)}
                   rows={3}
                   onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey) doAddNote(); }}
                 />
-                <div className="notes-compose-actions">
-                  <span className="compose-hint">Ctrl+Enter to submit</span>
+                <div className="vmr-notes-compose-actions">
+                  <span className="vmr-compose-hint">Ctrl+Enter to submit</span>
                   <button className="btn-add-note" onClick={doAddNote} disabled={noteLoading || !newNote.trim()}>
                     {noteLoading ? "Adding…" : "Add Note"}
                   </button>
@@ -1235,37 +1212,39 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
           )}
 
           {activeTab === "actions" && (
-            <div className="tab-pane actions-pane">
-              <div className="workflow-section">
-                <h5>Status Workflow</h5>
-                <div className="workflow-track">
-                  {STATUS_FLOW_ORDER.map((s, i) => {
-                    const isDone    = flowIndex > i;
-                    const isCurrent = flowIndex === i;
-                    return (
-                      <React.Fragment key={s}>
-                        <div className={`workflow-node ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}>
-                          <div className="wf-dot">{isDone ? <Check size={12} /> : i + 1}</div>
-                          <span className="wf-label">{STATUS_LABELS[s]}</span>
-                        </div>
-                        {i < STATUS_FLOW_ORDER.length - 1 && (
-                          <div className={`workflow-arrow-line ${isDone ? "done" : ""}`} />
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+            <div className="vmr-actions-tab">
+              <div className="vmr-card">
+                <div className="vmr-card-hdr"><Shield size={14} /><span>STATUS WORKFLOW</span></div>
+                <div className="vmr-card-body">
+                  <div className="workflow-track">
+                    {STATUS_FLOW_ORDER.map((s, i) => {
+                      const isDone = flowIndex > i;
+                      const isCurrent = flowIndex === i;
+                      return (
+                        <React.Fragment key={s}>
+                          <div className={`workflow-node ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}>
+                            <div className="wf-dot">{isDone ? <Check size={12} /> : i + 1}</div>
+                            <span className="wf-label">{STATUS_LABELS[s]}</span>
+                          </div>
+                          {i < STATUS_FLOW_ORDER.length - 1 && (
+                            <div className={`workflow-arrow-line ${isDone ? "done" : ""}`} />
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                  {r.status === REPORT_STATUS.DECLINED && (
+                    <div className="workflow-declined-badge"><Ban size={16} /> This report was declined</div>
+                  )}
                 </div>
-                {r.status === REPORT_STATUS.DECLINED && (
-                  <div className="workflow-declined-badge"><Ban size={16} /> This report was declined</div>
-                )}
               </div>
 
               {transitions.length > 0 ? (
-                <div className="action-section">
-                  <h5>Change Status</h5>
-                  <p className="action-note">
-                    <Mail size={16} /> The reporter will receive an in-app notification for every status change.
-                  </p>
+                <div className="vmr-action-card">
+                  <div className="vmr-action-hdr">
+                    <Mail size={20} className="vmr-action-ico vmr-ico-verify" />
+                    <div><h4>Change Status</h4><p>The reporter will receive an in-app notification for every status change.</p></div>
+                  </div>
                   {transitions.includes(REPORT_STATUS.DECLINED) && (
                     <div className="decline-reason-input">
                       <label>Decline Reason <span className="required">*</span></label>
@@ -1291,97 +1270,85 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
                   </div>
                 </div>
               ) : (
-                <div className="actions-terminal">
-                  <span><CheckCircle size={24} /></span>
-                  <p>This report is in a final state — no further status changes are allowed.</p>
+                <div className="vmr-terminal-note">
+                  <CheckCircle size={16} />
+                  This report is in a final state — no further status changes are allowed.
                 </div>
               )}
             </div>
           )}
 
           {activeTab === "message" && (
-            <div className="tab-pane message-pane">
+            <div className="vmr-message-tab">
               {!r.owner?.id ? (
-                <div className="no-notes">
-                  <span><MailOpen size={32} /></span>
-                  <p>This report has no linked reporter account. Updates cannot be sent.</p>
-                </div>
+                <div className="vmr-media-empty"><MailOpen size={32} /><p>This report has no linked reporter account. Updates cannot be sent.</p></div>
               ) : (
                 <>
-                  <div className="msg-reporter-info">
-                    <strong>Sending to:</strong> {r.owner?.full_name ?? "Reporter"}
-                    {r.owner?.email && (
-                      <span style={{ color: "var(--subtext)", marginLeft: 6 }}>{r.owner.email}</span>
-                    )}
+                  <div className="vmr-card">
+                    <div className="vmr-card-body">
+                      <strong>Sending to:</strong> {r.owner?.full_name ?? "Reporter"}
+                      {r.owner?.email && <span style={{ color: "var(--subtext)", marginLeft: 6 }}>{r.owner.email}</span>}
+                    </div>
                   </div>
 
-                  <p className="msg-label" style={{ marginBottom: 8 }}>Quick updates</p>
+                  <p className="msg-label" style={{ margin: "14px 0 8px" }}>Quick updates</p>
                   <div className="msg-quick-replies">
                     {[
-                      { label: <><CheckCircle size={14} /> Under Review</>,       title: "Your report is under review",   text: "Your report is currently being reviewed by our team. We will update you shortly.", type: "info"    },
-                      { label: <><Camera size={14} /> Need Clearer Photo</>,      title: "Additional information needed", text: "Thank you for your report. Could you please provide a clearer photo of the damage?", type: "warning" },
-                      { label: <><Wrench size={14} /> Scheduled for Repair</>,   title: "Repair has been scheduled",     text: "Your report has been reviewed and a repair has been scheduled. Thank you!", type: "info"    },
-                      { label: <><CheckCircle size={14} /> Repair Complete</>,    title: "Road damage has been repaired", text: "The damage you reported has been fully repaired. Thank you for helping keep our roads safe!", type: "success" },
-                      { label: <><ClipboardList size={14} /> Duplicate Report</>, title: "Your report is a duplicate",   text: "This damage has already been reported and is being addressed. Thank you for your vigilance!", type: "warning" },
+                      { label: <><CheckCircle size={14} /> Under Review</>, title: "Your report is under review", text: "Your report is currently being reviewed by our team. We will update you shortly.", type: "info" },
+                      { label: <><Camera size={14} /> Need Clearer Photo</>, title: "Additional information needed", text: "Thank you for your report. Could you please provide a clearer photo of the damage?", type: "warning" },
+                      { label: <><Wrench size={14} /> Scheduled for Repair</>, title: "Repair has been scheduled", text: "Your report has been reviewed and a repair has been scheduled. Thank you!", type: "info" },
+                      { label: <><CheckCircle size={14} /> Repair Complete</>, title: "Road damage has been repaired", text: "The damage you reported has been fully repaired. Thank you for helping keep our roads safe!", type: "success" },
+                      { label: <><ClipboardList size={14} /> Duplicate Report</>, title: "Your report is a duplicate", text: "This damage has already been reported and is being addressed. Thank you for your vigilance!", type: "warning" },
                     ].map((tpl, idx) => (
-                      <button
-                        key={idx}
-                        className="msg-quick-btn"
-                        disabled={updatesLoading}
-                        onClick={() => doSendUpdate(tpl.title, tpl.text, tpl.type)}
-                      >
+                      <button key={idx} className="msg-quick-btn" disabled={updatesLoading} onClick={() => doSendUpdate(tpl.title, tpl.text, tpl.type)}>
                         {tpl.label}
                       </button>
                     ))}
                   </div>
 
-                  <label className="msg-label" style={{ marginTop: 14 }}>Custom message (optional)</label>
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                    <textarea
-                      className="msg-textarea"
-                      value={customMsg}
-                      onChange={(e) => setCustomMsg(e.target.value)}
-                      rows={3}
-                      maxLength={300}
-                      placeholder="Write a custom update for the reporter…"
-                      style={{ flex: 1 }}
-                    />
-                    <button
-                      className="btn-send-msg"
-                      style={{ flexShrink: 0, height: "fit-content" }}
-                      onClick={() => doSendUpdate(`Update on ${padId(r.id)}`, customMsg, "info")}
-                      disabled={updatesLoading || !customMsg.trim()}
-                    >
-                      {updatesLoading ? "Sending…" : <><Send size={14} /> Send</>}
-                    </button>
+                  <div className="vmr-card" style={{ marginTop: 14 }}>
+                    <div className="vmr-card-hdr"><Send size={14} /><span>CUSTOM MESSAGE</span></div>
+                    <div className="vmr-card-body">
+                      <textarea
+                        className="msg-textarea"
+                        value={customMsg}
+                        onChange={(e) => setCustomMsg(e.target.value)}
+                        rows={3}
+                        maxLength={300}
+                        placeholder="Write a custom update for the reporter…"
+                      />
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                        <button
+                          className="btn-send-msg"
+                          onClick={() => doSendUpdate(`Update on ${padId(r.id)}`, customMsg, "info")}
+                          disabled={updatesLoading || !customMsg.trim()}
+                        >
+                          {updatesLoading ? "Sending…" : <><Send size={14} /> Send</>}
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
-                  {updateSent && (
-                    <div className="msg-sent-banner"><Check size={14} /> Update sent to reporter successfully!</div>
-                  )}
+                  {updateSent && <div className="msg-sent-banner"><Check size={14} /> Update sent to reporter successfully!</div>}
 
                   <div style={{ marginTop: 20 }}>
                     <p className="msg-label">Update history ({updates.length})</p>
                     {updatesLoading ? (
                       <p style={{ color: "var(--subtext)", fontSize: "0.84rem" }}>Loading…</p>
                     ) : updates.length === 0 ? (
-                      <div className="no-notes" style={{ padding: "16px 0" }}>
-                        <span><MailOpen size={32} /></span>
-                        <p>No updates sent yet for this report.</p>
-                      </div>
+                      <div className="vmr-media-empty" style={{ padding: "16px 0" }}><MailOpen size={32} /><p>No updates sent yet for this report.</p></div>
                     ) : (
-                      <div className="notes-timeline">
+                      <div className="vmr-notes-timeline">
                         {updates.map((u, i) => (
-                          <div key={u.id ?? i} className="note-entry">
-                            <div className="note-line" />
-                            <div className="note-dot" />
-                            <div className="note-body">
-                              <div className="note-meta">
-                                <span className="note-author">Admin → {r.owner?.full_name ?? "Reporter"}</span>
-                                <span className="note-date">{fmtDate(u.created_at)}</span>
+                          <div key={u.id ?? i} className="vmr-note-entry">
+                            <div className="vmr-note-dot" />
+                            <div className="vmr-note-body">
+                              <div className="vmr-note-meta">
+                                <span className="vmr-note-author">Admin → {r.owner?.full_name ?? "Reporter"}</span>
+                                <span className="vmr-note-date">{fmtDate(u.created_at)}</span>
                               </div>
-                              <p className="note-text" style={{ fontWeight: 600 }}>{u.title}</p>
-                              <p className="note-text">{u.message}</p>
+                              <p className="vmr-note-text" style={{ fontWeight: 600 }}>{u.title}</p>
+                              <p className="vmr-note-text">{u.message}</p>
                             </div>
                           </div>
                         ))}
@@ -1394,63 +1361,71 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
           )}
 
           {activeTab === "completion" && (
-            <div className="tab-pane completion-pane">
+            <div className="vmr-completion-tab">
               {compLoading ? (
-                <div className="no-notes">
-                  <Loader2 size={24} className="spin" />
-                  <p>Loading completion details…</p>
-                </div>
+                <p className="vmr-compl-loading">Loading completion details…</p>
               ) : !completion ? (
-                <div className="no-notes">
-                  <CheckCircle size={28} />
-                  <p>No completion details available for this report.</p>
-                </div>
+                <p className="vmr-compl-empty">No completion details available for this report.</p>
               ) : (
-                <div className="compl-section">
-                  <div className="compl-grid">
+                <>
+                  <div className="vmr-grid">
                     {completion.notes && (
-                      <div className="compl-item compl-item--full">
-                        <span className="compl-label">Notes</span>
-                        <p className="compl-value">{completion.notes}</p>
+                      <div className="vmr-card vmr-card--full">
+                        <div className="vmr-card-hdr"><FileText size={14} /><span>NOTES</span></div>
+                        <div className="vmr-card-body"><p className="vmr-compl-notes">{completion.notes}</p></div>
                       </div>
                     )}
-                    {completion.materials_used && (
-                      <div className="compl-item compl-item--full">
-                        <span className="compl-label">Materials Used</span>
-                        <p className="compl-value">{completion.materials_used}</p>
+                    {completion.materials_used && Array.isArray(completion.materials_used) && completion.materials_used.length > 0 && (
+                      <div className="vmr-card vmr-card--full">
+                        <div className="vmr-card-hdr"><Wrench size={14} /><span>MATERIALS USED</span></div>
+                        <div className="vmr-card-body">
+                          <table className="vmr-materials-table">
+                            <thead>
+                              <tr><th>Material</th><th>Qty</th><th>Unit Cost</th></tr>
+                            </thead>
+                            <tbody>
+                              {completion.materials_used.map((m, i) => (
+                                <tr key={i}>
+                                  <td>{m.name ?? "—"}</td>
+                                  <td>{m.quantity ?? "—"}</td>
+                                  <td>{m.unit_cost != null ? `₱${Number(m.unit_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                     {completion.actual_cost != null && (
-                      <div className="compl-item">
-                        <span className="compl-label">Actual Cost</span>
-                        <p className="compl-value compl-cost">
-                          ₱{Number(completion.actual_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-                        </p>
+                      <div className="vmr-card">
+                        <div className="vmr-card-hdr"><ClipboardList size={14} /><span>ACTUAL COST</span></div>
+                        <div className="vmr-card-body">
+                          <div className="vmr-row"><span className="vmr-lbl">Total</span>
+                            <span className="vmr-val vmr-cost">₱{Number(completion.actual_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
                       </div>
                     )}
                     {completion.completed_at && (
-                      <div className="compl-item">
-                        <span className="compl-label">Completed On</span>
-                        <p className="compl-value">{fmtDate(completion.completed_at)}</p>
+                      <div className="vmr-card">
+                        <div className="vmr-card-hdr"><Calendar size={14} /><span>COMPLETED ON</span></div>
+                        <div className="vmr-card-body">
+                          <div className="vmr-row"><span className="vmr-lbl">Date</span><span className="vmr-val">{fmtDate(completion.completed_at)}</span></div>
+                        </div>
                       </div>
                     )}
                   </div>
                   {completion.completion_photos?.length > 0 && (
-                    <div className="compl-photos">
-                      <p className="compl-photos-label"><Camera size={13} /> Completion Photos</p>
-                      <div className="compl-photos-grid">
+                    <div className="vmr-compl-photos">
+                      <p className="vmr-compl-photos-lbl"><Camera size={13} /> Completion Photos</p>
+                      <div className="vmr-compl-photos-row">
                         {completion.completion_photos.map((ph) => (
-                          <img
-                            key={ph.id}
-                            src={`${BASE_URL}${ph.file_url}`}
-                            alt={ph.file_name ?? "Completion photo"}
-                            className="compl-photo-img"
-                          />
+                          <img key={ph.id} src={`${BASE_URL}${ph.file_url}`} alt={ph.file_name ?? "Completion photo"} className="vmr-compl-photo" />
                         ))}
                       </div>
                     </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           )}

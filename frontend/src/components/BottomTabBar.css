@@ -1,0 +1,77 @@
+.bottom-tab-bar {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .bottom-tab-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    padding-bottom: env(safe-area-inset-bottom, 0px); /* avoids iOS home-bar overlap */
+    background: linear-gradient(180deg, var(--user-bg-to), var(--user-bg-from));
+    border-top: 1px solid var(--user-border);
+    z-index: 1000;
+  }
+
+  .bottom-tab-link,
+  .bottom-tab-more {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: var(--user-text-muted);
+    text-decoration: none;
+    font-size: 0.65rem;
+    font-weight: 500;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 4px 8px;
+    flex: 1;
+  }
+
+  .bottom-tab-link.active {
+    color: var(--user-toggle-track);
+  }
+
+  .bottom-tab-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--user-btn-from), var(--user-btn-to));
+    color: #fff;
+    border: 4px solid var(--user-bg-from);
+    margin-top: -28px; /* raises it above the bar */
+    box-shadow: 0 4px 14px rgba(31, 92, 63, 0.4);
+    cursor: pointer;
+  }
+
+  .bottom-tab-fab:active {
+    transform: scale(0.95);
+  }
+
+  .bottom-tab-more-icon {
+    position: relative;
+  }
+
+  .bottom-tab-more-badge {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #e53935;
+  }
+}

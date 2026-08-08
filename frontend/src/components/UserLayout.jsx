@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import UserSidebar from "./UserSidebar";
+import BottomTabBar from "./BottomTabBar";
 import AppHeader from "./AppHeader";
 import ChatbotWidget from "./ChatbotWidget";
 import { useAuth } from "../hooks/useAuth";
@@ -39,6 +40,7 @@ function UserLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth < 1024);
   const [toasts, setToasts] = useState([]);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const timerRef = useRef({});
 
   const { user } = useAuth();
@@ -81,13 +83,14 @@ function UserLayout() {
     return () => { document.body.style.overflow = ""; };
   }, [isSidebarOpen]);
 
-  return (
+return (
     <div className="user-layout">
       <UserSidebar 
         isOpen={isSidebarOpen}
         onClose={closeSidebar}
         isCollapsed={isCollapsed}
         onToggleCollapse={toggleCollapse}
+        onReportModalChange={setIsReportModalOpen}
       />
 
       <AppHeader 
@@ -102,6 +105,11 @@ function UserLayout() {
 
       {isSidebarOpen && <div className="sidebar-backdrop" onClick={closeSidebar} />}
 
+      <BottomTabBar 
+      onOpenMore={toggleSidebar} 
+      onReportModalChange={setIsReportModalOpen}
+      />
+
       {toasts.length > 0 && (
         <div className="notif-toast-stack">
           {toasts.map(t => (
@@ -114,10 +122,12 @@ function UserLayout() {
         </div>
       )}
 
-      <ChatbotWidget
-        userName={user?.full_name || user?.name || null}
-        pendingReportCount={user?.pending_reports_count ?? null}
-      />
+      {!isSidebarOpen && !isReportModalOpen && (
+        <ChatbotWidget
+          userName={user?.full_name || user?.name || null}
+          pendingReportCount={user?.pending_reports_count ?? null}
+        />
+      )}
     </div>
   );
 }

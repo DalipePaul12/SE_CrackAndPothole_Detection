@@ -1,21 +1,9 @@
-/**
- * ContractorNotifications.jsx
- *
- * Mirrors Inside-App-User/Notifications.jsx exactly in structure and style.
- * Differences from the citizen version:
- *  - handleView navigates to /contractorpanel/projects instead of /dashboard/submissions
- *  - Page subtitle is contractor-appropriate
- *  - All helper sub-components are self-contained copies so the citizen file
- *    is never modified.
- *
- * Uses the same NotificationProvider/useNotificationContext that wraps the
- * entire route tree in App.jsx — no new hook or context is needed.
- */
+
 import React, { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-/* Re-use the citizen page's CSS wholesale — all class names are .notif-* and
-   .notifications-page, shared safely across both pages. */
+
 import "../Inside-App-User/Notifications.css";
+import "./ContractorNotifications.css";
 import { useNotificationContext } from "../Contexts/NotificationContext.jsx";
 import { getReport } from "../../api/reports";
 
@@ -402,7 +390,7 @@ export default function ContractorNotifications() {
     <>
       <Toast toasts={toasts} onRemove={removeToast} />
 
-      <div className="notifications-page">
+      <div className="notifications-page contractor-notifications-page">
         <div className="notifications-inner">
 
           {/* ── Header ── */}

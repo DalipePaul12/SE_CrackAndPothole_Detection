@@ -106,7 +106,7 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
 
       <button
         className={`user-report-btn ${isCollapsed ? "collapsed" : ""}`}
-        onClick={() => { setShowReportModal(true); onClose?.(); }}
+        onClick={() => { setShowReportModal(true); onClose?.(); onReportModalChange?.(true); }}
         title={isCollapsed ? "Report Damage" : ""}
       >
         <PlusCircle size={20} />
@@ -115,34 +115,34 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
 
       {showReportModal && <CreateReport onClose={() => setShowReportModal(false)} />}
 
-      <nav className="user-sidebar-nav">
-        {/* ── Main Menu ── */}
-        <div className="user-nav-section">
-          {!isCollapsed && <label className="user-section-label">Main Menu</label>}
-          {isCollapsed && <div className="user-section-spacer" />}
-
-          {mainNavItems.map(item => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.to;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={onClose}
-                className={`user-nav-link ${isActive ? "active" : ""}`}
-                title={isCollapsed ? item.label : ""}
-              >
-                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                <span className={isCollapsed ? "hidden" : ""}>{item.label}</span>
-                {isCollapsed && isActive && <span className="user-active-dot" />}
-              </Link>
-            );
-          })}
-        </div>
+<nav className="user-sidebar-nav">
+        {/* ── Main Menu — desktop only; mobile has these in the bottom tab bar ── */}
+        {!isMobile && (
+          <div className="user-nav-section">
+            <label className={`user-section-label ${isCollapsed ? "hidden" : ""}`}>Main Menu</label>
+            {mainNavItems.map(item => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.to;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={onClose}
+                  className={`user-nav-link ${isActive ? "active" : ""}`}
+                  title={isCollapsed ? item.label : ""}
+                >
+                  <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  <span className={isCollapsed ? "hidden" : ""}>{item.label}</span>
+                  {isCollapsed && isActive && <span className="user-active-dot" />}
+                </Link>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── Personal ── */}
         <div className="user-nav-section">
-          {!isCollapsed && <label className="user-section-label">Personal</label>}
+          <label className={`user-section-label ${isCollapsed ? "hidden" : ""}`}>Personal</label>
           {isCollapsed && <div className="user-section-spacer" />}
 
           {personalNavItems.map(item => {
@@ -166,6 +166,9 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
 
         {/* ── Others ── */}
         <div className="user-nav-section user-others-section">
+          <label className={`user-section-label ${isCollapsed ? "hidden" : ""}`}>Preferences</label>
+          {isCollapsed && <div className="user-section-spacer" />}
+
           {otherNavItems.map(item => {
             const Icon = item.icon;
             const isActive = location.pathname === item.to;

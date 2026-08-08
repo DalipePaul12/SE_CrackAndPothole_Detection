@@ -1,0 +1,164 @@
+/* ContractorBottomNav — mobile-only tab bar, references existing --admin-* variables */
+
+.contractor-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .contractor-bottom-nav {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(60px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: linear-gradient(180deg, var(--admin-bg-from), var(--admin-bg-to));
+    border-top: 1px solid var(--admin-border);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+    z-index: 1050;
+    font-family: "Poppins", sans-serif;
+  }
+}
+
+.contractor-bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--admin-text-muted);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 6px 2px;
+  transition: color 0.2s;
+}
+
+.contractor-bottom-nav-item span {
+  font-size: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.contractor-bottom-nav-item.active {
+  color: var(--admin-toggle-track);
+}
+
+.contractor-bottom-nav-icon-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.contractor-bottom-nav-badge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 9999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ── More Sheet ── */
+.contractor-bottom-sheet-backdrop {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .contractor-bottom-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1099;
+  }
+
+  .contractor-bottom-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(180deg, var(--admin-bg-from), var(--admin-bg-to));
+    border-radius: 20px 20px 0 0;
+    border: 1px solid var(--admin-border);
+    border-bottom: none;
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+    z-index: 1100;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.3);
+    animation: contractor-sheet-up 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@keyframes contractor-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.contractor-bottom-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid var(--admin-border);
+  margin-bottom: 8px;
+  color: var(--admin-text);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.contractor-bottom-sheet-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1.5px solid var(--admin-border);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--admin-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.contractor-bottom-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 10px;
+  border-radius: 14px;
+  border: none;
+  background: transparent;
+  color: var(--admin-text);
+  text-decoration: none;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.contractor-bottom-sheet-item:hover {
+  background: var(--admin-link-hover);
+}
+
+.contractor-bottom-sheet-logout {
+  color: #e63946;
+}
+
+.contractor-bottom-sheet-logout:hover {
+  background: #e63946;
+  color: white;
+}

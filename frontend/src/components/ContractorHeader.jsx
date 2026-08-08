@@ -1,16 +1,11 @@
-/**
- * ContractorHeader — thin wrapper around AdminHeader.
- * Reuses AdminHeader's full implementation and CSS; only overrides the title.
- */
-import AdminHeader from "./AdminHeader";
+import "./ContractorHeader.css";
 
-export default function ContractorHeader({ onMenuClick, isSidebarOpen, isCollapsed }) {
+export default function ContractorHeader({ title = "Contractor Panel", isCollapsed }) {
   return (
-    <AdminHeader
-      title="Contractor Panel"
-      onMenuClick={onMenuClick}
-      isSidebarOpen={isSidebarOpen}
-      isCollapsed={isCollapsed}
-    />
+    <header className={`contractor-header${isCollapsed ? " collapsed" : ""}`}>
+      <div className="contractor-header-left">
+        <h2 className="contractor-header-title">{title}</h2>
+      </div>
+    </header>
   );
 }

@@ -1,0 +1,52 @@
+/* ContractorHeader — standalone, references generic --card/--border/--text theme vars */
+
+.contractor-header {
+  height: var(--header-height);
+  background: var(--card);
+  border-bottom: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  position: fixed;
+  top: 0;
+  left: var(--admin-width);
+  right: 0;
+  z-index: 100;
+  border-bottom-left-radius: 30px;
+  border-bottom-right-radius: 30px;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+  font-family: "Poppins", sans-serif;
+  transition: background var(--transition-med), border-color var(--transition-med),
+              left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.contractor-header.collapsed {
+  left: var(--admin-collapsed);
+}
+
+.contractor-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contractor-header-title {
+  font-size: 1.6rem;
+  color: var(--text);
+  font-weight: 600;
+  margin: 0;
+}
+
+/* ── Mobile ── */
+@media (max-width: 1023px) {
+  .contractor-header {
+    left: 0 !important;
+    padding: 0 16px;
+  }
+
+  .contractor-header-title {
+    font-size: 1.15rem;
+  }
+}

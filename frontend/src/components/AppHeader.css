@@ -80,7 +80,7 @@
 }
 
 @media (max-width: 1023px) {
-  .burger-btn { display: block; }
+  .burger-btn { display: none; }
   .app-header { left: 0 !important; }
 }
 

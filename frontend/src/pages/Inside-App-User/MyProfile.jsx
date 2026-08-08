@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./MyProfile.css";
-
+import { createPortal } from "react-dom";
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal.jsx";
+import { useNavigate } from "react-router-dom";
 
 import { ImLocation } from "react-icons/im";
 import {
@@ -19,14 +20,14 @@ import {
   FaChevronDown,
 } from "react-icons/fa";
 import { IoPersonSharp } from "react-icons/io5";
-import { MdLocationOn } from "react-icons/md";
+import { MdLocationOn, MdBrokenImage } from "react-icons/md";
 import { BiError } from "react-icons/bi";
 
 import { useUser } from "../../hooks/useUser";
 import { useReports } from "../../hooks/useReports";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 6;
 
 /* ─── Toast Component ─── */
 function Toast({ toasts, removeToast }) {
@@ -126,97 +127,240 @@ function StatusTimeline({ report }) {
   );
 }
 
+const VIDEO_EXT_RE = /\.(mp4|webm|ogg|mov)(\?|$)/i;
+
+function getReportMedia(report) {
+  const url = report?.media_attachments?.[0]?.file_url;
+  if (!url) return { url: null, type: null };
+  return {
+    url: `${BASE_URL}${url}`,
+    type: VIDEO_EXT_RE.test(url) ? "video" : "image",
+  };
+}
+
+function ReportMedia({ media, reportId }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!media.url || failed) {
+    return (
+      <div className="report-media-wrap">
+        <div className="report-image-placeholder">
+          <MdBrokenImage />
+          <span>No media</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (media.type === "video") {
+    return (
+      <div className="report-media-wrap">
+        <video
+          src={media.url}
+          controls
+          muted
+          playsInline
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="report-media-wrap">
+      <img
+        src={media.url}
+        alt={`Report #${reportId}`}
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
 /* ─── Report Detail Modal ─── */
 function ReportDetailModal({ report, onClose, BASE_URL }) {
-  const imageUrl = report?.media_attachments?.[0]?.file_url
-    ? `${BASE_URL}${report.media_attachments[0].file_url}`
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("details");
+  const attachments = report?.media_attachments ?? [];
+  const imageUrl = attachments[0]?.file_url
+    ? `${BASE_URL}${attachments[0].file_url}`
     : null;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
+    document.body.classList.add("report-modal-open");
+    return () => { 
+      document.body.style.overflow = ""; 
+      document.body.classList.remove("report-modal-open");
     };
   }, []);
+
+  useEffect(() => {
+    const fn = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
+  }, [onClose]);
+
+  const statusLabel = statusToStage(report.status).toUpperCase();
+
+  const padId = (id) => `RPT-${String(id).padStart(5, "0")}`;
+
+  const TABS = [
+    { id: "details",  label: "Details",  icon: <FaSearch /> },
+    { id: "media",    label: "Media",    icon: <FaCamera />, badge: attachments.length },
+    { id: "timeline", label: "Timeline", icon: <FaTools /> },
+  ];
 
   return (
     <div
       className="modal-overlay"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="modal-box report-detail-modal">
-        <div className="modal-header-band">
-          <h3 className="modal-title">
-            <FaSearch />
-            Report #{report.id}
-          </h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
+      <div className="mp-modal-box" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="mp-modal-header">
+          <div className="mp-modal-header-id">
+            <span className="mp-modal-id">{padId(report.id)}</span>
+            <span className={`mp-modal-badge mp-status-badge mp-status-${(report.status || "").toLowerCase()}`}>
+              {statusLabel}
+            </span>
+            {report.ai_confidence != null && (
+              <span className="mp-modal-badge mp-confidence-badge">
+                AI {(report.ai_confidence * 100).toFixed(0)}%
+              </span>
+            )}
+          </div>
+          <button className="mp-modal-close" onClick={onClose} aria-label="Close">
             <FaTimes />
           </button>
         </div>
 
-        <div className="modal-scroll-body">
-          {imageUrl && (
-            <img
-              src={imageUrl}
-              alt={`Report #${report.id}`}
-              className="modal-report-img"
-              onError={(e) => { e.currentTarget.style.display = "none"; }}
-            />
-          )}
+        {/* Tabs */}
+        <div className="mp-modal-tabs">
+          {TABS.map(({ id, label, icon, badge }) => (
+            <button
+              key={id}
+              className={`mp-modal-tab ${activeTab === id ? "active" : ""}`}
+              onClick={() => setActiveTab(id)}
+            >
+              {icon}
+              {label}
+              {badge > 0 && <span className="mp-modal-tab-badge">{badge}</span>}
+            </button>
+          ))}
+        </div>
 
-          <div className="modal-body">
-            <div className="modal-detail-grid">
-              <div className="modal-detail-cell">
-                <span className="modal-detail-label">Date / Time</span>
-                <span className="modal-detail-value">
-                  {report.created_at ? new Date(report.created_at).toLocaleString() : "—"}
-                </span>
+        {/* Body */}
+        <div className="mp-modal-body">
+          {activeTab === "details" && (
+            <div className="mp-modal-grid">
+              <div className="mp-modal-card">
+                <h4 className="mp-modal-card-title"><FaPaperPlane /> Report Info</h4>
+                <div className="mp-modal-card-body">
+                  <div className="mp-modal-row">
+                    <span>Date / Time</span>
+                    <strong>{report.created_at ? new Date(report.created_at).toLocaleString() : "—"}</strong>
+                  </div>
+                  <div className="mp-modal-row">
+                    <span>Description</span>
+                    <strong>{report.description || "No description provided."}</strong>
+                  </div>
+                </div>
               </div>
 
-              <div className="modal-detail-cell">
-                <span className="modal-detail-label">Location</span>
-                <span className="modal-detail-value">
-                  {report.barangay || report.street_name || `${report.latitude}, ${report.longitude}`}
-                </span>
+              <div className="mp-modal-card">
+                <h4 className="mp-modal-card-title"><BiError /> Damage Info</h4>
+                <div className="mp-modal-card-body">
+                  <div className="mp-modal-row">
+                    <span>Type</span>
+                    <strong className={`damage ${(report.ai_damage_type || "").toLowerCase()}`}>
+                      {report.ai_damage_type || "Pending"}
+                    </strong>
+                  </div>
+                  <div className="mp-modal-row">
+                    <span>Severity</span>
+                    <strong className={`severity ${(report.ai_severity || "").toLowerCase().replace(" ", "-")}`}>
+                      {report.ai_severity || "Pending"}
+                    </strong>
+                  </div>
+                  {report.ai_confidence != null && (
+                    <div style={{ marginTop: "6px" }}>
+                      <ConfidenceBar value={report.ai_confidence} />
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="modal-detail-cell">
-                <span className="modal-detail-label">Damage Type</span>
-                <span className={`modal-detail-value damage ${(report.ai_damage_type || "").toLowerCase()}`}>
-                  {report.ai_damage_type || "Pending"}
-                </span>
+              <div className="mp-modal-card mp-modal-card--full">
+                <h4 className="mp-modal-card-title"><MdLocationOn /> Location</h4>
+                <div className="mp-modal-card-body">
+                  <div className="mp-modal-row">
+                    <span>Barangay</span>
+                    <strong>{report.barangay || "—"}</strong>
+                  </div>
+                  <div className="mp-modal-row">
+                    <span>Street</span>
+                    <strong>{report.street_name || "—"}</strong>
+                  </div>
+                  <div className="mp-modal-row">
+                    <span>Coordinates</span>
+                    <strong>{report.latitude}, {report.longitude}</strong>
+                  </div>
+                  {report.latitude != null && report.longitude != null && (
+                    <button
+                      type="button"
+                      className="mp-modal-map-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate("/dashboard/mapview", {
+                          state: {
+                            lat: report.latitude,
+                            lng: report.longitude,
+                            reportId: report.id,
+                          },
+                        });
+                      }}
+                    >
+                      <ImLocation /> View on Map
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="modal-detail-cell">
-                <span className="modal-detail-label">Severity</span>
-                <span className={`modal-detail-value severity ${(report.ai_severity || "").toLowerCase().replace(" ", "-")}`}>
-                  {report.ai_severity || "Pending"}
-                </span>
-              </div>
-
-              {report.ai_confidence != null && (
-                <div className="modal-detail-cell full">
-                  <span className="modal-detail-label">AI Confidence</span>
-                  <div style={{ marginTop: "4px" }}>
-                    <ConfidenceBar value={report.ai_confidence} />
+              {report.status === "DECLINED" && report.decline_reason && (
+                <div className="mp-modal-card mp-modal-card--full mp-modal-card--danger">
+                  <div className="mp-modal-card-body mp-modal-decline-body">
+                    <BiError />
+                    <span><strong>Decline Reason:</strong> {report.decline_reason}</span>
                   </div>
                 </div>
               )}
+            </div>
+          )}
 
-              {report.description && (
-                <div className="modal-detail-cell full">
-                  <span className="modal-detail-label">Description</span>
-                  <span className="modal-detail-value">{report.description}</span>
+          {activeTab === "media" && (
+            <div className="mp-modal-media-tab">
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt={`Report #${report.id}`}
+                  className="mp-modal-media-main"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              ) : (
+                <div className="mp-modal-media-empty">
+                  <MdBrokenImage />
+                  <p>No media attachments for this report</p>
                 </div>
               )}
             </div>
+          )}
 
-            <div className="modal-timeline-section">
-              <p className="modal-timeline-title">Status Timeline</p>
+          {activeTab === "timeline" && (
+            <div className="mp-modal-timeline-tab">
               <StatusTimeline report={report} />
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -294,9 +438,15 @@ function ReputationModal({ score, onClose }) {
 
 /* ─── Main Component ─── */
 function MyProfile() {
-  // FIX 1: Added updatePassword to destructure
-  const { profile, loading: profileLoading, update, saving, updatePassword } = useUser();
-  const { reports, loading: reportsLoading } = useReports({ mine: true });
+  const {
+    profile,
+    loading: profileLoading,
+    update,
+    saving,
+    updatePassword,
+  } = useUser();
+
+  const { reports, loading: reportsLoading, stats: reportStats } = useReports({ mine: true });
 
   const [showConfirm, setShowConfirm]   = useState(false);
   const [activeTab, setActiveTab]       = useState("feed");
@@ -407,10 +557,9 @@ function MyProfile() {
   const visibleReports = filteredReports.slice(0, visibleCount);
   const hasMore        = visibleCount < filteredReports.length;
 
-  /* Stats */
-  const totalPosts = reports.length;
-  const resolved   = reports.filter((r) => r.status === "RESOLVED").length;
-  const inProgress = reports.filter((r) => r.status === "IN_PROGRESS").length;
+  const totalPosts = reportStats?.total ?? reports.length;
+  const resolved   = reportStats?.resolved ?? reports.filter((r) => r.status === "RESOLVED").length;
+  const inProgress = reportStats?.inProgress ?? reports.filter((r) => r.status === "IN_PROGRESS").length;
 
   /* ─── Avatar Upload ─── */
   const handleAvatarChange = async (e) => {
@@ -476,8 +625,6 @@ function MyProfile() {
   };
 
   /* ─── Change Password ─── */
-  // FIX 3: Replaced raw fetch with updatePassword from useUser hook
-  /* ─── Change Password ─── */
   const [pwLoading, setPwLoading] = useState(false);
 
   const handleChangePassword = async () => {
@@ -510,12 +657,6 @@ function MyProfile() {
     }
   };
 
-  /* ─── Image URL helper ─── */
-  const getImageUrl = (report) => {
-    const url = report?.media_attachments?.[0]?.file_url;
-    return url ? `${BASE_URL}${url}` : null;
-  };
-
   /* ─── Loading state ─── */
   if (profileLoading)
     return (
@@ -537,7 +678,6 @@ function MyProfile() {
           <img src={profilePicSrc} alt="Profile" className="profile-avatar" />
 
           <div className="profile-info">
-            {/* FIX 2: Changed profile?.public_id to profile?.full_name */}
             <h2>{profile?.full_name || "—"}</h2>
             <p className="profile-bio">
               <MdLocationOn className="bio-location-icon" />
@@ -563,7 +703,7 @@ function MyProfile() {
             <div
               className="stat-card stat-card--clickable"
               onClick={() => setShowRepModal(true)}
-              title="View reputation breakdown"
+              aria-label="View reputation breakdown"
             >
               <span>{Math.floor(profile?.reputation_score ?? 0)}</span>
               <p>Rep Score</p>
@@ -656,76 +796,74 @@ function MyProfile() {
               </div>
             ) : (
               <>
-                {visibleReports.map((report) => {
-                  const imageUrl = getImageUrl(report);
-                  return (
-                    <div
-                      key={report.id}
-                      className="report-card"
-                      onClick={() => setSelectedReport(report)}
-                      title="Click to view full details"
-                    >
-                      <div className="report-header">
-                        <div>
-                          <strong>Report #{report.id}</strong>
-                          <p>
-                            {report.created_at
-                              ? new Date(report.created_at).toLocaleString()
-                              : "—"}
-                          </p>
+                <div className="reports-grid">
+                  {visibleReports.map((report) => {
+                    const media = getReportMedia(report);
+                    return (
+                      <div
+                        key={report.id}
+                        className="report-card"
+                        onClick={() => setSelectedReport(report)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`View details for report #${report.id}`}
+                      >
+                        <div className="report-header">
+                          <div>
+                            <strong>Report #{report.id}</strong>
+                            <p>
+                              {report.created_at
+                                ? new Date(report.created_at).toLocaleString()
+                                : "—"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="report-main">
-                        {imageUrl && (
-                          <img
-                            src={imageUrl}
-                            alt={`Report #${report.id}`}
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
-                        )}
-                        <div className="ai-result">
-                          <h4>AI Classification</h4>
-                          <h5>Result</h5>
-                          <p>
-                            <strong>Damage:</strong>
-                            <span
-                              className={`damage ${(report.ai_damage_type || "").toLowerCase()}`}
-                            >
-                              {report.ai_damage_type || "Pending"}
-                            </span>
-                          </p>
-                          <p>
-                            <strong>Severity:</strong>
-                            <span
-                              className={`severity ${(report.ai_severity || "").toLowerCase().replace(" ", "-")}`}
-                            >
-                              {report.ai_severity || "Pending"}
-                            </span>
-                          </p>
-                          {report.ai_confidence != null && (
-                            <ConfidenceBar value={report.ai_confidence} />
-                          )}
+                        <div className="report-main">
+                          <ReportMedia media={media} reportId={report.id} />
+                          <div className="ai-result">
+                            <h4>AI Classification</h4>
+                            <h5>Result</h5>
+                            <p>
+                              <strong>Damage:</strong>
+                              <span
+                                className={`damage ${(report.ai_damage_type || "").toLowerCase()}`}
+                              >
+                                {report.ai_damage_type || "Pending"}
+                              </span>
+                            </p>
+                            <p>
+                              <strong>Severity:</strong>
+                              <span
+                                className={`severity ${(report.ai_severity || "").toLowerCase().replace(" ", "-")}`}
+                              >
+                                {report.ai_severity || "Pending"}
+                              </span>
+                            </p>
+                            {report.ai_confidence != null && (
+                              <ConfidenceBar value={report.ai_confidence} />
+                            )}
+                          </div>
                         </div>
+
+                        <p className="report-location">
+                          <ImLocation className="report-location-icon" />
+                          {report.barangay ||
+                            report.street_name ||
+                            `${report.latitude}, ${report.longitude}`}
+                        </p>
+
+                        <div
+                          className={`report-description${report.description ? "" : " report-description--empty"}`}
+                        >
+                          {report.description || "No description provided."}
+                        </div>
+
+                        <StatusTimeline report={report} />
                       </div>
-
-                      <p className="report-location">
-                        <ImLocation className="report-location-icon" />
-                        {report.barangay ||
-                          report.street_name ||
-                          `${report.latitude}, ${report.longitude}`}
-                      </p>
-
-                      <div className="report-description">
-                        {report.description || "—"}
-                      </div>
-
-                      <StatusTimeline report={report} />
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
 
                 {hasMore && (
                   <button
@@ -752,7 +890,7 @@ function MyProfile() {
             <div className="settings-avatar">
               <div className="avatar-wrapper">
                 <img src={profilePicSrc} alt="Profile" />
-                <label className="camera-btn" title="Change profile picture">
+                <label className="camera-btn" aria-label="Change profile picture">
                   <FaCamera className="change-camera-icon" />
                   <input
                     ref={avatarInputRef}
@@ -935,19 +1073,23 @@ function MyProfile() {
             </div>
           </div>
         )}
+      </div>
 
-        {/* ── Modals ── */}
-        {showConfirm && (
+      {/* ── Modals (portaled to document.body) ── */}
+      {showConfirm &&
+        createPortal(
           <ConfirmChangesModal
             title="Save Profile Changes?"
             message="Your updated name and location will be visible to others."
             confirmText="Save"
             onCancel={() => setShowConfirm(false)}
             onConfirm={confirmSave}
-          />
+          />,
+          document.body
         )}
 
-        {showDiscardDialog && (
+      {showDiscardDialog &&
+        createPortal(
           <ConfirmChangesModal
             title="Discard unsaved changes?"
             message="You have unsaved changes — discard them and leave this tab?"
@@ -960,24 +1102,28 @@ function MyProfile() {
               setPendingTab(null);
               performTabSwitch(tab);
             }}
-          />
+          />,
+          document.body
         )}
 
-        {selectedReport && (
+      {selectedReport &&
+        createPortal(
           <ReportDetailModal
             report={selectedReport}
             onClose={() => setSelectedReport(null)}
             BASE_URL={BASE_URL}
-          />
+          />,
+          document.body
         )}
 
-        {showRepModal && (
+      {showRepModal &&
+        createPortal(
           <ReputationModal
             score={Math.floor(profile?.reputation_score ?? 0)}
             onClose={() => setShowRepModal(false)}
-          />
+          />,
+          document.body
         )}
-      </div>
     </>
   );
 }

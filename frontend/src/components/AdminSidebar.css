@@ -202,11 +202,29 @@ body.dark {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
+  gap: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
   justify-content: flex-start;
+  padding-right: 4px;
+  margin-right: -4px;
+  min-height: 0; /* required for flex children to actually scroll instead of overflowing the parent */
 }
 
+/* Match UserSidebar's scrollbar styling */
+.admin-sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+.admin-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.admin-sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--admin-border);
+  border-radius: 10px;
+}
+.admin-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--admin-divider);
+}
 .admin-nav-section {
   display: flex;
   flex-direction: column;
@@ -235,7 +253,7 @@ body.dark {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: 14px;
   color: var(--admin-text);
   text-decoration: none;
@@ -400,4 +418,10 @@ body.dark {
   .admin-sidebar.mobile-open .admin-active-dot {
     display: none;
   }
+}
+
+.admin-sidebar.collapsed .admin-sidebar-header {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  min-height: 36px;
 }

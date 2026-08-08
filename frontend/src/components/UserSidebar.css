@@ -35,6 +35,7 @@ body.dark {
 .user-sidebar {
   width: var(--user-width);
   height: 100vh;
+  height: 100dvh; /* dynamic viewport height — accounts for mobile browser chrome */
   background: linear-gradient(180deg, var(--user-bg-from), var(--user-bg-to));
   color: var(--user-text);
   position: fixed;
@@ -51,13 +52,17 @@ body.dark {
   box-sizing: border-box;
   overflow: hidden;
 }
-
 .user-sidebar.collapsed {
   width: var(--user-collapsed);
   padding: 16px 8px;
 }
 
+
+
 @media (max-width: 1023px) {
+    .user-collapse-btn {
+    display: none !important;
+  }
   .user-sidebar {
     left: calc(-1 * var(--user-width));
     box-shadow: 4px 0 24px rgba(0,0,0,0.2);
@@ -95,7 +100,11 @@ body.dark {
   flex: 1;
   text-align: center;
 }
-
+.user-sidebar.collapsed .user-sidebar-header {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  min-height: 40px; /* roughly matches the collapse button's height */
+}
 /* Hide logo completely when collapsed */
 .user-sidebar.collapsed .user-sidebar-brand,
 .user-sidebar-brand.hidden {
@@ -255,12 +264,12 @@ body.dark {
   flex-direction: column;
   gap: 24px;
   flex: 1;
+  min-height: 0; /* ensures it actually scrolls instead of overflowing the sidebar */
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;
   margin-right: -4px;
 }
-
 /* Custom scrollbar */
 .user-sidebar-nav::-webkit-scrollbar {
   width: 5px;
@@ -304,7 +313,7 @@ body.dark {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 7px 12px;
   border-radius: 10px;
   text-decoration: none;
   color: var(--user-text-muted);
@@ -484,6 +493,7 @@ body.dark {
   .user-sidebar.mobile-open {
     width: var(--user-width);
     padding: 12px 10px;
+    height: calc(100dvh - 64px); /* stop above the 64px tab bar */
   }
 
   .user-sidebar.mobile-open .user-sidebar-brand,

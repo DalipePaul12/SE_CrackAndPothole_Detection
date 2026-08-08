@@ -172,14 +172,20 @@ function NoteComposer({ reportId, onSent }) {
         </button>
       </div>
     </div>
-  );
+    );
 }
 
 function Lightbox({ src, alt, onClose }) {
   useEffect(() => {
+    document.body.style.overflow = "hidden";
+    document.body.classList.add("report-modal-open");
     const h = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
+    return () => {
+      document.body.style.overflow = "";
+      document.body.classList.remove("report-modal-open");
+      document.removeEventListener("keydown", h);
+    };
   }, [onClose]);
 
   return (
@@ -429,9 +435,15 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
   }, [report.id]);
 
   useEffect(() => {
+    document.body.style.overflow = "hidden";
+    document.body.classList.add("report-modal-open");
     const h = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
+    return () => {
+      document.body.style.overflow = "";
+      document.body.classList.remove("report-modal-open");
+      document.removeEventListener("keydown", h);
+    };
   }, [onClose]);
 
   useEffect(() => { loadComments(); }, [loadComments]);
@@ -727,7 +739,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
               <div className="sub-tab-messages">
 
               {comments.filter(c => c.user?.role === "admin").length > 0 && (
-                <div style={{
+                <div className="sub-admin-updates-banner" style={{
                   background: "var(--info-bg)",
                   border: "1px solid var(--info-border)",
                   borderRadius: "var(--radius-lg)",
@@ -748,7 +760,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
               )}
 
               {comments.filter(c => c.user?.role === "admin").length === 0 && (
-                <div style={{
+                <div className="sub-admin-updates-banner sub-admin-updates-empty" style={{
                   background: "var(--bg-secondary)",
                   border: "1px dashed var(--border-strong)",
                   borderRadius: "var(--radius-lg)",

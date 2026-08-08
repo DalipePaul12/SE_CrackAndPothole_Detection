@@ -101,65 +101,71 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
         )}
       </div>
 
-      <nav className="admin-sidebar-nav">
-        <div className="admin-nav-section">
-          {!isCollapsed && <label className="admin-section-label">Admin Dashboard</label>}
-          {isCollapsed && <div className="admin-section-spacer" />}
+<nav className="admin-sidebar-nav">
+  <div className="admin-nav-section">
+    {!isCollapsed && <label className="admin-section-label">Admin Dashboard</label>}
+    {isCollapsed && <div className="admin-section-spacer" />}
 
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.to;
+    {navItems.map((item) => {
+      const Icon = item.icon;
+      const isActive = location.pathname === item.to;
 
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={onClose}
-                className={`admin-nav-link ${isActive ? "active" : ""}`}
-                title={isCollapsed ? item.label : ""}
-              >
-                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                <span className={isCollapsed ? "hidden" : ""}>{item.label}</span>
-                {isCollapsed && isActive && <span className="admin-active-dot" />}
-              </Link>
-            );
-          })}
+      return (
+        <Link
+          key={item.to}
+          to={item.to}
+          onClick={onClose}
+          className={`admin-nav-link ${isActive ? "active" : ""}`}
+          title={isCollapsed ? item.label : ""}
+        >
+          <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+          <span className={isCollapsed ? "hidden" : ""}>{item.label}</span>
+          {isCollapsed && isActive && <span className="admin-active-dot" />}
+        </Link>
+      );
+    })}
+  </div>
 
-          {/* User Management — superadmin only */}
-          {isSuperAdmin && (() => {
-            const isActive = location.pathname === "/adminpanel/users";
-            return (
-              <Link
-                to="/adminpanel/users"
-                onClick={onClose}
-                className={`admin-nav-link ${isActive ? "active" : ""}`}
-                title={isCollapsed ? "User Management" : ""}
-              >
-                <Users size={20} strokeWidth={isActive ? 2.5 : 2} />
-                <span className={isCollapsed ? "hidden" : ""}>User Management</span>
-                {isCollapsed && isActive && <span className="admin-active-dot" />}
-              </Link>
-            );
-          })()}
+  {/* Superadmin-only section, with its own label */}
+  {isSuperAdmin && (
+    <div className="admin-nav-section">
+      {!isCollapsed && <label className="admin-section-label">Superadmin</label>}
+      {isCollapsed && <div className="admin-section-spacer" />}
 
-          {/* Audit Logs — superadmin only */}
-          {isSuperAdmin && (() => {
-            const isActive = location.pathname === "/adminpanel/audit-logs";
-            return (
-              <Link
-                to="/adminpanel/audit-logs"
-                onClick={onClose}
-                className={`admin-nav-link ${isActive ? "active" : ""}`}
-                title={isCollapsed ? "Audit Logs" : ""}
-              >
-                <ScrollText size={20} strokeWidth={isActive ? 2.5 : 2} />
-                <span className={isCollapsed ? "hidden" : ""}>Audit Logs</span>
-                {isCollapsed && isActive && <span className="admin-active-dot" />}
-              </Link>
-            );
-          })()}
-        </div>
-      </nav>
+      {(() => {
+        const isActive = location.pathname === "/adminpanel/users";
+        return (
+          <Link
+            to="/adminpanel/users"
+            onClick={onClose}
+            className={`admin-nav-link ${isActive ? "active" : ""}`}
+            title={isCollapsed ? "User Management" : ""}
+          >
+            <Users size={20} strokeWidth={isActive ? 2.5 : 2} />
+            <span className={isCollapsed ? "hidden" : ""}>User Management</span>
+            {isCollapsed && isActive && <span className="admin-active-dot" />}
+          </Link>
+        );
+      })()}
+
+      {(() => {
+        const isActive = location.pathname === "/adminpanel/audit-logs";
+        return (
+          <Link
+            to="/adminpanel/audit-logs"
+            onClick={onClose}
+            className={`admin-nav-link ${isActive ? "active" : ""}`}
+            title={isCollapsed ? "Audit Logs" : ""}
+          >
+            <ScrollText size={20} strokeWidth={isActive ? 2.5 : 2} />
+            <span className={isCollapsed ? "hidden" : ""}>Audit Logs</span>
+            {isCollapsed && isActive && <span className="admin-active-dot" />}
+          </Link>
+        );
+      })()}
+    </div>
+  )}
+</nav>
 
       <div className="admin-sidebar-footer">
         {!isCollapsed && <label className="admin-section-label">Preferences</label>}

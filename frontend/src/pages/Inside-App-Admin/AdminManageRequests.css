@@ -208,22 +208,36 @@
   transition: border-color 0.3s ease, color 0.3s ease;
 }
 
-/* ── Column width distribution ─────────────────── */
-/* Report */
+/* ── Column width distribution (accounts for checkbox column) ── */
+/* Checkbox — handled by .amr-cb-col (40px), leave as is */
 .submissions-table th:nth-child(1),
-.submissions-table td:nth-child(1) { width: 26%; }
-/* Type */
+.submissions-table td:nth-child(1) {
+  width: 40px;
+  min-width: 40px;
+}
+/* Report */
 .submissions-table th:nth-child(2),
-.submissions-table td:nth-child(2) { width: 12%; }
-/* Date */
+.submissions-table td:nth-child(2) { width: 24%; }
+
+/* Type */
 .submissions-table th:nth-child(3),
-.submissions-table td:nth-child(3) { width: 16%; }
-/* Severity */
+.submissions-table td:nth-child(3) { width: 10%; }
+
+/* Date */
 .submissions-table th:nth-child(4),
-.submissions-table td:nth-child(4) { width: 12%; }
-/* Action — needs room for two 88px pills + gap */
+.submissions-table td:nth-child(4) { width: 14%; }
+
+/* Severity */
 .submissions-table th:nth-child(5),
-.submissions-table td:nth-child(5) { width: 34%; text-align: center; }
+.submissions-table td:nth-child(5) { width: 10%; }
+
+/* Action — needs room for two 88px pills + gap + padding */
+.submissions-table th:nth-child(6),
+.submissions-table td:nth-child(6) {
+  width: 42%;
+  min-width: 190px;
+  text-align: center;
+}
 
 .submissions-table tbody {
   display: block;

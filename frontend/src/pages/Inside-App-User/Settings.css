@@ -52,7 +52,11 @@ html, body { margin: 0; padding: 0; background: var(--st-bg); }
 
 /* ── Container ───────────────────────────────── */
 .st-container {
-  /* NO margin-left / margin-top — UserLayout handles it */
+  /* Centers within whatever width UserLayout gives this route.
+     No margin-left/margin-top hacks — UserLayout still owns the
+     sidebar offset; this only balances the leftover horizontal
+     space so the cards don't hug the left edge on wide screens. */
+  margin: 0 auto;
   padding: 1.5rem 2rem 3rem;
   min-height: calc(100vh - 80px); /* fill remaining viewport under header */
   width: 100%;                    /* shrinks correctly below max-width */
@@ -619,7 +623,7 @@ html, body { margin: 0; padding: 0; background: var(--st-bg); }
 @media (max-width: 1024px) {
   .st-container {
     width: 100%;
-    margin-left: 0;  /* can remove this too, but harmless */
+    margin: 0 auto;
     padding: 1.25rem 1.25rem 2.5rem;
   }
 }
