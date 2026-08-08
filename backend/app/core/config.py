@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     AI_ENABLED: bool = True
     POTHOLE_MODEL_PATH: str = str(BASE_DIR /  "Pothole_best.pt")
     CRACK_MODEL_PATH: str = str(BASE_DIR /  "Crack_best.pt")
+
+    # Direct-download URLs (e.g. GitHub Release asset links) used to fetch
+    # the weight files at startup when they're not present on disk — Render's
+    # free-tier filesystem is ephemeral and the repo intentionally does not
+    # track *.pt files, so these must be set in production. Leave blank for
+    # local dev where the files already sit on disk.
+    POTHOLE_MODEL_URL: str = ""
+    CRACK_MODEL_URL: str = ""
+
     AI_CONFIDENCE_THRESHOLD: float = 0.35
     AI_FAKE_DETECTION_ENABLED: bool = True
     HF_API_TOKEN: Optional[str] = None
@@ -127,21 +136,22 @@ class Settings(BaseSettings):
         self.CRACK_MODEL_PATH   = _resolve(self.CRACK_MODEL_PATH)
 
         if self.AI_ENABLED:
-            for label, resolved in (
-                ("Pothole", self.POTHOLE_MODEL_PATH),
-                ("Crack",   self.CRACK_MODEL_PATH),
+            for label, resolved, url in (
+                ("Pothole", self.POTHOLE_MODEL_PATH, self.POTHOLE_MODEL_URL),
+                ("Crack",   self.CRACK_MODEL_PATH,   self.CRACK_MODEL_URL),
             ):
-                if not Path(resolved).exists():
+                if not Path(resolved).exists() and not url:
                     logger.warning(
                         "\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                         " MISSING MODEL FILE: %s\n"
                         " Expected location : %s\n"
-                        " Action required   : Place the .pt weight file at\n"
-                        "   the path above, then restart the server.\n"
+                        " No %s_MODEL_URL set — nothing to download from.\n"
+                        " Action required   : place the .pt weight file at\n"
+                        "   the path above, or set %s_MODEL_URL, then restart.\n"
                         " While missing, all ML/AI endpoints will return 503.\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                        label, resolved,
+                        label, resolved, label.upper(), label.upper(),
                     )
 
         return self
