@@ -282,6 +282,7 @@ function ColoredBarChart({ data, dataKey = "count", xKey = "status" }) {
         <XAxis dataKey={xKey} tick={{ fill: "var(--subtext)", fontSize: 11 }} tickLine={false} axisLine={false} />
         <YAxis allowDecimals={false} tick={{ fill: "var(--subtext)", fontSize: 10 }} axisLine={false} tickLine={false} />
         <Tooltip
+          cursor={{ fill: "#2ba81d", fillOpacity: 0.08 }}
           contentStyle={{ borderRadius: 10, border: "1px solid var(--border)", fontSize: 12, background: "var(--card)", color: "var(--text)" }}
           formatter={(v) => [`${v} reports`, "Count"]}
         />

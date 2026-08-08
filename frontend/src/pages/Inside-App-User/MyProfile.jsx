@@ -28,7 +28,10 @@ import { useReports } from "../../hooks/useReports";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 const PAGE_SIZE = 6;
-
+const resolveMediaUrl = (url) => {
+  if (!url) return null;
+  return /^https?:\/\//i.test(url) ? url : `${BASE_URL}${url}`;
+};
 /* ─── Toast Component ─── */
 function Toast({ toasts, removeToast }) {
   return (
@@ -133,7 +136,7 @@ function getReportMedia(report) {
   const url = report?.media_attachments?.[0]?.file_url;
   if (!url) return { url: null, type: null };
   return {
-    url: `${BASE_URL}${url}`,
+    url: resolveMediaUrl(url),
     type: VIDEO_EXT_RE.test(url) ? "video" : "image",
   };
 }
@@ -182,9 +185,9 @@ function ReportDetailModal({ report, onClose, BASE_URL }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("details");
   const attachments = report?.media_attachments ?? [];
-  const imageUrl = attachments[0]?.file_url
-    ? `${BASE_URL}${attachments[0].file_url}`
-    : null;
+const imageUrl = attachments[0]?.file_url
+  ? resolveMediaUrl(attachments[0].file_url)
+  : null;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";

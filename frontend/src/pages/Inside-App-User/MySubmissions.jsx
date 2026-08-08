@@ -19,10 +19,14 @@ import {
 } from "lucide-react";
 
 const BASE_URL  = import.meta.env.VITE_API_URL || "";
+const resolveMediaUrl = (url) => {
+  if (!url) return null;
+  return /^https?:\/\//i.test(url) ? url : `${BASE_URL}${url}`;
+};
 const toClass   = (str = "") => str.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 const fmtDate   = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" }) : "—";
 const fmtDT     = (iso) => iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
-const mediaUrl  = (att) => att?.file_url ? `${BASE_URL}${att.file_url}` : null;
+const mediaUrl = (att) => resolveMediaUrl(att?.file_url);
 
 const STATUS_LABEL  = { PENDING: "Pending", IN_PROGRESS: "In Progress", VERIFIED: "Verified", RESOLVED: "Resolved", DECLINED: "Declined" };
 const STATUS_STEPS  = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];

@@ -1,9 +1,43 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { FaComments, FaTimes, FaPaperPlane, FaRobot } from "react-icons/fa";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useChatbot } from "../hooks/useChatbot.js";
 import "./ChatbotWidget.css";
+
+/* Renders [Label](pagelink:N) as an inline clickable chip that navigates
+   client-side. N indexes into that specific message's validated pageLinks
+   array — the route itself is never read out of the markdown text, so a
+   malformed or hallucinated href can't send the user anywhere unintended. */
+function makeMarkdownComponents(pageLinks, navigate, onNavigate) {
+  return {
+    a: ({ href, children }) => {
+      if (href?.startsWith("pagelink:")) {
+        const idx = Number(href.slice("pagelink:".length));
+        const link = pageLinks?.[idx];
+        if (!link) return <strong>{children}</strong>;
+        return (
+          <button
+            type="button"
+            className="chatbot-inline-link"
+            onClick={() => {
+              navigate(link.route);
+              onNavigate?.();
+            }}
+          >
+            {children}
+          </button>
+        );
+      }
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      );
+    },
+  };
+}
 
 export default function ChatbotWidget({ userName = null, pendingReportCount = null }) {
   const {
@@ -12,12 +46,15 @@ export default function ChatbotWidget({ userName = null, pendingReportCount = nu
     isOpen,
     suggestions,
     toggleOpen,
+    close,
     sendMessage,
     clearChat,
   } = useChatbot(userName, pendingReportCount);
   const [input, setInput] = useState("");
+  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
+  const navigate = useNavigate();
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -33,6 +70,11 @@ export default function ChatbotWidget({ userName = null, pendingReportCount = nu
     }
   }, [isOpen]);
 
+  // New suggestion set (fresh prompt/response) always starts visible again
+  useEffect(() => {
+    setSuggestionsDismissed(false);
+  }, [suggestions]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
@@ -42,6 +84,10 @@ export default function ChatbotWidget({ userName = null, pendingReportCount = nu
 
   const handleSuggestion = (text) => {
     sendMessage(text);
+  };
+
+  const handleDismissSuggestions = () => {
+    setSuggestionsDismissed(true);
   };
 
   return (
@@ -97,7 +143,10 @@ export default function ChatbotWidget({ userName = null, pendingReportCount = nu
                 <div className="chatbot-bubble">
                   {msg.role === "assistant" ? (
                     <div className="chatbot-markdown">
-                      <Markdown remarkPlugins={[remarkGfm]}>
+                      <Markdown
+                        remarkPlugins={[remarkGfm]}
+                        components={makeMarkdownComponents(msg.pageLinks, navigate, close)}
+                      >
                         {msg.content}
                       </Markdown>
                     </div>
@@ -120,8 +169,17 @@ export default function ChatbotWidget({ userName = null, pendingReportCount = nu
           </div>
 
           {/* Suggestion chips */}
-          {suggestions.length > 0 && !loading && (
+          {suggestions.length > 0 && !loading && !suggestionsDismissed && (
             <div className="chatbot-suggestions">
+              <button
+                type="button"
+                className="chatbot-suggestions-dismiss"
+                onClick={handleDismissSuggestions}
+                aria-label="Dismiss suggestions"
+                title="Dismiss suggestions"
+              >
+                <FaTimes />
+              </button>
               {suggestions.map((text, idx) => (
                 <button
                   key={idx}

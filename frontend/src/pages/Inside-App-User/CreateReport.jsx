@@ -29,6 +29,7 @@ import { tokenStorage } from "../../api/client";
 import { analyzeMedia, analyzeVideo } from "../../api/ml";
 import { createReport, uploadMedia } from "../../api/reports";
 import { useOfflineQueue, enqueueOfflineReport } from "../../hooks/useOfflineQueue";
+import { invalidateReportsCache } from "../../hooks/useReports";
 import PhotoCaptureGuide from "../../components/PhotoCaptureGuide";
 import DetectionOverlay from "../../components/DetectionOverlay";
 
@@ -513,7 +514,7 @@ function CreateReport({ onClose }) {
     setOfflineToasts((prev) => [...prev, { id, ...toast }]);
     setTimeout(() => {
       setOfflineToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 6000);
+    }, toast.onRetry ? 15000 : 6000);
   }, []);
 
   const { isOnline } = useOfflineQueue({
@@ -544,6 +545,7 @@ function CreateReport({ onClose }) {
   const recordTimerRef   = useRef(null);
   const previewMediaRef  = useRef(null);
   const angleRef         = useRef(null);
+  const submittingRef    = useRef(false);
 
   // ── NEW: natural image size via hook (for correct mask scaling) ────────────
   // ── NEW: natural image size via hook (for correct mask scaling) ────────────
@@ -1095,92 +1097,120 @@ if (ai_validation && typeof ai_validation === "object") {
   }, [file, isAnalyzing, analysisComplete, hfStatus, imageType, damageType, barangay, coords, disclaimerAccepted, manualReviewOverride]);
 
   // ── Submit (UNCHANGED) ────────────────────────────────────────────────────
-  const handleSubmitConfirm = useCallback(async () => {
-    if (isSubmitting) return;
-    setShowSubmitModal(false);
-    setIsSubmitting(true);
-    setFormError("");
-    let reportPayload = null;
+  const performBackgroundSubmit = useCallback(async (reportPayload, mediaFile, existingReportId = null) => {
     try {
-      const is_flagged = imageType === "AI-GENERATED";
-      const isVideo    = file && isVideoFile(file);
-      reportPayload = {
-        user_id: userId, reporter_name: reporterName,
-        latitude: coords.lat, longitude: coords.lng,
-        barangay, street_name: streetName || null,
-        description: additionalInfo?.trim() || null,
-        ai_damage_type:   DAMAGE_TYPE_BACKEND[damageType]  ?? null,
-        ai_severity:      SEVERITY_BACKEND[severity]       ?? null,
-        ai_confidence:    aiConfidence                     ?? 0.0,
-        is_flagged_fake:  is_flagged,
-        fake_confidence:  hfConfidence                     ?? 0.0,
-        report_type:      isVideo ? "video" : "image",
-        is_hybrid:        isHybrid,
-        secondary_damage: secondaryDamage ?? null,
-        detection_note:   detectionNote   ?? null,
-        ai_validation_status:     hfStatus     ?? null,
-        ai_validation_confidence: hfConfidence ?? null,
-        ai_validation_model:      hfModel      ?? null,
-        requires_admin_review: requiresReview,
-        review_reason:         reviewReason ?? null,
-        disclaimer_accepted:   disclaimerAccepted,
-        capture_metadata: {
-          angle_degrees:           phoneAngle !== null ? Math.round(phoneAngle) : null,
-          angle_valid:             angleValid,
-          estimated_distance_text: predictionResult?.distance?.text ?? null,
-          distance_method:         "bbox_area_estimation",
-        },
-      };
-      if (!isOnline) {
-        // ── Offline: queue instead of failing silently ─────────────────────
-        await enqueueOfflineReport(reportPayload, file);
+      let reportId = existingReportId;
+      if (!reportId) {
+        const reportRes = await createReport(reportPayload);
+        if (!reportRes.success) throw new Error(reportRes.error || "Report submission failed.");
+        reportId = reportRes.data?.id ?? reportRes.data?.report_id;
+        if (!reportId) throw new Error("Server did not return a report ID.");
+      }
+
+      const uploadRes = await uploadMedia(reportId, mediaFile);
+      if (!uploadRes.success) {
         pushOfflineToast({
-          type: "info",
-          message: "You're offline — report saved and will submit automatically once you're back online.",
+          type: "warning",
+          message: `Report #${reportId} was saved, but the photo/video upload failed.`,
+          onRetry: () => performBackgroundSubmit(reportPayload, mediaFile, reportId),
         });
-        setSubmitSuccess(true);
-        setTimeout(() => onClose(), 2000);
         return;
       }
 
-      const reportRes = await createReport(reportPayload);
-      if (!reportRes.success) throw new Error(reportRes.error);
-      const reportId = reportRes.data?.id ?? reportRes.data?.report_id;
-      if (!reportId) throw new Error("Server did not return a report ID.");
-      const uploadRes = await uploadMedia(reportId, file);
-      if (!uploadRes.success) {
-        setFormError(`Report #${reportId} saved, but media upload failed: ${uploadRes.error}.`);
-      }
-      setSubmitSuccess(true);
-      setTimeout(() => onClose(), 2000);
+      invalidateReportsCache?.();
+      pushOfflineToast({ type: "success", message: `Report #${reportId} submitted successfully.` });
     } catch (err) {
-      // ── Network dropped mid-submit: fall back to the offline queue ────────
-      if (!navigator.onLine && reportPayload) {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
         try {
-          await enqueueOfflineReport(reportPayload, file);
+          await enqueueOfflineReport(reportPayload, mediaFile);
           pushOfflineToast({
             type: "info",
             message: "Connection lost — report saved and will submit automatically once you're back online.",
           });
-          setSubmitSuccess(true);
-          setTimeout(() => onClose(), 2000);
           return;
         } catch {
           // fall through to generic error handling below
         }
       }
-      setFormError(err.message || "Submission failed. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+      pushOfflineToast({
+        type: "error",
+        message: err.message || "Submission failed.",
+        onRetry: () => performBackgroundSubmit(reportPayload, mediaFile, existingReportId),
+      });
     }
+  }, [pushOfflineToast]);
+
+  // ── Submit — optimistic: UI confirms instantly, network work runs in the
+  //    background via performBackgroundSubmit. submittingRef blocks duplicate
+  //    clicks synchronously, before React even re-renders the disabled button.
+  const handleSubmitConfirm = useCallback(() => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setShowSubmitModal(false);
+    setFormError("");
+
+    const is_flagged = imageType === "AI-GENERATED";
+    const isVideo     = file && isVideoFile(file);
+    const reportPayload = {
+      user_id: userId, reporter_name: reporterName,
+      latitude: coords.lat, longitude: coords.lng,
+      barangay, street_name: streetName || null,
+      description: additionalInfo?.trim() || null,
+      ai_damage_type:   DAMAGE_TYPE_BACKEND[damageType]  ?? null,
+      ai_severity:      SEVERITY_BACKEND[severity]       ?? null,
+      ai_confidence:    aiConfidence                     ?? 0.0,
+      is_flagged_fake:  is_flagged,
+      fake_confidence:  hfConfidence                     ?? 0.0,
+      report_type:      isVideo ? "video" : "image",
+      is_hybrid:        isHybrid,
+      secondary_damage: secondaryDamage ?? null,
+      detection_note:   detectionNote   ?? null,
+      ai_validation_status:     hfStatus     ?? null,
+      ai_validation_confidence: hfConfidence ?? null,
+      ai_validation_model:      hfModel      ?? null,
+      requires_admin_review: requiresReview,
+      review_reason:         reviewReason ?? null,
+      disclaimer_accepted:   disclaimerAccepted,
+      capture_metadata: {
+        angle_degrees:           phoneAngle !== null ? Math.round(phoneAngle) : null,
+        angle_valid:             angleValid,
+        estimated_distance_text: predictionResult?.distance?.text ?? null,
+        distance_method:         "bbox_area_estimation",
+      },
+    };
+
+    // UI confirms immediately — analysis already ran client-side, so we
+    // already know this submission is valid. The button flips to
+    // "Submitted!" and the modal closes right away.
+    setSubmitSuccess(true);
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      enqueueOfflineReport(reportPayload, file)
+        .then(() => {
+          pushOfflineToast({
+            type: "info",
+            message: "You're offline — report saved and will submit automatically once you're back online.",
+          });
+        })
+        .catch((err) => {
+          pushOfflineToast({ type: "error", message: err.message || "Could not save report for offline submission." });
+        })
+        .finally(() => { submittingRef.current = false; });
+      setTimeout(() => onClose(), 600);
+      return;
+    }
+
+    performBackgroundSubmit(reportPayload, file).finally(() => {
+      submittingRef.current = false;
+    });
+    setTimeout(() => onClose(), 600);
   }, [
-    isSubmitting, imageType, coords, barangay, streetName, additionalInfo,
+    imageType, coords, barangay, streetName, additionalInfo,
     damageType, severity, aiConfidence, hfConfidence, hfStatus, hfModel,
     requiresReview, reviewReason, isHybrid, secondaryDamage, detectionNote,
     file, onClose, phoneAngle, angleValid, predictionResult,
-    disclaimerAccepted, reporterName, userId, isOnline, pushOfflineToast,
+    disclaimerAccepted, reporterName, userId, performBackgroundSubmit, pushOfflineToast,
   ]);
-
   // ── Derived values ─────────────────────────────────────────────────────────
   const canSubmit      = !isSubmitting && !isAnalyzing;
   const imageTypeBadge = hfStatus === "error" ? "HF-ERROR" : imageType;
@@ -1258,6 +1288,18 @@ const showMask = analysisComplete &&
               <div key={t.id} className={`offline-toast offline-toast--${t.type}`}>
                 {t.type === "success" ? <FaCheckCircle aria-hidden="true" /> : <FaExclamationTriangle aria-hidden="true" />}
                 <span>{t.message}</span>
+                {t.onRetry && (
+                  <button
+                    type="button"
+                    className="offline-toast-retry"
+                    onClick={() => {
+                      setOfflineToasts((prev) => prev.filter((x) => x.id !== t.id));
+                      t.onRetry();
+                    }}
+                  >
+                    Retry
+                  </button>
+                )}
               </div>
             ))}
           </div>

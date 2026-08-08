@@ -32,6 +32,7 @@ async def chatbot_message(payload: ChatRequest):
             reply=result["reply"],
             model=result["model"],
             finish_reason=result.get("finish_reason"),
+            page_links=result.get("page_links", []),
         )
     except Exception as e:
         logger.error(f"Chatbot endpoint error: {e}", exc_info=True)

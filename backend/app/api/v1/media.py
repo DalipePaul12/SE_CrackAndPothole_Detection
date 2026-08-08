@@ -70,6 +70,7 @@ async def _persist_media(
 ) -> tuple[MediaAttachment, str | None]:
     from app.services.ml_service import validate_ai_generated
     from app.services.queue_service import enqueue_ml_task
+    from app.core.supabase_storage import upload_report_file
 
     ai_result = await validate_ai_generated(contents)
 
@@ -79,17 +80,37 @@ async def _persist_media(
 
     is_flagged: bool = ai_result["is_ai_generated"]
 
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+
+    # ── UPLOAD TO SUPABASE STORAGE (was: local disk write) ──────────────
+    storage_subpath = f"{report_id}/{filename}"
+    try:
+        file_url = upload_report_file(
+            file_bytes=contents,
+            storage_path=storage_subpath,
+            content_type=file.content_type or "application/octet-stream",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error": "STORAGE_UPLOAD_FAILED", "detail": str(e)},
+        )
+
+    # ── Local temp copy — ONLY so the ML pipeline (enqueue_ml_task /
+    #    run_yolo) has a real file path to read from. Not the source of
+    #    truth anymore; Supabase is. We do NOT delete it here because
+    #    enqueue_ml_task may run in a background task after this function
+    #    returns — cleanup happens in the ML task itself, or via a
+    #    periodic cleanup_service sweep (you already have cleanup_service.py).
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = f"{uuid.uuid4().hex}_{file.filename}"
     file_path = upload_dir / filename
     file_path.write_bytes(contents)
 
     try:
         media = MediaAttachment(
             report_id=report_id,
-            file_url=f"/uploads/{filename}",
+            file_url=file_url,
             file_name=file.filename,
             file_size_bytes=len(contents),
             media_type=MediaType.image if "image" in (file.content_type or "") else MediaType.video,
@@ -124,7 +145,6 @@ async def _persist_media(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "DB_WRITE_FAILED"},
         )
-
 
 def _build_ai_result(media: MediaAttachment) -> dict:
     return {

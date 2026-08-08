@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { getContractorProject, acceptProject, declineProject, completeProject } from "../../api/contractor";
 import { getComments, addComment } from "../../api/reports";
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 import SeverityBadge from "../../components/SeverityBadge.jsx";
 import ConfirmSubmitModal from "../PopUps/ConfirmSubmitModal.jsx";
 import "./ContractorProjectDetail.css";
@@ -17,10 +18,22 @@ const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" }) : "—";
 const fmtDT = (iso) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
-const mediaUrl = (att) => (att?.file_url ? `${BASE_URL}${att.file_url}` : null);
 
 function getReport(project) {
   return project?.report ?? project ?? {};
+}
+
+// Sanitizes free-typed peso amounts: digits + a single decimal point only.
+// Using type="text" + this instead of type="number" avoids the cursor-jump /
+// unexpected-reformatting bugs that native number inputs have in controlled
+// React components, especially on mobile keyboards.
+function sanitizeDecimalInput(raw) {
+  let v = raw.replace(/[^0-9.]/g, "");
+  const firstDot = v.indexOf(".");
+  if (firstDot !== -1) {
+    v = v.slice(0, firstDot + 1) + v.slice(firstDot + 1).replace(/\./g, "");
+  }
+  return v;
 }
 
 const STATUS_LABEL = {
@@ -58,37 +71,48 @@ function MaterialRow({ row, index, onChange, onRemove, disabled }) {
 
   return (
     <div className="cpd-mat-row">
-      <input
-        className="cpd-input cpd-mat-name"
-        placeholder="Material name"
-        value={row.name}
-        onChange={(e) => onChange(index, "name", e.target.value)}
-        disabled={disabled}
-        aria-label="Material name"
-      />
-      <input
-        className="cpd-input cpd-mat-qty"
-        type="number"
-        min="0"
-        placeholder="Qty"
-        value={row.qty}
-        onChange={(e) => onChange(index, "qty", e.target.value)}
-        disabled={disabled}
-        aria-label="Quantity"
-      />
-      <input
-        className="cpd-input cpd-mat-cost"
-        type="number"
-        min="0"
-        step="0.01"
-        placeholder="Unit cost"
-        value={row.unit_cost}
-        onChange={(e) => onChange(index, "unit_cost", e.target.value)}
-        disabled={disabled}
-        aria-label="Unit cost"
-      />
-      <div className="cpd-mat-total">
-        ₱{isNaN(rowTotal) ? "0.00" : rowTotal.toFixed(2)}
+      <div className="cpd-mat-cell cpd-mat-cell--name">
+        <span className="cpd-mat-mlabel">Material</span>
+        <input
+          className="cpd-input cpd-mat-name"
+          placeholder="Material name"
+          value={row.name}
+          onChange={(e) => onChange(index, "name", e.target.value)}
+          disabled={disabled}
+          aria-label="Material name"
+        />
+      </div>
+      <div className="cpd-mat-cell cpd-mat-cell--qty">
+        <span className="cpd-mat-mlabel">Qty</span>
+        <input
+          className="cpd-input cpd-mat-qty"
+          type="text"
+          inputMode="decimal"
+          placeholder="Qty"
+          value={row.qty}
+          onChange={(e) => onChange(index, "qty", sanitizeDecimalInput(e.target.value))}
+          disabled={disabled}
+          aria-label="Quantity"
+        />
+      </div>
+      <div className="cpd-mat-cell cpd-mat-cell--cost">
+        <span className="cpd-mat-mlabel">Unit Cost (₱)</span>
+        <input
+          className="cpd-input cpd-mat-cost"
+          type="text"
+          inputMode="decimal"
+          placeholder="Unit cost"
+          value={row.unit_cost}
+          onChange={(e) => onChange(index, "unit_cost", sanitizeDecimalInput(e.target.value))}
+          disabled={disabled}
+          aria-label="Unit cost"
+        />
+      </div>
+      <div className="cpd-mat-cell cpd-mat-cell--total">
+        <span className="cpd-mat-mlabel">Total</span>
+        <div className="cpd-mat-total">
+          ₱{isNaN(rowTotal) ? "0.00" : rowTotal.toFixed(2)}
+        </div>
       </div>
       <button
         className="cpd-mat-remove"
@@ -287,6 +311,7 @@ export default function ContractorProjectDetail() {
   const [actionError,    setActionError]    = useState(null);
   const [showDecline,    setShowDecline]    = useState(false);
   const [declineReason,  setDeclineReason]  = useState("");
+  const [declineSuccess, setDeclineSuccess] = useState(false);
 
   /* ── Completion form ──────────────────────────────────────────────────── */
   const [notes,        setNotes]        = useState("");
@@ -301,6 +326,8 @@ export default function ContractorProjectDetail() {
 
   const fileRef = useRef(null);
   const previewUrlsRef = useRef([]);
+  const acceptingRef = useRef(false);
+  const decliningRef = useRef(false);
 
   /* ── Load project if not in navigation state ──────────────────────────── */
   useEffect(() => {
@@ -322,33 +349,72 @@ export default function ContractorProjectDetail() {
     return () => previewUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
   }, []);
 
-  /* ── Accept / Decline handlers ───────────────────────────────────────── */
-  const handleAccept = async () => {
-    setActionLoading(true);
+  /* ── Accept / Decline handlers — optimistic: UI updates instantly,
+     backend call runs in the background, rollback on failure ──────────── */
+  const handleAccept = useCallback(() => {
+    if (acceptingRef.current) return;
+    acceptingRef.current = true;
     setActionError(null);
-    const res = await acceptProject(project.id);
-    setActionLoading(false);
-    if (!res.success) {
-      setActionError(res.error || "Failed to accept project.");
-      return;
-    }
-    // Reload fresh project data to reflect IN_PROGRESS status
-    const fresh = await getContractorProject(project.id);
-    if (fresh.success && fresh.data) setProject(fresh.data);
-  };
 
-  const handleDecline = async () => {
-    if (!declineReason.trim()) return;
-    setActionLoading(true);
+    const previousProject = project;
+    setProject((prev) => ({ ...prev, status: "IN_PROGRESS" }));
+
+    acceptProject(project.id)
+      .then((res) => {
+        if (!res.success) throw new Error(res.error || "Failed to accept project.");
+        return getContractorProject(project.id);
+      })
+      .then((fresh) => {
+        if (fresh?.success && fresh.data) setProject(fresh.data);
+      })
+      .catch((err) => {
+        setProject(previousProject);
+        setActionError(err.message || "Failed to accept project.");
+      })
+      .finally(() => {
+        acceptingRef.current = false;
+      });
+  }, [project]);
+
+  const handleAcceptRetry = useCallback(() => {
     setActionError(null);
-    const res = await declineProject(project.id, declineReason.trim());
-    setActionLoading(false);
-    if (!res.success) {
-      setActionError(res.error || "Failed to decline project.");
-      return;
-    }
-    navigate("/contractorpanel/projects", { replace: true });
-  };
+    handleAccept();
+  }, [handleAccept]);
+
+  const handleDecline = useCallback(() => {
+    if (!declineReason.trim() || decliningRef.current) return;
+    decliningRef.current = true;
+    setActionError(null);
+
+    const reason = declineReason.trim();
+    const projectId = project.id;
+
+    // Optimistic: confirm instantly, then leave the page — backend call
+    // continues in the background and doesn't block navigation.
+    setDeclineSuccess(true);
+
+    declineProject(projectId, reason)
+      .then((res) => {
+        if (!res.success) throw new Error(res.error || "Failed to decline project.");
+      })
+      .catch((err) => {
+        try {
+          sessionStorage.setItem(
+            "cpd_pending_error",
+            JSON.stringify({ projectId, message: err.message || "Failed to decline project." })
+          );
+        } catch {
+          // sessionStorage unavailable — nothing more we can do post-navigation
+        }
+      })
+      .finally(() => {
+        decliningRef.current = false;
+      });
+
+    setTimeout(() => {
+      navigate("/contractorpanel/projects", { replace: true });
+    }, 500);
+  }, [declineReason, project, navigate]);
 
   /* ── Derived data ─────────────────────────────────────────────────────── */
   const report     = project ? getReport(project) : {};
@@ -519,7 +585,14 @@ export default function ContractorProjectDetail() {
       )}
 
       {/* ── Accept / Decline panel (SCHEDULED only) ────────────────────────── */}
-      {isPending && !submitSuccess && (
+      {declineSuccess && (
+        <div className="cpd-success-banner">
+          <CheckCircle2 size={18} />
+          Project declined. Redirecting…
+        </div>
+      )}
+
+      {isPending && !submitSuccess && !declineSuccess && (
         <div className="cpd-pending-actions">
           <div className="cpd-pending-prompt">
             <AlertTriangle size={16} aria-hidden="true" />
@@ -529,6 +602,9 @@ export default function ContractorProjectDetail() {
           {actionError && (
             <p className="cpd-action-error" role="alert">
               <AlertCircle size={14} aria-hidden="true" /> {actionError}
+              <button type="button" className="cpd-action-retry" onClick={handleAcceptRetry}>
+                Retry
+              </button>
             </p>
           )}
 
@@ -537,16 +613,14 @@ export default function ContractorProjectDetail() {
               <button
                 className="cpd-accept-btn"
                 onClick={handleAccept}
-                disabled={actionLoading}
                 type="button"
               >
                 <CheckCircle2 size={16} aria-hidden="true" />
-                {actionLoading ? "Accepting…" : "Accept Project"}
+                Accept Project
               </button>
               <button
                 className="cpd-decline-open-btn"
                 onClick={() => { setActionError(null); setShowDecline(true); }}
-                disabled={actionLoading}
                 type="button"
               >
                 <X size={16} aria-hidden="true" />
@@ -566,7 +640,6 @@ export default function ContractorProjectDetail() {
                 placeholder="e.g. Outside service area, schedule conflict, equipment unavailable…"
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value)}
-                disabled={actionLoading}
                 aria-required="true"
               />
               <div className="cpd-char-count">{declineReason.length}/500</div>
@@ -574,15 +647,14 @@ export default function ContractorProjectDetail() {
                 <button
                   className="cpd-decline-confirm-btn"
                   onClick={handleDecline}
-                  disabled={actionLoading || !declineReason.trim()}
+                  disabled={!declineReason.trim()}
                   type="button"
                 >
-                  {actionLoading ? "Declining…" : "Confirm Decline"}
+                  Confirm Decline
                 </button>
                 <button
                   className="cpd-cancel-btn"
                   onClick={() => { setShowDecline(false); setDeclineReason(""); setActionError(null); }}
-                  disabled={actionLoading}
                   type="button"
                 >
                   Cancel
@@ -685,7 +757,7 @@ export default function ContractorProjectDetail() {
             ) : (
               <div className="cpd-report-photos">
                 {submissionPhotos.map((att, i) => {
-                  const url = mediaUrl(att);
+                const url = resolveMediaUrl(att.file_url);
                   return url ? (
                     <img
                       key={i}
@@ -708,7 +780,7 @@ export default function ContractorProjectDetail() {
               </div>
               <div className="cpd-report-photos">
                 {completionPhotos.map((att, i) => {
-                  const url = mediaUrl(att);
+                const url = resolveMediaUrl(att.file_url);
                   return url ? (
                     <img
                       key={i}
@@ -796,12 +868,11 @@ export default function ContractorProjectDetail() {
               <input
                 id="cpd-cost"
                 className="cpd-input cpd-cost-input"
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder="0.00"
                 value={actualCost}
-                onChange={(e) => setActualCost(e.target.value)}
+                onChange={(e) => setActualCost(sanitizeDecimalInput(e.target.value))}
                 disabled={submitting}
               />
               {materialsSubtotal > 0 && (

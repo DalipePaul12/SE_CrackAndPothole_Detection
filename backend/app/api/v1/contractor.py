@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from app.core.supabase_storage import upload_report_file
 
 from app.core.config import settings
 from app.db.session import get_db
@@ -386,9 +387,6 @@ async def complete_project(
                 detail="materials must be a valid JSON string.",
             )
 
-    # ── Validate and save proof photos ────────────────────────────────────────
-    dest_dir = UPLOAD_ROOT / "completion" / str(project_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
 
     saved_attachments: list[MediaAttachment] = []
     for photo in photos:
@@ -403,12 +401,13 @@ async def complete_project(
 
         ext = Path(photo.filename or "photo").suffix.lower() or ".jpg"
         safe_name = f"{uuid.uuid4().hex}{ext}"
-        dest_path = dest_dir / safe_name
 
-        async with aiofiles.open(dest_path, "wb") as f:
-            await f.write(data)
-
-        file_url = f"/uploads/completion/{project_id}/{safe_name}"
+        storage_subpath = f"{project.report_id}/completion_{safe_name}"
+        file_url = upload_report_file(
+            file_bytes=data,
+            storage_path=storage_subpath,
+            content_type="image/jpeg",  # or detect properly like Doc 14 does
+        )
         attachment = MediaAttachment(
             report_id=project.report_id,
             file_url=file_url,

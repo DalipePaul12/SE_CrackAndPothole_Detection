@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "./AdminManageRequests.css";
 import { getReports, updateReport } from "../../api/reports";
 import { REPORT_STATUS } from "../../constants/reportStatus";
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 import { sendNotification } from "../../api/notifications";
 import {
   Check, X, Mail, Camera, Video, MapPin, CheckCircle, XCircle,
@@ -22,10 +23,7 @@ const dateStr    = (r) =>
   r.created_at ? new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
 const timeStr    = (r) =>
   r.created_at ? new Date(r.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—";
-const mediaUrl   = (r, base = "") => {
-  const url = r.media_attachments?.[0]?.file_url;
-  return url ? `${base}${url}` : null;
-};
+const mediaUrl = (r) => resolveMediaUrl(r.media_attachments?.[0]?.file_url);
 const mediaCount = (r) => r.media_attachments?.length ?? 0;
 const aiConfidence = (r) => r.ai_confidence ?? r.confidence ?? null;
 
@@ -350,6 +348,7 @@ export default function AdminManageRequests() {
         <RequestModal
           report={selectedReport}
           base={BASE_URL}
+          navigate={navigate}  
           onClose={() => setSelected(null)}
           onConfirm={(r) => {
             setSelected(null);
@@ -460,7 +459,7 @@ function BulkDeclineDialog({ count, onDecline, onCancel, loading }) {
   );
 }
 
-function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessage, actionLoading }) {
+function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline, onMessage, actionLoading }) {
   const [activeTab, setActiveTab] = useState("details");
 
   const loc     = r.location_address ?? r.barangay ?? "—";
@@ -469,7 +468,7 @@ function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessag
   const conf    = aiConfidence(r);
   const mUrl    = r.media_attachments?.[0]?.file_url;
   const mType   = r.media_attachments?.[0]?.media_type;
-  const fullUrl = mUrl ? `${base}${mUrl}` : null;
+  const fullUrl = resolveMediaUrl(mUrl);
   const mCount  = mediaCount(r);
   const status  = r.status ?? REPORT_STATUS.PENDING;
   const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
@@ -600,15 +599,7 @@ function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessag
                 <button
                   className="amr-map-btn"
                   onClick={() =>
-                    navigate("/adminpanel/map", {
-                      state: {
-                        focusReport: {
-                          id:  r.id,
-                          lat: r.latitude,
-                          lng: r.longitude,
-                        },
-                      },
-                    })
+                    navigate("/adminpanel/map", { state: { focusReport: { id: r.id, lat: r.latitude, lng: r.longitude } } })
                   }
                 >
                   <Navigation size={16} />
@@ -639,7 +630,7 @@ function RequestModal({ report: r, base, onClose, onConfirm, onDecline, onMessag
                       {att.media_type === "video" ? (
                         <Video size={20} />
                       ) : (
-                        <img src={`${base}${att.file_url}`} alt="" />
+                        <img src={resolveMediaUrl(att.file_url)} alt="" />
                       )}
                     </div>
                   ))}

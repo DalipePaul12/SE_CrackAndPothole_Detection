@@ -21,8 +21,15 @@ class ChatRequest(AppBaseModel):
     history: List[ChatMessage] = Field(default_factory=list, description="Previous turns")
 
 
+class PageLink(BaseModel):
+    """A clickable in-app navigation link surfaced alongside a chat reply."""
+    label: str = Field(..., description="Button text shown to the user")
+    route: str = Field(..., description="App route to navigate to, e.g. /settings")
+
+
 class ChatResponse(AppBaseModel):
     """POST /api/v1/chatbot response."""
     reply: str = Field(..., description="AI-generated reply")
     model: str = Field(..., description="Groq model used")
     finish_reason: str | None = Field(None, description="Completion finish reason")
+    page_links: List[PageLink] = Field(default_factory=list, description="Clickable in-app navigation links")

@@ -62,11 +62,11 @@ export function useChatbot(userName = null, pendingReportCount = null) {
         history
       );
 
-      if (success && data?.reply) {
+if (success && data?.reply) {
         const reply = data.reply;
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: reply },
+          { role: "assistant", content: reply, pageLinks: data.page_links ?? [] },
         ]);
         // Contextual follow-up chips based on response content
         if (reply.toLowerCase().includes("status")) {
@@ -86,6 +86,7 @@ export function useChatbot(userName = null, pendingReportCount = null) {
             role: "assistant",
             content:
               "Oops, I couldn't get a response right now. Please try again in a moment!",
+            pageLinks: [],
           },
         ]);
         setSuggestions(DEFAULT_SUGGESTIONS);

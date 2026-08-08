@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import "./AdminMapView.css";
-
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 import {
   MapContainer, TileLayer, Marker, Popup,
   useMap, useMapEvents, Rectangle, Polygon, Circle,
@@ -121,9 +121,9 @@ function passesDateFilter(r, range) {
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 function getImageSrc(r) {
-  const mediaUrl = r?.media_attachments?.[0]?.file_url;
-  if (mediaUrl) return `${BASE_URL}${mediaUrl}`;
-  return r?.image_url ?? r?.photo_url ?? r?.image ?? r?.photo ?? r?.attachment_url ?? null;
+  const url = r?.media_attachments?.[0]?.file_url
+    ?? r?.image_url ?? r?.photo_url ?? r?.image ?? r?.photo ?? r?.attachment_url;
+  return resolveMediaUrl(url) ?? null;
 }
 
 const esc = (s) =>

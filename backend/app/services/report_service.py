@@ -1,16 +1,3 @@
-"""
-backend/app/services/report_service.py
-──────────────────────────────────────
-Report CRUD + upvote service layer.
-
-Fully aligned with:
-  • app/models/report.py          (SQLAlchemy ORM with 7 new columns)
-  • app/schemas/report.py         (Pydantic v2 ReportCreate / ReportUpdate)
-  • app/api/v1/reports.py         (FastAPI endpoints)
-
-Handles all new fields: ai_validation_*, capture_metadata, requires_admin_review,
-review_reason, disclaimer_accepted, is_hybrid, secondary_damage, detection_note.
-"""
 
 from __future__ import annotations
 

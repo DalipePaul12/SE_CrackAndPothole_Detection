@@ -722,9 +722,22 @@ body.dark .damage-type-badge {
 
 @media (max-width: 480px) {
   .dashboard-summary {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
   }
-  .summary-card.users { grid-column: unset; }
+  .summary-card {
+    padding: 10px 12px 11px;
+    border-radius: 14px;
+  }
+  .summary-card h3 {
+    font-size: 0.6rem;
+    margin: 0 0 6px;
+    letter-spacing: 0.03em;
+  }
+  .summary-card .icon { font-size: 0.95rem; }
+  .summary-card p { font-size: 1.35rem; }
+  .kpi-body { align-items: center; }
+  .summary-card.users { grid-column: 1 / -1; }
   .insights-list      { grid-template-columns: 1fr; }
   .contribution-stats { gap: 8px; }
   .progress-steps     { overflow-x: auto; padding-bottom: 4px; }

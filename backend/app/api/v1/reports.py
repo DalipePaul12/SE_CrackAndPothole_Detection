@@ -740,12 +740,14 @@ async def delete_report(
 
 # ── UPLOAD MEDIA ──────────────────────────────────────────────────────────────
 
+# ── UPLOAD MEDIA ──────────────────────────────────────────────────────────────
+
 @router.post("/{report_id}/media", status_code=status.HTTP_200_OK)
 @limiter.limit("20/minute")
 async def upload_media(
     request: Request,
     report_id: int,
-    background_tasks: BackgroundTasks,   # ← FIX: moved before File(...)
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -805,7 +807,25 @@ async def upload_media(
     clean_name    = _sanitize_filename(file.filename or "", fallback_ext)
     safe_name     = f"{uuid.uuid4().hex}_{clean_name}"
 
-    # Write to disk
+    # ── UPLOAD TO SUPABASE STORAGE (was: local disk write) ──────────────
+    from app.core.supabase_storage import upload_report_file
+
+    storage_subpath = f"{report_id}/{safe_name}"
+    try:
+        file_url = upload_report_file(
+            file_bytes=contents,
+            storage_path=storage_subpath,
+            content_type=actual_mime,
+        )
+    except Exception as e:
+        logger.error(f"Supabase upload failed for report {report_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to upload file to storage: {e}",
+        )
+
+    # ── Local temp copy — ONLY so run_yolo() below has a real file path.
+    #    Deleted right after ML inference finishes, in the finally block.
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / safe_name
@@ -813,16 +833,16 @@ async def upload_media(
     async with aiofiles.open(file_path, "wb") as f:
         await f.write(contents)
 
-    # Persist DB record
+    # Persist DB record — file_url now points to Supabase, not local disk
     from app.models.media_attachment import MediaAttachment
 
     attachment = MediaAttachment(
         report_id=report_id,
-        file_url=f"/uploads/{safe_name}",
+        file_url=file_url,
         file_name=clean_name,
         file_size_bytes=len(contents),
         media_type=media_type,
-        is_processed=False,   # ← FIX: will be True after ML runs
+        is_processed=False,
         is_ai_generated=report.is_flagged_fake,
         ai_generated_confidence=None,
     )
@@ -830,10 +850,14 @@ async def upload_media(
     await db.commit()
     await db.refresh(attachment)
 
-    # ── TRIGGER ML CLASSIFICATION ─────────────────────────────────────
-    # FIX: This endpoint previously never ran YOLO, so ai_severity stayed NULL.
+    # Set report primary image if first upload — MISSING before, caused
+    # report.image_url to stay NULL even though the file uploaded fine.
+    if not report.image_url and media_type == MediaType.image:
+        report.image_url = file_url
+        await db.commit()
+
+
     # ── RUN ML CLASSIFICATION INLINE ─────────────────────────────────
-    # FIX: queue_service has import error, so we run inline for now.
     import asyncio
     from app.services.ml_service import run_yolo
     from app.models.enums import DamageType, SeverityLevel
@@ -863,7 +887,6 @@ async def upload_media(
                         f"Valid values: {[s.value for s in SeverityLevel]}"
                     )
 
-            # Save to AIDetectionResult
             detection = AIDetectionResult(
                 report_id=report_id,
                 media_attachment_id=attachment.id,
@@ -876,7 +899,6 @@ async def upload_media(
             )
             db.add(detection)
 
-            # Update Report summary
             report.ai_damage_type = detected_class
             report.ai_severity = severity
             report.ai_confidence = prediction.get("confidence")
@@ -899,10 +921,15 @@ async def upload_media(
         attachment.is_processed = True
         await db.commit()
         task_id = "inline_failed"
+    finally:
+        # Local temp copy served its purpose (ML inference) — clean it up.
+        # File already lives in Supabase Storage as the source of truth.
+        if file_path.exists():
+            os.remove(file_path)
 
     logger.info(
-        "Media saved | report_id=%d | media_id=%d | mime=%s | size=%d bytes | file=%s | ml_task=%s",
-        report_id, attachment.id, actual_mime, len(contents), safe_name, task_id,
+        "Media saved | report_id=%d | media_id=%d | mime=%s | size=%d bytes | url=%s | ml_task=%s",
+        report_id, attachment.id, actual_mime, len(contents), file_url, task_id,
     )
 
     return {
@@ -910,7 +937,7 @@ async def upload_media(
         "data": {
             "media_id":    attachment.id,
             "file_url":    attachment.file_url,
-            "task_id":     task_id,   # ← frontend can poll if needed
+            "task_id":     task_id,
             "ai_validation": {
                 "is_ai_generated": report.is_flagged_fake,
                 "status": "flagged" if report.is_flagged_fake else "approved",
@@ -921,8 +948,6 @@ async def upload_media(
             },
         },
     }
-
-
 @router.post("/{report_id}/upvote")
 async def toggle_upvote(
     report_id: int,

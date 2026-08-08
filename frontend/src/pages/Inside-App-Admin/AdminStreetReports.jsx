@@ -3,7 +3,7 @@ import "./AdminStreetReports.css";
 import { getReports } from "../../api/reports";
 import { ChevronRight, MapPin, X } from "lucide-react";
 import { REPORT_STATUS } from "../../constants/reportStatus";
-
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 function isCoordinateString(str) {
   if (!str) return false;
   return /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(str.trim());
@@ -475,9 +475,7 @@ function StreetReportModal({ report: r, onClose }) {
   const severity = r.ai_severity ?? r.severity ?? "—";
   const mediaUrl = r.media_attachments?.[0]?.file_url;
   const mediaType = r.media_attachments?.[0]?.media_type;
-  const fullUrl = mediaUrl
-    ? `${import.meta.env.VITE_API_URL || ""}${mediaUrl}`
-    : null;
+  const fullUrl = resolveMediaUrl(mediaUrl);
   const displayAddress =
     r.exact_address || r.street_name || r.location_address || "—";
 

@@ -96,11 +96,21 @@
 .cpd-action-error {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--danger, #ef4444);
-  font-size: 0.85rem;
-  margin: 0;
+  gap: 8px;
+  flex-wrap: wrap;
 }
+
+.cpd-action-retry {
+  margin-left: auto;
+  border: 1px solid currentColor;
+  background: none;
+  color: inherit;
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
 .cpd-pending-btns {
   display: flex;
   flex-wrap: wrap;
@@ -435,6 +445,7 @@
   outline: none;
   width: 100%;
   box-sizing: border-box;
+  min-width: 0; /* prevents grid/flex children from refusing to shrink below content size */
 }
 .cpd-input:focus {
   border-color: var(--input-focus, var(--primary));
@@ -464,6 +475,9 @@
 .cpd-textarea:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* ── Materials table ─────────────────────────────────────────────────────── */
+/* Desktop/tablet: five-column grid. Each field is wrapped in a .cpd-mat-cell
+   so a small mobile-only label (.cpd-mat-mlabel) can be attached without
+   touching the input itself (inputs don't support ::before/::after). */
 .cpd-mat-header {
   display: grid;
   grid-template-columns: 1fr 80px 120px 90px 36px;
@@ -480,10 +494,27 @@
   grid-template-columns: 1fr 80px 120px 90px 36px;
   gap: 6px;
   align-items: center;
+  margin-bottom: 6px;
 }
-.cpd-mat-name  { grid-column: 1; }
-.cpd-mat-qty   { grid-column: 2; text-align: center; }
-.cpd-mat-cost  { grid-column: 3; }
+.cpd-mat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cpd-mat-mlabel {
+  display: none; /* shown only on narrow mobile layout below */
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--subtext);
+}
+.cpd-mat-cell--name  { grid-column: 1; }
+.cpd-mat-cell--qty   { grid-column: 2; }
+.cpd-mat-cell--cost  { grid-column: 3; }
+.cpd-mat-cell--total { grid-column: 4; }
+.cpd-mat-qty { text-align: center; }
 .cpd-mat-total {
   font-size: 0.88rem;
   font-weight: 600;
@@ -492,6 +523,7 @@
   padding-right: 4px;
 }
 .cpd-mat-remove {
+  grid-column: 5;
   background: none;
   border: none;
   color: var(--subtext);
@@ -900,10 +932,62 @@
   .cpd-page { padding: 20px 16px; }
   .cpd-content { grid-template-columns: 1fr; }
   .cpd-completion-section { padding: 18px 16px; }
-  .cpd-mat-header { display: none; }
-  .cpd-mat-row { grid-template-columns: 1fr 60px 100px 70px 32px; gap: 4px; }
   .cpd-submit-row { flex-direction: column; }
   .cpd-submit-btn,
   .cpd-cancel-btn { width: 100%; justify-content: center; }
   .cpd-cost-row { flex-direction: column; align-items: flex-start; }
+  .cpd-cost-input { max-width: none; width: 100%; }
+}
+
+/* Phones: the fixed-pixel qty/cost/total columns used to eat almost all the
+   row's width and squeeze the material-name field down to a few pixels.
+   Below 520px each material row becomes its own labeled card instead. */
+@media (max-width: 520px) {
+  /* 16px prevents iOS Safari from auto-zooming the page on input focus */
+  .cpd-input,
+  .cpd-textarea,
+  .cpd-composer-input {
+    font-size: 16px;
+  }
+  .cpd-input {
+    padding: 11px 12px;
+    min-height: 44px; /* comfortable touch target */
+  }
+
+  .cpd-mat-header { display: none; }
+
+  .cpd-mat-row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "name  name"
+      "qty   cost"
+      "total remove";
+    gap: 8px 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 10px);
+    background: var(--bg);
+    margin-bottom: 10px;
+  }
+  .cpd-mat-cell--name  { grid-area: name; }
+  .cpd-mat-cell--qty   { grid-area: qty; }
+  .cpd-mat-cell--cost  { grid-area: cost; }
+  .cpd-mat-cell--total { grid-area: total; }
+  .cpd-mat-qty { text-align: left; }
+  .cpd-mat-total {
+    text-align: left;
+    padding-right: 0;
+    font-size: 0.95rem;
+  }
+  .cpd-mat-remove {
+    grid-area: remove;
+    justify-self: end;
+    align-self: end;
+    border: 1px solid var(--border);
+    width: 36px;
+    height: 36px;
+  }
+  .cpd-mat-mlabel { display: block; }
+
+  .cpd-mat-subtotal { padding-right: 0; text-align: left; }
 }

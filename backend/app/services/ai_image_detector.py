@@ -1,14 +1,4 @@
-"""
-ai_image_detector.py
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Hybrid AI-generated image detector for Snap2Fix.
 
-PRIMARY:   HuggingFace API  (umm-maybe/AI-image-detector)
-FALLBACK:   8-signal hardcoded heuristic (noise, texture, color, edges, etc.)
-
-Never silently passes. If HF fails, hardcoded detector runs.
-If both are uncertain, flags for review rather than calling it REAL.
-"""
 
 from __future__ import annotations
 

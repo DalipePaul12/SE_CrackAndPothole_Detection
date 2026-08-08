@@ -34,6 +34,7 @@
 .notif-page-title-group {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -73,6 +74,8 @@
   color: var(--danger);
   font-size: 0.72rem;
   font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .notif-header-actions {
@@ -885,16 +888,17 @@
     margin-bottom: 1rem;
   }
 
-  .notif-page-title-group {
+.notif-page-title-group {
     width: 100%;
   }
 
   .notif-count-pill {
-    margin-left: auto;
+    margin-left: 0;
   }
 
   .notif-header-actions {
     width: 100%;
+    justify-content: flex-end;
   }
 
   .notif-mark-all-btn {

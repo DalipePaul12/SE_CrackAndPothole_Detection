@@ -21,7 +21,8 @@ class Settings(BaseSettings):
 
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_KEY: str = ""
-
+    SUPABASE_BUCKET: str = "report-media"
+    
     @property
     def effective_database_url(self) -> str:
         url = self.SUPABASE_DATABASE_URL.strip() if self.SUPABASE_DATABASE_URL.strip() else self.DATABASE_URL.strip()

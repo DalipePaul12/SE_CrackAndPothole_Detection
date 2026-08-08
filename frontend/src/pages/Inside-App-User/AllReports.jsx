@@ -11,6 +11,11 @@ import { SkeletonTableRow } from "../../components/SkeletonRow";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
+const resolveMediaUrl = (url) => {
+  if (!url) return null;
+  return /^https?:\/\//i.test(url) ? url : `${BASE_URL}${url}`;
+};
+
 const toClass = (str = "") =>
   str.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 
@@ -19,7 +24,7 @@ const fmtDate = (iso) =>
 
 const getImageUrl = (report) => {
   const url = report?.media_attachments?.[0]?.file_url;
-  return url ? `${BASE_URL}${url}` : null;
+  return url ? resolveMediaUrl(url) : null;
 };
 
 function Pagination({ page, setPage, total, pageSize = 10 }) {

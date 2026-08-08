@@ -11,7 +11,7 @@ import {
 import { getAvailableContractors, assignContractor, createProject, getProjects, getProjectCompletion } from "../../api/projects";
 import "./AdminManageReports.css";
 import { REPORT_STATUS } from "../../constants/reportStatus";
-
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 function isCoordinateString(str) {
   if (!str) return false;
   return /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(str.trim());
@@ -186,13 +186,10 @@ const damageType = (r) => r.ai_damage_type ?? r.damage_type ?? "—";
 const severity   = (r) => r.ai_severity    ?? r.severity    ?? "—";
 const barangay   = (r) => r.barangay ?? r.location_address?.split(",")[0] ?? "—";
 const street     = (r) => r.exact_address || r.street_name || r.location_address || "";
-const mediaFull  = (r, idx = 0) => {
+const mediaFull = (r, idx = 0) => {
   const att = r.media_attachments?.[idx];
   if (!att?.file_url) return null;
-  return {
-    url:  `${import.meta.env.VITE_API_URL || ""}${att.file_url}`,
-    type: att.media_type,
-  };
+  return { url: resolveMediaUrl(att.file_url), type: att.media_type };
 };
 
 const GEO_CACHE_KEY = "amr_geo_cache";
@@ -1539,7 +1536,7 @@ function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComp
               {mCount > 0 ? (
                 <>
                   {r.media_attachments.map((att, i) => {
-                    const url = `${import.meta.env.VITE_API_URL || ""}${att.file_url}`;
+                    const url = resolveMediaUrl(att.file_url);
                     return att.media_type === "video"
                       ? <video key={i} src={url} controls className="vmr-media-main" />
                       : <img key={i} src={url} alt={`Media ${i + 1}`} className="vmr-media-main" />;
@@ -1739,7 +1736,7 @@ function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComp
                         {completion.completion_photos.map(ph => (
                           <img
                             key={ph.id}
-                            src={`${import.meta.env.VITE_API_URL || ""}${ph.file_url}`}
+                            src={resolveMediaUrl(ph.file_url)}
                             alt={ph.file_name ?? "Completion photo"}
                             className="vmr-compl-photo"
                           />

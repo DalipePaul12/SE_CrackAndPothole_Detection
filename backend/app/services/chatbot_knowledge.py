@@ -1,27 +1,51 @@
 """
 Snap2Fix Chatbot Knowledge Base
 ================================
-Curated FAQ content, feature descriptions, and common user questions
-about the Snap2Fix road damage reporting platform.
-
-This module provides structured knowledge that the chatbot service
-loads and injects into the AI system prompt. Keeping content separate
-from the AI logic makes the knowledge base easy to extend without
-touching the Groq API code.
+Curated FAQ content, feature descriptions, page routes, and common user
+questions about the Snap2Fix road damage reporting platform.
 """
 
 from typing import List, Dict
+
+
+# ── Clickable page routes ───────────────────────────────────────────────────
+# SnapBot is only allowed to link to routes listed here. AI-generated
+# [Label](page:/route) tokens are validated against this whitelist server-side.
+PAGE_ROUTES: Dict[str, str] = {
+    "/dashboard": "Dashboard — overview of your reports, stats, and recent activity.",
+    "/dashboard/reports": "All Reports — browse all public reports, and submit a new one from here.",
+    "/dashboard/submissions": "My Submissions — full list of every report you've submitted, with status filters.",
+    "/dashboard/mapview": "Map View — interactive map of all public reports, filterable by damage type, severity, and status.",
+    "/dashboard/notifications": "Notifications — status updates, comments, and upvotes on your reports.",
+    "/dashboard/settings": "Settings — account details, password, and notification preferences.",
+    "/dashboard/profile": "My Profile — your account details and profile picture.",
+}
+
+# ── Label → route fallback map ──────────────────────────────────────────────
+# Safety net: if the AI mentions a page by its exact bolded name but forgets
+# the [Label](page:/route) syntax, this catches it so a clickable link still
+# gets generated. Keys are matched case-insensitively against **bold** spans.
+PAGE_LABELS: Dict[str, str] = {
+    "Dashboard": "/dashboard",
+    "All Reports": "/dashboard/reports",
+    "My Submissions": "/dashboard/submissions",
+    "Map View": "/dashboard/mapview",
+    "Notifications": "/dashboard/notifications",
+    "Settings": "/dashboard/settings",
+    "My Profile": "/dashboard/profile",
+}
 
 
 # ── Core knowledge sections ─────────────────────────────────────────────────
 
 FEATURES: Dict[str, str] = {
     "submit_report": (
-        "Users can submit road damage reports through the app by uploading a photo "
-        "or video of the damage. The AI engine automatically detects cracks and "
-        "potholes, assigns a severity level (Low, Moderate, High, Critical), and "
-        "estimates a confidence score. Users can add a manual description and "
-        "pin the exact location on a map."
+        "Users submit road damage reports by uploading a photo or video of the "
+        "damage from the [All Reports](page:/dashboard/reports) page. The AI "
+        "engine automatically detects cracks and potholes, assigns a severity "
+        "level (Low, Moderate, High, Critical), and estimates a confidence "
+        "score. Users can add a manual description and pin the exact location "
+        "on a map. Submission takes under a minute for a single clear photo."
     ),
     "severity_levels": (
         "Snap2Fix uses four severity levels:\n"
@@ -29,20 +53,24 @@ FEATURES: Dict[str, str] = {
         "• Moderate — Visible damage that may worsen; affects ride quality.\n"
         "• High — Significant hazard; risk to vehicles or pedestrians.\n"
         "• Critical — Severe damage requiring urgent immediate repair.\n"
-        "Severity is determined by the AI detection model and can be adjusted by admins."
+        "Severity is determined by the AI detection model based on visual size, "
+        "depth cues, and damage pattern, and can be adjusted by admins during "
+        "review. Critical reports are prioritized in the repair queue."
     ),
     "ai_detection": (
-        "Snap2Fix runs two YOLO-based detection models — one trained for potholes "
-        "and one for cracks. When a user uploads media, the AI analyzes the image, "
-        "draws segmentation masks, and outputs a damage type + confidence score. "
-        "The confidence threshold is configurable (default 0.60). Below-threshold "
-        "detections are flagged for human review."
+        "Snap2Fix runs two YOLO-based detection models — one trained for "
+        "potholes and one for cracks. When a user uploads media, the AI "
+        "analyzes the image, draws bounding boxes, and outputs a damage type + "
+        "confidence score. Detections below the confidence threshold are "
+        "flagged as 'uncertain' and queued for human review instead of being "
+        "auto-classified."
     ),
     "ai_summary": (
-        "Every submitted report gets an AI-generated plain-language summary that "
-        "describes the damage, severity, location, and confidence in 1-2 sentences. "
-        "This summary appears on the report detail page and helps admins quickly "
-        "understand the issue without reading the full description."
+        "Every submitted report can generate an AI plain-language summary that "
+        "describes the damage, severity, location, and confidence in 1-2 "
+        "sentences. There's a daily generation limit per user (5/day) since it "
+        "calls a billed external API — once generated, it's cached and never "
+        "re-triggers the limit."
     ),
     "status_tracking": (
         "Reports move through a lifecycle with these statuses:\n"
@@ -51,36 +79,45 @@ FEATURES: Dict[str, str] = {
         "• In Progress — Repair work has been assigned or started.\n"
         "• Resolved — The damage has been fixed and the report is closed.\n"
         "• Declined — The report was rejected (duplicate, fake, or out of scope).\n"
-        "Users can track their own reports in My Submissions and the Personal Activity Feed."
+        "Track every status change in [My Submissions](page:/dashboard/submissions) "
+        "or on the [Dashboard](page:/dashboard)."
     ),
     "map_view": (
-        "The Map View shows all public reports as interactive pins. Users can filter "
-        "by damage type (pothole / crack), severity, and status. Clicking a pin opens "
-        "the report detail. The map is powered by Mapbox."
+        "The [Map View](page:/dashboard/mapview) shows all public reports as "
+        "interactive pins, filterable by damage type, severity, and status. "
+        "Clicking a pin opens the report detail — it's the fastest way to check "
+        "what's already reported near you before submitting a new one."
     ),
     "notifications": (
-        "Users receive in-app notifications whenever their report changes status, "
-        "gets a comment, or receives an upvote. Notifications appear in the bell icon "
-        "dropdown and are also visible on the Notifications page."
+        "Users get in-app notifications whenever a report changes status, gets "
+        "a comment, or receives an upvote. See them all on the "
+        "[Notifications](page:/dashboard/notifications) page — updates arrive "
+        "live over WebSocket."
     ),
     "upvotes": (
-        "Users can upvote other people's reports to signal urgency. Highly upvoted "
-        "reports get prioritized in admin dashboards. You cannot upvote your own report."
+        "Users can upvote other people's reports to signal urgency. Highly "
+        "upvoted reports get prioritized in admin dashboards. You cannot "
+        "upvote your own report."
     ),
     "fake_detection": (
-        "The platform includes AI-powered fake-image detection to catch photos that "
-        "are not genuine road damage (e.g., screenshots, unrelated images). If a report "
-        "fails this check, it may be auto-declined or flagged for review."
+        "The platform includes AI-powered fake-image detection to catch photos "
+        "that aren't genuine road damage. Reports that fail this check may be "
+        "auto-declined or flagged for manual admin review."
     ),
     "duplicate_check": (
-        "When submitting near an existing report, the system checks for duplicates "
-        "by comparing GPS coordinates. If a very close report already exists, the "
-        "user is warned and can choose to upvote the existing one instead."
+        "When submitting near an existing report, the system checks GPS "
+        "coordinates for duplicates and warns you, letting you upvote the "
+        "existing one instead of creating a near-identical new one."
     ),
     "account": (
-        "Accounts are created with email + OTP verification. Users can set their "
-        "full name, contact number, and profile picture. Passwords can be changed "
-        "from Settings. Admins have additional panels for managing reports and users."
+        "Accounts use email + OTP verification. Update your name, contact "
+        "number, profile picture, or password from "
+        "[Settings](page:/dashboard/settings)."
+    ),
+    "contribution_score": (
+        "The [Dashboard](page:/dashboard) shows a personal Contribution score "
+        "and reporter badge (New / Rising / Active / Top Reporter) based on how "
+        "many reports you've submitted and how many were resolved."
     ),
 }
 
@@ -88,78 +125,91 @@ FAQ: List[Dict[str, str]] = [
     {
         "q": "How do I submit a report?",
         "a": (
-            "Go to Create Report, upload a clear photo or video of the road damage, "
-            "allow the AI to detect it automatically, add a description if you want, "
-            "pin the exact location on the map, and tap Submit."
+            "Go to [All Reports](page:/dashboard/reports), upload a clear photo "
+            "or video of the damage, let the AI detect it automatically, add a "
+            "description if you want, pin the location, and tap **Submit**."
         ),
     },
     {
         "q": "What photo quality do I need?",
         "a": (
-            "The photo should be clear, well-lit, and taken close enough that the "
-            "damage is visible. Avoid blurry, dark, or heavily cropped images. "
-            "Maximum file size is 50 MB for images and 150 MB for videos."
+            "The photo should be **clear, well-lit, and close enough** that the "
+            "damage is visible. Max file size: 50 MB images, 150 MB videos. "
+            "Supported formats: JPEG, PNG, WebP for images; MP4, MOV for video."
         ),
     },
     {
         "q": "Why did my report get declined?",
         "a": (
-            "Reports are declined if they are duplicates, the photo does not show "
-            "real road damage, the location is outside the service area, or the admin "
-            "marks it as invalid. Check the notification for the specific reason."
+            "Reports are declined for duplicates, photos that don't show real "
+            "road damage, out-of-area locations, or admin review. Check "
+            "[My Submissions](page:/dashboard/submissions) for the specific "
+            "reason."
         ),
     },
     {
         "q": "How long does it take for a report to be fixed?",
         "a": (
-            "It depends on severity and local government capacity. Critical reports "
-            "are prioritized. You can track status updates in My Submissions."
+            "Depends on severity and repair capacity — **Critical** reports go "
+            "first. Track live status on your [Dashboard](page:/dashboard)."
         ),
     },
     {
         "q": "Can I edit a report after submitting?",
         "a": (
-            "You can edit the description and severity while the report is still "
-            "Pending. Once it moves to Verified or beyond, only admins can modify it."
+            "Yes, while it's still **Pending** or **Declined** — you can edit "
+            "the barangay, street name, and description. Once Verified or "
+            "beyond, only admins can modify it."
         ),
     },
     {
         "q": "What is the AI summary?",
         "a": (
-            "The AI summary is a short natural-language paragraph automatically "
-            "generated for every report. It summarizes the damage type, severity, "
-            "location, and confidence score in plain language so you can understand "
-            "the issue at a glance."
+            "A short auto-generated paragraph summarizing a report's damage "
+            "type, severity, location, and AI confidence. Capped at 5 per user "
+            "per day."
         ),
     },
     {
         "q": "Is my data safe?",
         "a": (
-            "Yes. Photos are stored securely, location data is used only for report "
-            "pinning, and personal information is never shared publicly. Only your "
-            "full name (if you set one) appears on public reports."
+            "Yes. Photos are stored securely, location is used only for "
+            "pinning, and personal info is never shown publicly."
         ),
     },
     {
         "q": "I forgot my password",
         "a": (
-            "Use the password reset flow on the login screen. An OTP will be sent "
-            "to your registered email. If you still have trouble, contact support."
+            "Use the password reset flow on the login screen — an OTP is sent "
+            "to your email. You can also change it anytime from "
+            "[Settings](page:/dashboard/settings)."
         ),
     },
     {
         "q": "How does severity get decided?",
         "a": (
-            "Severity is first estimated by the AI detection model based on the "
-            "visual characteristics of the damage. Admins can override this during "
-            "review if they disagree with the AI's assessment."
+            "The AI estimates it first from visual size, depth, and pattern of "
+            "the damage. Admins can override it during review."
         ),
     },
     {
         "q": "Can I delete my account?",
         "a": (
-            "Account deletion is not yet available in the app. Contact admin support "
-            "to request account removal."
+            "Yes — from [Settings](page:/dashboard/settings). It's permanent."
+        ),
+    },
+    {
+        "q": "What's the difference between Verified and In Progress?",
+        "a": (
+            "**Verified** = admin confirmed it's legit, repair not started yet. "
+            "**In Progress** = a contractor is actively working on it."
+        ),
+    },
+    {
+        "q": "Do I need an account to view reports?",
+        "a": (
+            "You need an account to submit, upvote, or comment, but the "
+            "[Map View](page:/dashboard/mapview) is there once you're logged in."
         ),
     },
 ]
@@ -168,55 +218,57 @@ TROUBLESHOOTING: List[Dict[str, str]] = [
     {
         "q": "The app is not detecting my damage photo",
         "a": (
-            "Make sure the image is clear and the damage is visible. If the AI still "
-            "does not detect anything, you can manually mark the damage type and "
-            "severity when submitting. The AI confidence score will show how certain "
-            "the model was."
+            "Make sure the damage takes up a good portion of the frame. If AI "
+            "still can't detect it, you can manually mark damage type and "
+            "severity when submitting — it'll be flagged for review instead of "
+            "blocking your submission."
         ),
     },
     {
         "q": "I cannot see my submitted report",
         "a": (
-            "Check My Submissions under the dashboard. If it is not there, the "
-            "submission may have failed — try uploading again. Ensure you have a "
-            "stable internet connection."
+            "Check [My Submissions](page:/dashboard/submissions). If it's not "
+            "there, the upload may have failed silently — retry on a stable "
+            "connection."
         ),
     },
     {
         "q": "Map is not loading",
         "a": (
-            "The Map View requires a stable internet connection and a valid Mapbox "
-            "token. If the map stays blank, try refreshing the page or checking "
-            "your network connection."
+            "[Map View](page:/dashboard/mapview) needs a stable connection. Try "
+            "refreshing the page first."
         ),
     },
     {
         "q": "Notifications are not showing",
         "a": (
-            "Make sure you are logged in. Notifications are real-time via WebSocket. "
-            "If the bell icon badge is missing, try refreshing the page or checking "
-            "the Notifications page directly."
+            "Make sure you're logged in — sync is live over WebSocket. Check "
+            "the [Notifications](page:/dashboard/notifications) page directly "
+            "if the bell badge seems off."
         ),
     },
     {
         "q": "Upload keeps failing",
         "a": (
-            "Check your file size — images must be under 50 MB and videos under "
-            "150 MB. Supported formats: JPEG, PNG, WebP for images; MP4, MOV for videos. "
-            "If the file is valid but still fails, try a different network."
+            "Check file size first — 50 MB max for images, 150 MB for videos. "
+            "Try a different network if a valid file still fails."
         ),
     },
 ]
 
+
 # ── Assembled plain-text knowledge block for the system prompt ───────────────
 
 def build_knowledge_block() -> str:
-    """Return a single formatted string containing all KB content."""
     lines: List[str] = [
         "=== SNAP2FIX PLATFORM KNOWLEDGE BASE ===",
         "",
-        "--- Core Features ---",
+        "--- Available Page Routes (ONLY use these for [Label](page:/route) links) ---",
     ]
+    for route, desc in PAGE_ROUTES.items():
+        lines.append(f"{route} — {desc}")
+
+    lines.extend(["", "--- Core Features ---"])
     for key, desc in FEATURES.items():
         title = key.replace("_", " ").title()
         lines.extend([f"\n{title}:", desc])

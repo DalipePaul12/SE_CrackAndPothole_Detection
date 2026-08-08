@@ -6,6 +6,7 @@ import { getReports, updateReport, deleteReport, addComment } from "../../api/re
 import { getProjects, getProjectCompletion } from "../../api/projects";
 import { sendNotification } from "../../api/notifications";
 import { REPORT_STATUS } from "../../constants/reportStatus";
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 import { getDashboardSummary, getSeverityStats } from "../../api/analytics";
 import {
   Search, X, Download, Check, XCircle, Trash2, Settings, MapPin, ArrowUpRight,
@@ -46,7 +47,7 @@ const NOTIF_TEMPLATES = {
 const toClass  = (s = "") => s.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 const fmtDate  = (iso) => iso ? new Date(iso).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "—";
 const padId    = (id) => `RPT-${String(id).padStart(5, "0")}`;
-const mediaUrl = (att) => att?.file_url ? `${BASE_URL}${att.file_url}` : null;
+const mediaUrl = (att) => att?.file_url ? resolveMediaUrl(att.file_url) : null;
 
 const damageType = (r) => r.ai_damage_type ?? r.damage_type ?? "—";
 const severity   = (r) => r.ai_severity    ?? r.severity    ?? "—";
@@ -1420,7 +1421,7 @@ return (
                       <p className="vmr-compl-photos-lbl"><Camera size={13} /> Completion Photos</p>
                       <div className="vmr-compl-photos-row">
                         {completion.completion_photos.map((ph) => (
-                          <img key={ph.id} src={`${BASE_URL}${ph.file_url}`} alt={ph.file_name ?? "Completion photo"} className="vmr-compl-photo" />
+                          <img key={ph.id} src={resolveMediaUrl(ph.file_url)} alt={ph.file_name ?? "Completion photo"} className="vmr-compl-photo" />
                         ))}
                       </div>
                     </div>

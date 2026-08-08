@@ -7,6 +7,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useTheme } from "../Contexts/ThemeContext";
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 import { useMapReports } from "../../hooks/useMapReports";
 import {
   MapPin, AlertTriangle, Clock, CheckCircle2,
@@ -17,13 +18,7 @@ import {
 
 // ─── Image / Video helper ────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || "";
-const getThumb = (r) => {
-  const url = r?.media_attachments?.[0]?.file_url;
-  if (!url) return null;
-  return url.startsWith("http")
-    ? url
-    : `${BASE_URL.replace(/\/$/, "")}${url}`;
-};
+const getThumb = (r) => resolveMediaUrl(r?.media_attachments?.[0]?.file_url);
 
 const isVideo = (r) => r?.media_attachments?.[0]?.media_type === "video";
 
