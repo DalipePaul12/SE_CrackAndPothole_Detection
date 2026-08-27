@@ -80,6 +80,8 @@ async def lifespan(app: FastAPI):
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
+# ── Lifespan ─────────────────────────────────────────────────────────────────
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting %s [%s]", settings.PROJECT_NAME, settings.ENVIRONMENT)
@@ -102,7 +104,6 @@ async def lifespan(app: FastAPI):
     logger.info("Startup complete — server is accepting connections.")
     yield
     logger.info("Shutting down %s.", settings.PROJECT_NAME)
-
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
