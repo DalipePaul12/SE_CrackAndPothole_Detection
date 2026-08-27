@@ -24,8 +24,17 @@ steps:
       - 'asia-southeast1'
       - '--platform'
       - 'managed'
+      - '--memory'
+      - '4Gi'
+      - '--cpu'
+      - '2'
+      - '--timeout'
+      - '300'
 
 images:
   - 'asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dalipepaul12-se_crackandpothole_detection/snap2fix-backend:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
 
 timeout: '1200s'
