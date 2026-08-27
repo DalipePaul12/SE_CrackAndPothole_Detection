@@ -55,7 +55,8 @@ BLUR_PENALTY_THRESHOLD = 100.0
 # ── Model loading ────────────────────────────────────────────────────────────
 
 def load_models() -> None:
-    """Load both YOLO models into module-level globals. Idempotent."""
+    """Load both YOLO models into module-level globals. Idempotent.
+    Downloads weight files from *_MODEL_URL if not already on disk."""
     global _pothole_model, _crack_model
     if _pothole_model is not None and _crack_model is not None:
         return
@@ -68,6 +69,9 @@ def load_models() -> None:
     pothole_path = Path(settings.POTHOLE_MODEL_PATH)
     crack_path = Path(settings.CRACK_MODEL_PATH)
 
+    _ensure_model_downloaded(pothole_path, settings.POTHOLE_MODEL_URL, "Pothole")
+    _ensure_model_downloaded(crack_path, settings.CRACK_MODEL_URL, "Crack")
+
     if not pothole_path.exists():
         raise FileNotFoundError(f"Pothole model not found at '{pothole_path.resolve()}'.")
     if not crack_path.exists():
@@ -76,6 +80,30 @@ def load_models() -> None:
     _pothole_model = YOLO(str(pothole_path))
     _crack_model = YOLO(str(crack_path))
     logger.info("YOLO models loaded: pothole=%s  crack=%s", pothole_path, crack_path)
+
+
+def _ensure_model_downloaded(path: Path, url: str, label: str) -> None:
+    """Download a .pt weight file from `url` to `path` if it doesn't exist."""
+    if path.exists() or not url:
+        return
+
+    logger.info("%s model missing at %s — downloading from %s", label, path, url)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".part")
+
+    try:
+        with httpx.stream("GET", url, follow_redirects=True, timeout=120) as resp:
+            resp.raise_for_status()
+            with open(tmp_path, "wb") as f:
+                for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
+                    f.write(chunk)
+        tmp_path.rename(path)
+        logger.info("%s model downloaded: %s (%.1f MB)", label, path, path.stat().st_size / 1e6)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        logger.exception("Failed to download %s model from %s", label, url)
+        raise
 
 
 # ── Image pre-processing ─────────────────────────────────────────────────────
