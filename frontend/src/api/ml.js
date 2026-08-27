@@ -1,9 +1,10 @@
-const ENDPOINTS = {
-  image:    `/api/v1/ml/analyze`,
-  video:    `/api/v1/ml/analyze/video`,
-  realtime: `/api/v1/ml/analyze/realtime`,
-};
+import { BASE_URL } from "./client.js";
 
+const ENDPOINTS = {
+  image:    `${BASE_URL}/api/v1/ml/analyze`,
+  video:    `${BASE_URL}/api/v1/ml/analyze/video`,
+  realtime: `${BASE_URL}/api/v1/ml/analyze/realtime`,
+};
 const TIMEOUTS = {
   image:    90_000,
   video:    300_000,
@@ -300,10 +301,10 @@ export class RealtimeDetectionSocket {
     this.onFrame = onFrame;
   }
 
-  connect() {
+    connect() {
     const wsProto = window.location.protocol === "https:" ? "wss" : "ws";
-    const wsBase  = `${wsProto}://${window.location.host}`;
-    this.ws = new WebSocket(`${wsBase}/api/v1/ml/ws/realtime-overlay`);
+    const wsHost  = BASE_URL.replace(/^https?:\/\//, "");
+    this.ws = new WebSocket(`${wsProto}://${wsHost}/api/v1/ml/ws/realtime-overlay`);
 
     this.ws.onopen = () => {
       console.debug("[RealtimeDetectionSocket] connected");

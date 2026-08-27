@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || "";
+export const BASE_URL = import.meta.env.VITE_API_URL || "";
 const API_PREFIX = "/api/v1";
 
 // ── Token storage — single source of truth shared with useAuth.js ─────────────

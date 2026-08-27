@@ -158,7 +158,6 @@ export async function uploadMedia(reportId, file, onProgress) {
 // Alias for backwards compatibility
 export const uploadReportMedia = uploadMedia;
 
-
 // ── Admin actions ─────────────────────────────────────────────────────────────
 
 export async function validateReport(reportId) {
