@@ -19,6 +19,11 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Bake YOLO model weights into the image so they're on disk instantly at
+# container start — no runtime download, no startup-timeout risk.
+RUN curl -L https://huggingface.co/TellMeWhatYouSaw/RoadDamage-yolo-models/resolve/main/Pothole_best.pt -o Pothole_best.pt \
+    && curl -L https://huggingface.co/TellMeWhatYouSaw/RoadDamage-yolo-models/resolve/main/Crack_best.pt -o Crack_best.pt
+
 COPY . .
 
 ENV PORT=8080

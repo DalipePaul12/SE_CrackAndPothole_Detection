@@ -35,15 +35,9 @@ from app.api.v1 import settings as settings_router
 from app.routers import comments, ws
 
 
-# ── Background model loading ──────────────────────────────────────────────────
-# CRITICAL FIX: loading YOLO/torch models BEFORE `yield` blocks the event loop
-# and delays the port bind. On low-CPU instances (e.g. Render free tier, 0.1
-# CPU) this can take well over 100s — longer than Render's deploy timeout —
-# causing "Exited with status 128" with zero logs, because the process never
-# gets the chance to bind and answer the health check.
-#
-# Fix: bind the port immediately (yield right away), and load models as a
-# fire-and-forget background task. `app.state.models_ready` gates ML routes.
+# ── Lifespan ─────────────────────────────────────────────────────────────────
+# Model weights are baked into the Docker image at build time (see Dockerfile),
+# so load_models() finds them on disk instantly — no download, no long startup.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting %s [%s]", settings.PROJECT_NAME, settings.ENVIRONMENT)
@@ -77,33 +71,6 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down %s.", settings.PROJECT_NAME)
 
-
-# ── Lifespan ─────────────────────────────────────────────────────────────────
-
-# ── Lifespan ─────────────────────────────────────────────────────────────────
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Starting %s [%s]", settings.PROJECT_NAME, settings.ENVIRONMENT)
-
-    if settings.AI_ENABLED:
-        # Fire-and-forget: do NOT await here. The server must bind the port
-        # first so Render's health check / port scan succeeds immediately.
-        app.state.models_ready = False
-        asyncio.create_task(_load_models_background(app))
-        logger.info("ML model loading scheduled in background.")
-    else:
-        app.state.models_ready = False
-        app.state.models_error = None
-        logger.info("AI_ENABLED=False — skipping model preload.")
-
-    # Fire-and-forget data-retention cleanup loop (24 h interval).
-    asyncio.create_task(start_cleanup_loop())
-    logger.info("Data-retention cleanup loop scheduled.")
-
-    logger.info("Startup complete — server is accepting connections.")
-    yield
-    logger.info("Shutting down %s.", settings.PROJECT_NAME)
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
