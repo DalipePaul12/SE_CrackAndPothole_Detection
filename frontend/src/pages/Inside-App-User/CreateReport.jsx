@@ -52,8 +52,8 @@ import { readExifGps } from "../../utils/exifUtils";
 // ─── Constants (UNCHANGED) ────────────────────────────────────────────────────
 const DAMAGE_TYPE_BACKEND     = { POTHOLE: "pothole", CRACK: "crack" };
 const SEVERITY_BACKEND = {
-  critical:     "critical",
-  non_critical: "non_critical",
+  CRITICAL:     "critical",
+  NON_CRITICAL: "non_critical",
 }
 const REALTIME_CONF_THRESHOLD = 0.40; // lowered from 0.60: live 320-px frames score ~0.1-0.15 below 640-px stills
 const MAX_REC_SECS            = 10;

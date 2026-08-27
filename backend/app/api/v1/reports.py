@@ -850,14 +850,7 @@ async def upload_media(
     await db.commit()
     await db.refresh(attachment)
 
-    # Set report primary image if first upload — MISSING before, caused
-    # report.image_url to stay NULL even though the file uploaded fine.
-    if not report.image_url and media_type == MediaType.image:
-        report.image_url = file_url
-        await db.commit()
-
-
-    # ── RUN ML CLASSIFICATION INLINE ─────────────────────────────────
+        # ── RUN ML CLASSIFICATION INLINE ─────────────────────────────────
     import asyncio
     from app.services.ml_service import run_yolo
     from app.models.enums import DamageType, SeverityLevel
