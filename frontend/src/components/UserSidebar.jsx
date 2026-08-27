@@ -46,7 +46,7 @@ function SnapLogo() {
   );
 }
 
-function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
+function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onReportModalChange }) {
   const { unreadCount } = useNotifications();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
