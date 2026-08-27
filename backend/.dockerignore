@@ -15,3 +15,5 @@ docs/
 package-lock.json
 package.json
 *.log
+.pytest_cache/
+requirements.lock
