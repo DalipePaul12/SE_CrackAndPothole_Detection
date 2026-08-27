@@ -44,22 +44,38 @@ from app.routers import comments, ws
 #
 # Fix: bind the port immediately (yield right away), and load models as a
 # fire-and-forget background task. `app.state.models_ready` gates ML routes.
-async def _load_models_background(app: FastAPI) -> None:
-    app.state.models_ready = False
-    app.state.models_error = None
-    try:
-        from app.services.ml_service import load_models
-        # load_models() is likely sync/CPU-bound (torch.load, YOLO()), so run
-        # it in a thread to avoid blocking the event loop entirely.
-        await asyncio.to_thread(load_models)
-        app.state.models_ready = True
-        logger.info("ML models loaded and ready.")
-    except FileNotFoundError as exc:
-        app.state.models_error = str(exc)
-        logger.critical("Model weights missing: %s — ML endpoints will fail.", exc)
-    except Exception as exc:
-        app.state.models_error = str(exc)
-        logger.error("Failed to load ML models: %s", exc)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting %s [%s]", settings.PROJECT_NAME, settings.ENVIRONMENT)
+
+    if settings.AI_ENABLED:
+        # Load models BEFORE yield so the download finishes during
+        # container startup (which gets full CPU for free on Cloud Run),
+        # instead of as a background task that stalls once CPU throttles.
+        app.state.models_ready = False
+        app.state.models_error = None
+        try:
+            from app.services.ml_service import load_models
+            await asyncio.to_thread(load_models)
+            app.state.models_ready = True
+            logger.info("ML models loaded and ready.")
+        except FileNotFoundError as exc:
+            app.state.models_error = str(exc)
+            logger.critical("Model weights missing: %s — ML endpoints will fail.", exc)
+        except Exception as exc:
+            app.state.models_error = str(exc)
+            logger.error("Failed to load ML models: %s", exc)
+    else:
+        app.state.models_ready = False
+        app.state.models_error = None
+        logger.info("AI_ENABLED=False — skipping model preload.")
+
+    asyncio.create_task(start_cleanup_loop())
+    logger.info("Data-retention cleanup loop scheduled.")
+
+    logger.info("Startup complete — server is accepting connections.")
+    yield
+    logger.info("Shutting down %s.", settings.PROJECT_NAME)
 
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ if not settings.GROQ_API_KEY:
     logger.warning("GROQ_API_KEY is not set — AI chatbot will return fallback responses.")
 
 # Model used — consistent with summary_service.py
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "openai/gpt-oss-120b"
 
 # Safety caps
 # Safety caps
