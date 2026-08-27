@@ -1911,6 +1911,28 @@
   transition: all 0.35s ease;
 }
 
+@media (max-width: 480px) {
+  .s2f-pagination {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 14px 0 4px;
+  }
+
+  .s2f-page-info {
+    grid-column: 1 / -1;
+    order: -1;
+    text-align: center;
+    font-size: 0.82rem;
+  }
+
+  .s2f-page-btn {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
 .s2f-page-btn {
   display: flex;
   align-items: center;

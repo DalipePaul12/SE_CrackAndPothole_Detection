@@ -4,6 +4,8 @@ import {
   AlertTriangle, ChevronLeft, ChevronRight, X,
   ChevronDown, ChevronUp, ImageOff, MapPin, Calendar,
   Activity, Shield, TrendingUp, Database, Search,
+  FileText, Clock, Image as ImageIcon, Wrench, CircleCheck,
+  ShieldX, CheckCheck, Send, FileSearch, Info,
 } from "lucide-react";
 import "./AllReports.css";
 import { useReports } from "../../hooks/useReports";
@@ -21,6 +23,12 @@ const toClass = (str = "") =>
 
 const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" }) : "—";
+
+const fmtDT = (iso) =>
+  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
+
+const STATUS_LABEL = { PENDING: "Pending", IN_PROGRESS: "In Progress", VERIFIED: "Verified", RESOLVED: "Resolved", DECLINED: "Declined" };
+const STATUS_STEPS = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
 
 const getImageUrl = (report) => {
   const url = report?.media_attachments?.[0]?.file_url;
@@ -55,13 +63,83 @@ function Pagination({ page, setPage, total, pageSize = 10 }) {
   );
 }
 
+function StatusProgress({ status }) {
+  if (status === "DECLINED") {
+    return (
+      <div className="arm-status-progress arm-declined-progress">
+        <ShieldX size={16} aria-hidden="true" />
+        <span className="arm-declined-label">Report Declined</span>
+      </div>
+    );
+  }
+  const StepIcons = [Send, FileSearch, Wrench, CircleCheck];
+  const currentIdx = STATUS_STEPS.indexOf(status);
+
+  return (
+    <div className="arm-status-progress" role="progressbar" aria-label="Report status">
+      {STATUS_STEPS.map((step, idx) => {
+        const StepIcon = StepIcons[idx];
+        return (
+          <React.Fragment key={step}>
+            <div className={`arm-progress-step ${idx <= currentIdx ? "step-active" : ""} ${idx === currentIdx ? "step-current" : ""}`}>
+              <div className="arm-step-dot" aria-hidden="true">
+                {idx < currentIdx ? <CheckCheck size={12} /> : <StepIcon size={12} />}
+              </div>
+              <span className="arm-step-label">{STATUS_LABEL[step]}</span>
+            </div>
+            {idx < STATUS_STEPS.length - 1 && (
+              <div className={`arm-progress-line ${idx < currentIdx ? "line-active" : ""}`} aria-hidden="true" />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function ReportTimeline({ report }) {
+  const events = [{ label: "Submitted", date: report.created_at, Icon: Send }];
+  if (report.verified_at)    events.push({ label: "Verified",    date: report.verified_at,    Icon: FileSearch });
+  if (report.in_progress_at) events.push({ label: "In Progress", date: report.in_progress_at, Icon: Wrench });
+  if (report.resolved_at)    events.push({ label: "Resolved",    date: report.resolved_at,    Icon: CircleCheck });
+  if (report.declined_at)    events.push({ label: "Declined",    date: report.declined_at,    Icon: ShieldX });
+  events.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  return (
+    <div className="arm-timeline">
+      {events.map((evt, i) => {
+        const Icon = evt.Icon;
+        return (
+          <div key={i} className="arm-timeline-item">
+            <div className="arm-timeline-icon" aria-hidden="true"><Icon size={16} /></div>
+            <div className="arm-timeline-body">
+              <span className="arm-timeline-label">{evt.label}</span>
+              <span className="arm-timeline-date">
+                <Clock size={11} aria-hidden="true" />
+                {fmtDT(evt.date)}
+              </span>
+            </div>
+            {i < events.length - 1 && <div className="arm-timeline-connector" aria-hidden="true" />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ReportModal({ report, onClose }) {
   const imageUrl = getImageUrl(report);
   const [imgError, setImgError] = useState(false);
+  const [activeTab, setActiveTab] = useState("details");
+  const status = report.status ?? "";
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    document.body.classList.add("report-modal-open");
+    return () => {
+      document.body.style.overflow = "";
+      document.body.classList.remove("report-modal-open");
+    };
   }, []);
 
   useEffect(() => {
@@ -69,6 +147,12 @@ function ReportModal({ report, onClose }) {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  const TABS = [
+    { id: "details",  label: "Details",  Icon: FileText },
+    { id: "timeline", label: "Timeline", Icon: Clock },
+    { id: "media",    label: "Media",    Icon: ImageIcon },
+  ];
 
   return createPortal(
     <div
@@ -80,99 +164,110 @@ function ReportModal({ report, onClose }) {
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
-          <X size={18} />
+          <X size={16} />
         </button>
-        <h3 className="modal-title">Report #{report.id}</h3>
-        <div className="modal-body">
-          <div className="modal-left">
-            <div className="reporter-info">
-              <div className="info-row">
-                <strong>Report ID</strong>
-                <span>#{report.id}</span>
+
+        <div className="arm-modal-header">
+          <div>
+            <h2 className="arm-modal-title">Report #{report.id}</h2>
+            <p className="arm-modal-subtitle">
+              <MapPin size={12} style={{ display: "inline", marginRight: 4 }} aria-hidden="true" />
+              {report.barangay ?? report.street_name ?? "—"}
+            </p>
+          </div>
+          <span className={`status ${toClass(status)} arm-status-pill`}>
+            {STATUS_LABEL[status] ?? status ?? "—"}
+          </span>
+        </div>
+
+        <StatusProgress status={status} />
+
+        <div className="arm-modal-tabs" role="tablist">
+          {TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={activeTab === id}
+              className={`arm-modal-tab ${activeTab === id ? "active" : ""}`}
+              onClick={() => setActiveTab(id)}
+            >
+              <Icon size={14} aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="arm-modal-body">
+          {activeTab === "details" && (
+            <div>
+              <div className="arm-detail-grid">
+                {[
+                  { key: "Damage Type", val: report.ai_damage_type ?? "—", Icon: FileText },
+                  { key: "Severity",    val: report.ai_severity ?? "—",    Icon: TrendingUp },
+                  { key: "Submitted",   val: fmtDate(report.created_at),  Icon: Calendar },
+                  { key: "Barangay",    val: report.barangay ?? "—",       Icon: MapPin },
+                  { key: "Street",      val: report.street_name ?? "—",    Icon: MapPin },
+                  {
+                    key: "Coordinates",
+                    val: report.latitude != null && report.longitude != null
+                      ? `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}`
+                      : "—",
+                    Icon: MapPin,
+                  },
+                  ...(report.upvote_count > 0 ? [{ key: "Upvotes", val: `${report.upvote_count} people`, Icon: TrendingUp }] : []),
+                ].map(({ key, val, Icon }) => (
+                  <div key={key} className="arm-detail-item">
+                    <span className="arm-detail-key"><Icon size={12} aria-hidden="true" />{key}</span>
+                    <span className={key === "Severity" ? `arm-detail-val severity ${toClass(report.ai_severity ?? "")}` : "arm-detail-val"}>
+                      {val}
+                    </span>
+                  </div>
+                ))}
+
+                {report.ai_confidence != null && (
+                  <div className="arm-detail-item" style={{ gridColumn: "span 2" }}>
+                    <span className="arm-detail-key"><Activity size={12} aria-hidden="true" />AI Confidence</span>
+                    <div className="arm-confidence-wrap">
+                      <span className="arm-confidence-text">{(report.ai_confidence * 100).toFixed(1)}%</span>
+                      <div className="arm-confidence-track">
+                        <span className="arm-confidence-fill" style={{ width: `${(report.ai_confidence * 100).toFixed(0)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              {report.upvote_count > 0 && (
-                <div className="info-row">
-                  <strong>Upvotes</strong>
-                  <span>{report.upvote_count}</span>
+
+              {report.description && (
+                <div className="arm-detail-description">
+                  <span className="arm-detail-key"><Info size={12} aria-hidden="true" />Description</span>
+                  <p>{report.description}</p>
                 </div>
               )}
-            </div>
-            <div className="info-card">
-              <div className="info-row">
-                <strong>Damage Type</strong>
-                <span>{report.ai_damage_type ?? "—"}</span>
-              </div>
-              <div className="info-row">
-                <strong>Severity</strong>
-                <span className={`severity ${toClass(report.ai_severity ?? "")}`}>
-                  {report.ai_severity ?? "—"}
-                </span>
-              </div>
-              <div className="info-row">
-                <strong>Status</strong>
-                <span className={`status ${toClass(report.status ?? "")}`}>
-                  {report.status ?? "—"}
-                </span>
-              </div>
-              {report.status === "DECLINED" && report.decline_reason && (
+
+              {status === "DECLINED" && report.decline_reason && (
                 <div className="decline-reason">
                   <AlertTriangle size={15} />
                   <span><strong>Reason:</strong> {report.decline_reason}</span>
                 </div>
               )}
-              <div className="info-row">
-                <strong>AI Confidence</strong>
-                <span>
-                  {report.ai_confidence != null
-                    ? `${(report.ai_confidence * 100).toFixed(1)}%`
-                    : "—"}
-                </span>
-              </div>
-              {report.description && (
-                <div
-                  className="info-row"
-                  style={{ alignItems: "flex-start", flexDirection: "column", gap: "6px" }}
-                >
-                  <strong>Description</strong>
-                  <span style={{ color: "var(--text)" }}>{report.description}</span>
+
+              {report.is_flagged_fake && (
+                <div className="ai-flag-badge" role="alert">
+                  <AlertTriangle size={15} />
+                  <span>
+                    Flagged as possibly AI-generated
+                    {report.fake_confidence != null &&
+                      ` (${(report.fake_confidence * 100).toFixed(0)}% confidence)`}
+                  </span>
                 </div>
               )}
             </div>
-            <div className="location-info">
-              <div className="info-row">
-                <strong>Barangay</strong>
-                <span>{report.barangay ?? "—"}</span>
-              </div>
-              <div className="info-row">
-                <strong>Street</strong>
-                <span>{report.street_name ?? "—"}</span>
-              </div>
-              <div className="info-row">
-                <strong>Coordinates</strong>
-                <span>
-                  {report.latitude != null && report.longitude != null
-                    ? `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}`
-                    : "—"}
-                </span>
-              </div>
-              <div className="info-row">
-                <strong>Submitted</strong>
-                <span>{fmtDate(report.created_at)}</span>
-              </div>
-            </div>
-            {report.is_flagged_fake && (
-              <div className="ai-flag-badge" role="alert">
-                <AlertTriangle size={15} />
-                <span>
-                  Flagged as possibly AI-generated
-                  {report.fake_confidence != null &&
-                    ` (${(report.fake_confidence * 100).toFixed(0)}% confidence)`}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="modal-right">
-            <div className="modal-media">
+          )}
+
+          {activeTab === "timeline" && <ReportTimeline report={report} />}
+
+          {activeTab === "media" && (
+            <div className="arm-modal-media">
               {imageUrl && !imgError ? (
                 <img
                   src={imageUrl}
@@ -187,7 +282,7 @@ function ReportModal({ report, onClose }) {
                 </div>
               )}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>,

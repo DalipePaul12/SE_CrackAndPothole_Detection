@@ -44,7 +44,7 @@
   width: 380px;
   max-width: calc(100vw - 48px);
   height: 540px;
-  max-height: calc(100vh - 120px);
+  max-height: min(calc(100vh - 120px), calc(100dvh - 120px)); /* ← dvh fallback-safe */
   background: var(--card);
   border-radius: var(--radius-xl);
   border: 1px solid var(--border);
@@ -133,6 +133,7 @@
   padding: 16px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;   /* ← ADD THIS: anchors messages to bottom */
   gap: 12px;
   min-height: 0;
 }
@@ -468,8 +469,8 @@
   .chatbot-panel {
     width: calc(100vw - 32px);
     right: -8px;
-    height: calc(100vh - 168px); /* was 100px — adds room for tab bar + spacing */
-    max-height: 480px; /* was 520px, slightly reduced to guarantee clearance */
+    height: min(calc(100vh - 168px), calc(100dvh - 168px));
+    max-height: min(480px, calc(100dvh - 168px));
   }
 }
 

@@ -413,11 +413,14 @@
 /* ── Responsive ─────────────────────────────────────────────── */
 
 @media (max-width: 1024px) {
-  .cp-page { padding: 0 1.25rem 3rem; }
+  .cp-page {     padding: 0 0.75rem calc(1000px + env(safe-area-inset-bottom, 0px));
+}
 }
 
 @media (max-width: 768px) {
-  .cp-page { padding: 0 0.75rem 2.5rem; }
+  .cp-page {
+    padding: 0 0.75rem calc(1000px + env(safe-area-inset-bottom, 0px));
+  }
 
   .cp-hero-card {
     flex-direction: column;
@@ -442,7 +445,9 @@
 }
 
 @media (max-width: 480px) {
-  .cp-page { padding: 0 0.5rem 2rem; }
+  .cp-page {
+    padding: 0 0.5rem calc(1000px + env(safe-area-inset-bottom, 0px));
+  }
 
   .cp-name { font-size: 1.15rem; }
 
@@ -451,7 +456,7 @@
   .cp-section-card { padding: 16px; }
 
   .cp-toast {
-    bottom: 12px;
+    bottom: calc(1000px + env(safe-area-inset-bottom, 0px));
     right: 12px;
     left: 12px;
     text-align: center;

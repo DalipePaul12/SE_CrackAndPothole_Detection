@@ -950,6 +950,368 @@ body.dark .no-image {
   }
 }
 
+/* Hide floating chat widget while a report modal is open */
+body.report-modal-open .chat-fab,
+body.report-modal-open .chat-widget,
+body.report-modal-open .floating-chat,
+body.report-modal-open [class*="chatbot"],
+body.report-modal-open [id*="chatbot"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ── New tabbed modal layout ──────────────────────────────────── */
+.arm-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 1rem;
+  padding-right: 36px;
+  flex-wrap: wrap;
+}
+
+.arm-modal-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.arm-modal-subtitle {
+  font-size: 0.82rem;
+  color: var(--subtext);
+  margin: 0;
+}
+
+.arm-status-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.arm-status-progress {
+  display: flex;
+  align-items: center;
+  padding: 24px 12px 16px;
+  background: var(--bg);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+}
+
+.arm-declined-progress {
+  justify-content: center;
+  gap: 10px;
+}
+
+.arm-declined-label {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.arm-progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 72px;
+  flex-shrink: 0;
+}
+
+.arm-step-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--subtext);
+  background: var(--card);
+}
+
+.arm-progress-step.step-active .arm-step-dot {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.arm-progress-step.step-current .arm-step-dot {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.arm-step-label {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--subtext);
+  white-space: nowrap;
+}
+
+.arm-progress-step.step-current .arm-step-label {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.arm-progress-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  min-width: 20px;
+  margin-bottom: 18px;
+}
+
+.arm-progress-line.line-active {
+  background: var(--primary);
+}
+
+.arm-modal-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  margin-bottom: 1.1rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.arm-modal-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  background: var(--bg);
+  color: var(--subtext);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.arm-modal-tab.active {
+  background: rgba(76, 175, 80, 0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.arm-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.arm-detail-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.arm-detail-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--subtext);
+  font-weight: 700;
+}
+
+.arm-detail-val {
+  font-size: 0.88rem;
+  color: var(--text);
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.arm-detail-description {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.arm-detail-description p {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--subtext);
+  line-height: 1.55;
+}
+
+.arm-confidence-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.arm-confidence-text {
+  font-weight: 700;
+  color: var(--primary);
+  min-width: 42px;
+  font-size: 0.86rem;
+}
+
+.arm-confidence-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.arm-confidence-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.arm-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.arm-timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  position: relative;
+}
+
+.arm-timeline-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(76, 175, 80, 0.1);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.arm-timeline-body {
+  padding: 3px 0 18px;
+}
+
+.arm-timeline-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.arm-timeline-date {
+  font-size: 0.74rem;
+  color: var(--subtext);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.arm-timeline-connector {
+  position: absolute;
+  left: 15px;
+  top: 32px;
+  width: 2px;
+  height: calc(100% - 32px);
+  background: var(--border);
+  opacity: 0.6;
+}
+
+.arm-modal-media {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 140px;
+}
+
+.arm-modal-media img,
+.arm-modal-media video {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  display: block;
+}
+
+/* Mobile compact tuning */
+@media (max-width: 768px) {
+  .modal-content {
+    padding: 0.85rem;
+  }
+
+  .arm-modal-title {
+    font-size: 1.05rem;
+  }
+
+  .arm-modal-subtitle {
+    font-size: 0.74rem;
+  }
+
+  .arm-status-progress {
+    padding: 16px 8px 10px;
+    margin-bottom: 0.85rem;
+  }
+
+  .arm-step-dot {
+    width: 20px;
+    height: 20px;
+  }
+
+  .arm-step-label {
+    font-size: 0.56rem;
+  }
+
+  .arm-modal-tab {
+    padding: 6px 12px;
+    font-size: 0.76rem;
+  }
+
+  .arm-detail-grid {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .arm-detail-item {
+    padding: 8px 10px;
+  }
+
+  .arm-detail-val {
+    font-size: 0.8rem;
+  }
+
+  .arm-modal-media img,
+  .arm-modal-media video {
+    max-height: 220px;
+  }
+}
+
 body.dark .modal-content {
   background: var(--card);
   color: var(--text);
