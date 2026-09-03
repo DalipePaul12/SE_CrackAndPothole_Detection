@@ -1000,12 +1000,12 @@ body.report-modal-open [id*="chatbot"] {
 .arm-status-progress {
   display: flex;
   align-items: center;
-  padding: 24px 12px 16px;
+  padding: 20px 16px 14px;
   background: var(--bg);
   border-radius: 14px;
   border: 1px solid var(--border);
-  margin-bottom: 1.25rem;
-  overflow-x: auto;
+  margin: 4px 0 1.1rem;
+  overflow: hidden;
 }
 
 .arm-declined-progress {
@@ -1023,11 +1023,10 @@ body.report-modal-open [id*="chatbot"] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  min-width: 72px;
-  flex-shrink: 0;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
 }
-
 .arm-step-dot {
   width: 26px;
   height: 26px;
@@ -1039,7 +1038,6 @@ body.report-modal-open [id*="chatbot"] {
   color: var(--subtext);
   background: var(--card);
 }
-
 .arm-progress-step.step-active .arm-step-dot {
   border-color: var(--primary);
   color: var(--primary);
@@ -1053,10 +1051,14 @@ body.report-modal-open [id*="chatbot"] {
 }
 
 .arm-step-label {
-  font-size: 0.64rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--subtext);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-top: 2px;
 }
 
 .arm-progress-step.step-current .arm-step-label {
@@ -1069,9 +1071,8 @@ body.report-modal-open [id*="chatbot"] {
   height: 2px;
   background: var(--border);
   min-width: 20px;
-  margin-bottom: 18px;
+  margin-bottom: 15px;
 }
-
 .arm-progress-line.line-active {
   background: var(--primary);
 }
@@ -1275,17 +1276,23 @@ body.report-modal-open [id*="chatbot"] {
   }
 
   .arm-status-progress {
-    padding: 16px 8px 10px;
+    padding: 12px 4px 8px;
     margin-bottom: 0.85rem;
   }
 
   .arm-step-dot {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
   }
 
   .arm-step-label {
-    font-size: 0.56rem;
+    font-size: 0.48rem;
+  }
+
+  .arm-progress-line {
+    flex: 0 1 6px;
+    min-width: 3px;
+    margin-bottom: 12px;
   }
 
   .arm-modal-tab {

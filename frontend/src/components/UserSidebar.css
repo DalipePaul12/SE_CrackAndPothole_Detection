@@ -135,7 +135,6 @@ body.dark {
 /* Mobile drawer (full-width) should keep the normal inline badge look */
 .user-sidebar.mobile-open .user-notification-badge.collapsed-badge {
   position: static;
-  margin-left: auto;
   min-width: 18px;
   height: 18px;
   font-size: 0.65rem;
@@ -143,7 +142,6 @@ body.dark {
   border-radius: 9px;
   box-shadow: none;
 }
-/* ========== BRAND / LOGO ========== */
 
 /* ========== LOGO IMAGE ========== */
 .user-sidebar-logo-img {
@@ -360,7 +358,6 @@ body.dark {
 
 /* ========== NOTIFICATION BADGE ========== */
 .user-notification-badge {
-  margin-left: auto;
   background: #e53935;
   color: #fff;
   font-size: 0.65rem;
@@ -509,7 +506,7 @@ body.dark {
     display: flex;
   }
 
-  .user-sidebar.mobile-open .user-nav-link span,
+  .user-sidebar.mobile-open .user-nav-link span:not(.user-notification-badge),
   .user-sidebar.mobile-open .user-report-btn span,
   .user-sidebar.mobile-open .user-footer-btn span,
   .user-sidebar.mobile-open .hidden {

@@ -133,9 +133,20 @@
   padding: 16px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;   /* ← ADD THIS: anchors messages to bottom */
+  /* NOTE: do NOT use justify-content:flex-end here — combined with
+     overflow-y:auto it's a known Chrome/Firefox flexbox bug where any
+     content pushed past the top edge becomes permanently unreachable by
+     scroll. margin-top:auto on the first message item below achieves the
+     same "anchored to bottom when short" look without breaking scroll. */
   gap: 12px;
   min-height: 0;
+  -webkit-overflow-scrolling: touch;  /* momentum scroll on iOS */
+  overscroll-behavior: contain;       /* stop scroll chaining to the page behind */
+  touch-action: pan-y;                /* explicit vertical-only touch scroll */
+}
+
+.chatbot-messages > .chatbot-msg:first-child {
+  margin-top: auto;
 }
 
 .chatbot-msg {
@@ -342,7 +353,6 @@
 }
 
 /* ── Suggestion chips ── */
-/* ── Suggestion chips ── */
 .chatbot-suggestions {
   position: relative;
   display: flex;
@@ -402,6 +412,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
   background: var(--card);
   flex-shrink: 0;
@@ -417,6 +428,8 @@
   color: var(--text);
   outline: none;
   transition: border-color 0.15s;
+  /* Prevent iOS Safari auto-zoom on focus (fires when font-size < 16px) */
+  font-size: max(0.85rem, 16px);
 }
 
 .chatbot-input:focus {
@@ -461,6 +474,10 @@
   border-radius: 99px;
 }
 
+/* ============================================================
+   Mobile — sized against the visual viewport (dvh), with room
+   left for the app's bottom tab bar + iOS home-indicator area.
+   ============================================================ */
 @media (max-width: 480px) {
   .chatbot-widget {
     bottom: 84px;
@@ -469,8 +486,14 @@
   .chatbot-panel {
     width: calc(100vw - 32px);
     right: -8px;
-    height: min(calc(100vh - 168px), calc(100dvh - 168px));
-    max-height: min(480px, calc(100dvh - 168px));
+    height: min(
+      calc(100vh - 168px),
+      calc(100dvh - 168px - env(safe-area-inset-bottom))
+    );
+    max-height: min(
+      560px,
+      calc(100dvh - 168px - env(safe-area-inset-bottom))
+    );
   }
 }
 
@@ -479,6 +502,6 @@
     bottom: 84px;
   }
   .chatbot-panel {
-    max-height: calc(100vh - 168px);
+    max-height: calc(100dvh - 168px - env(safe-area-inset-bottom));
   }
 }

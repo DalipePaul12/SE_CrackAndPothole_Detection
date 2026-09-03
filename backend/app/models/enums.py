@@ -1,19 +1,4 @@
-"""
-backend/app/models/enums.py
 
-CRITICAL: ReportStatus values must be lowercase strings.
-Every consumer normalises to lowercase before lookup:
-  - _normalize_status() calls ReportStatus(status_str.lower())
-  - Frontend patchStatus() always sends lowercase
-  - notif_map keys in reports.py are uppercase only for .value.upper() display
-  - PostgreSQL stores whatever value Python writes; mixed case = broken queries
-
-SeverityLevel values use underscore (non_critical) NOT hyphen (non-critical).
-  - run_yolo() output must be normalized before SeverityLevel() lookup:
-      raw.lower().strip().replace("-", "_").replace(" ", "_")
-  - Frontend toClass() converts underscore → hyphen for CSS only (display layer)
-  - DB stores the underscore form: "non_critical", "critical"
-"""
 from __future__ import annotations
 import enum
 

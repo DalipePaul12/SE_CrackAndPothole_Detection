@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Sequence
@@ -27,6 +26,12 @@ async def create_report(
     # Apply admin default_severity when ML hasn't assigned one.
     # Falls back to None (original behaviour) if admin settings are unavailable.
     effective_severity = data.ai_severity
+
+    # FIX: _cfg must exist regardless of which branch runs below, or the
+    # auto-assign check after this block raises UnboundLocalError whenever
+    # data.ai_severity is already set (e.g. client-computed severity from
+    # useSubmitReport.js), since the fetch below was previously skipped.
+    _cfg = None
     if effective_severity is None:
         from sqlalchemy import select as _sel
         from app.models.admin_settings import AdminSettings as _AS

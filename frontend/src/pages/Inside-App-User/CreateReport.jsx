@@ -111,13 +111,7 @@ function distanceFeedback(bbox) {
 
 // ─── ReferenceCaptureCircle (UNCHANGED) ───────────────────────────────────────
 function ReferenceCaptureCircle() {
-  return (
-    <div className="capture-reference-circle" aria-hidden="true">
-      <div className="capture-reference-text">
-        Keep damage inside circle · Stand ~1.5m back
-      </div>
-    </div>
-  );
+  return <div className="capture-reference-circle" aria-hidden="true" />;
 }
 
 // ─── AngleHUD (UNCHANGED) ─────────────────────────────────────────────────────
@@ -133,7 +127,142 @@ function AngleHUD({ angle, valid }) {
     </div>
   );
 }
+// ─── FullscreenCamera — dedicated camera-only popup, rendered as its own
+//     portal so it's never constrained by the form's scroll container ──────
+function FullscreenCamera({
+  activeTab, cameraError, videoRef, onVideoPlay, showAngleHUD, phoneAngle,
+  angleValid, liveDetection, isRecording, cameraActive, viewfinderSize,
+  viewfinderOverlayDetections, viewfinderMaskDetections, recProgress,
+  capturing, onCapturePhoto, onStopCamera, onStartRecording, onStopRecordingEarly,
+  recordingTime, onRetryCamera, MAX_REC_SECS,
+}) {
+  return ReactDOM.createPortal(
+    <div className="fs-camera-overlay">
+      <button className="fs-camera-close" onClick={onStopCamera} aria-label="Close camera">
+        <FaTimes />
+      </button>
 
+      {cameraError ? (
+        <div className="fs-camera-error">
+          <FaExclamationTriangle aria-hidden="true" />
+          <p>{cameraError}</p>
+          <button className="btn-retry" onClick={onRetryCamera}>
+            <FaRedo /> Retry
+          </button>
+        </div>
+      ) : (
+        <div className={`fs-camera-viewport${isRecording ? " recording" : ""}`}>
+          <video ref={videoRef} className="fs-camera-video"
+            autoPlay playsInline muted onPlay={onVideoPlay} />
+
+          <div className="capture-reference-circle" aria-hidden="true" />
+          {showAngleHUD && <AngleHUD angle={phoneAngle} valid={angleValid} />}
+
+          {["tl","tr","bl","br"].map((pos) => (
+            <span key={pos} aria-hidden="true"
+              className={`guide-corner corner-${pos} ${
+                liveDetection.status === "detected" ? "green"
+                : isRecording ? "rec-red" : "red"
+              }`} />
+          ))}
+
+          {cameraActive && (
+            <div className={`detection-pill pill-${liveDetection.status}`}
+              role="status" aria-live="polite">
+              <span className="dot-pulse" aria-hidden="true" />
+              {liveDetection.status === "detected"
+                ? `${liveDetection.label?.charAt(0).toUpperCase()}${liveDetection.label?.slice(1)} detected — ${Math.round(liveDetection.confidence * 100)}%`
+                : liveDetection.status === "warning"
+                ? liveDetection.distance?.text || "Adjust distance to ~1.5 m"
+                : "Scanning for road damage…"}
+            </div>
+          )}
+
+          {cameraActive && viewfinderSize.width > 0 && (
+            <DetectionOverlay mode="realtime"
+              detections={viewfinderOverlayDetections}
+              width={viewfinderSize.width}
+              height={viewfinderSize.height} />
+          )}
+
+          {cameraActive && viewfinderSize.width > 0 && viewfinderMaskDetections.length > 0 && (
+            <SegmentationMask
+              predictions={viewfinderMaskDetections}
+              imageSize={viewfinderSize}
+              naturalSize={viewfinderSize}
+              showBoundingBox={false}
+              showLabels={false}
+              smoothPasses={0}
+            />
+          )}
+
+          {cameraActive && liveDetection.distance && (
+            <div className={`distance-indicator ${liveDetection.distance.ok ? "ok" : "warn"}`}
+              aria-hidden="true">
+              <span className={`dist-dot ${liveDetection.distance.ok ? "" : "red"}`} />
+              {liveDetection.distance.text}
+            </div>
+          )}
+
+          {cameraActive && !isRecording && (
+            <p className="guidance-text" aria-hidden="true">
+              {activeTab === "video"
+                ? `Keep damage in circle · up to ${MAX_REC_SECS}s`
+                : "Keep damage inside the circle"}
+            </p>
+          )}
+
+          {isRecording && (
+            <div className="rec-progress-track" aria-hidden="true">
+              <div className="rec-progress-fill" style={{ width: `${recProgress}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {cameraActive && !cameraError && (
+        <div className="fs-camera-controls">
+          {activeTab === "photo" ? (
+            <>
+              <button className="fs-stop-link" onClick={onStopCamera}>Cancel</button>
+              <button className="fs-shutter-btn" onClick={onCapturePhoto}
+                disabled={capturing || (showAngleHUD && !angleValid)}
+                aria-label="Capture photo">
+                {capturing && <FaSpinner className="spin-icon" aria-hidden="true" />}
+              </button>
+              <span className="fs-controls-spacer" aria-hidden="true" />
+            </>
+          ) : isRecording ? (
+            <>
+              <div className="fs-rec-timer" role="status" aria-live="polite">
+                <span className="rec-pulse-dot" aria-hidden="true" />
+                {recordingTime}s / {MAX_REC_SECS}s
+              </div>
+              <button className="fs-shutter-btn fs-shutter-btn--stop" onClick={onStopRecordingEarly}
+                aria-label="Stop recording">
+                <FaStop />
+              </button>
+              <span className="fs-controls-spacer" aria-hidden="true" />
+            </>
+          ) : (
+            <>
+              <button className="fs-stop-link" onClick={onStopCamera}>Cancel</button>
+              <button className="fs-shutter-btn" onClick={onStartRecording}
+                disabled={showAngleHUD && !angleValid}
+                aria-label="Start video recording">
+                <FaVideo />
+              </button>
+              <span className="fs-controls-spacer" aria-hidden="true" />
+            </>
+          )}
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+}
+
+// ─── DetectionFilmstrip (UNCHANGED) ───────────────────────────────────────────
 // ─── DetectionFilmstrip (UNCHANGED) ───────────────────────────────────────────
 function DetectionFilmstrip({ snapshots }) {
   const [lightbox, setLightbox] = useState(null);
@@ -1323,125 +1452,35 @@ const showMask = analysisComplete &&
             ))}
           </div>
 
-          {/* ── CAMERA VIEWFINDER ── */}
+          {/* ── CAMERA VIEWFINDER — now a dedicated fullscreen popup ── */}
           {showCamera && (
-            <div className="snap-camera-wrapper">
-              {cameraError ? (
-                <div className="camera-error">
-                  <FaExclamationTriangle aria-hidden="true" />
-                  <p>{cameraError}</p>
-                  <button className="btn-retry" onClick={startCamera}>
-                    <FaRedo /> Retry
-                  </button>
-                </div>
-              ) : (
-                <div className={`camera-viewport${isRecording ? " recording" : ""}`}>
-                  <video ref={videoRef} className="camera-video"
-                    autoPlay playsInline muted
-                    onPlay={(e) => setViewfinderSize({
-                      width:  e.target.offsetWidth  || 640,
-                      height: e.target.offsetHeight || 360,
-                    })} />
-                  <ReferenceCaptureCircle />
-                  {showAngleHUD && <AngleHUD angle={phoneAngle} valid={angleValid} />}
-                  {["tl","tr","bl","br"].map((pos) => (
-                    <span key={pos} aria-hidden="true"
-                      className={`guide-corner corner-${pos} ${
-                        liveDetection.status === "detected" ? "green"
-                        : isRecording ? "rec-red" : "red"
-                      }`} />
-                  ))}
-                  {cameraActive && (
-                    <div className={`detection-pill pill-${liveDetection.status}`}
-                      role="status" aria-live="polite">
-                      <span className="dot-pulse" aria-hidden="true" />
-                      {liveDetection.status === "detected"
-                        ? `${liveDetection.label?.charAt(0).toUpperCase()}${liveDetection.label?.slice(1)} detected — ${Math.round(liveDetection.confidence * 100)}%`
-                        : liveDetection.status === "warning"
-                        ? liveDetection.distance?.text || "Adjust distance to ~1.5 m"
-                        : "Scanning for road damage…"}
-                    </div>
-                  )}
-                  {cameraActive && viewfinderSize.width > 0 && (
-                    <DetectionOverlay mode="realtime"
-                      detections={viewfinderOverlayDetections}
-                      width={viewfinderSize.width}
-                      height={viewfinderSize.height} />
-                  )}
-                  {/* Polygon mask overlay on the live viewfinder.
-                      imageSize = video element's rendered px dimensions (from viewfinderSize).
-                      naturalSize = same value: segments_norm coords are already 0–1 relative
-                      to the inference resolution, so SegmentationMask scales them to displayW/H
-                      directly without needing a separate natural-resolution reference.
-                      showBoundingBox/showLabels are false — DetectionOverlay handles those. */}
-                  {cameraActive && viewfinderSize.width > 0 && viewfinderMaskDetections.length > 0 && (
-                    <SegmentationMask
-                      predictions={viewfinderMaskDetections}
-                      imageSize={viewfinderSize}
-                      naturalSize={viewfinderSize}
-                      showBoundingBox={false}
-                      showLabels={false}
-                      smoothPasses={0}
-                    />
-                  )}
-                  {cameraActive && liveDetection.distance && (
-                    <div className={`distance-indicator ${liveDetection.distance.ok ? "ok" : "warn"}`}
-                      aria-hidden="true">
-                      <span className={`dist-dot ${liveDetection.distance.ok ? "" : "red"}`} />
-                      {liveDetection.distance.text}
-                    </div>
-                  )}
-                  {cameraActive && !isRecording && (
-                    <p className="guidance-text" aria-hidden="true">
-                      {activeTab === "video"
-                        ? `Up to ${MAX_REC_SECS}s · stand ~1.5 m from damage · tilt phone 45°–75°`
-                        : "Focus camera · stand ~1.5 m from damage · tilt phone 45°–75°"}
-                    </p>
-                  )}
-                  {isRecording && (
-                    <div className="rec-progress-track" aria-hidden="true">
-                      <div className="rec-progress-fill" style={{ width: `${recProgress}%` }} />
-                    </div>
-                  )}
-                </div>
-              )}
-              {cameraActive && !cameraError && (
-                <div className="camera-controls">
-                  {activeTab === "photo" ? (
-                    <>
-                      <button className="btn-capture" onClick={capturePhoto}
-                        disabled={capturing || (showAngleHUD && !angleValid)}
-                        aria-label="Capture photo">
-                        {capturing
-                          ? <><FaSpinner className="spin-icon" aria-hidden="true" /> Capturing…</>
-                          : <><FaCamera /> Capture Photo</>}
-                      </button>
-                      <button className="btn-stop-cam" onClick={stopCamera}>Stop Camera</button>
-                    </>
-                  ) : isRecording ? (
-                    <>
-                      <div className="recording-indicator" role="status" aria-live="polite">
-                        <span className="rec-pulse-dot" aria-hidden="true" />
-                        REC {recordingTime}s / {MAX_REC_SECS}s
-                      </div>
-                      <button className="btn-stop-rec" onClick={stopRecordingEarly}
-                        aria-label="Stop recording">
-                        <FaStop aria-hidden="true" /> Stop
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="btn-capture" onClick={startRecording}
-                        disabled={showAngleHUD && !angleValid}
-                        aria-label="Start video recording">
-                        <FaVideo aria-hidden="true" /> Start Recording
-                      </button>
-                      <button className="btn-stop-cam" onClick={stopCamera}>Stop Camera</button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+            <FullscreenCamera
+              activeTab={activeTab}
+              cameraError={cameraError}
+              videoRef={videoRef}
+              onVideoPlay={(e) => setViewfinderSize({
+                width:  e.target.offsetWidth  || 640,
+                height: e.target.offsetHeight || 360,
+              })}
+              showAngleHUD={showAngleHUD}
+              phoneAngle={phoneAngle}
+              angleValid={angleValid}
+              liveDetection={liveDetection}
+              isRecording={isRecording}
+              cameraActive={cameraActive}
+              viewfinderSize={viewfinderSize}
+              viewfinderOverlayDetections={viewfinderOverlayDetections}
+              viewfinderMaskDetections={viewfinderMaskDetections}
+              recProgress={recProgress}
+              capturing={capturing}
+              onCapturePhoto={capturePhoto}
+              onStopCamera={stopCamera}
+              onStartRecording={startRecording}
+              onStopRecordingEarly={stopRecordingEarly}
+              recordingTime={recordingTime}
+              onRetryCamera={startCamera}
+              MAX_REC_SECS={MAX_REC_SECS}
+            />
           )}
 
           {/* ── UPLOAD / PREVIEW BOX ── */}
@@ -1797,13 +1836,13 @@ const showMask = analysisComplete &&
 
           <div className="snap-form-row">
             <div className="snap-form-group half">
-              <label htmlFor="reporter-name">{reporterName}</label>
+              <label htmlFor="reporter-name">Reporter</label>
               <div className="reporter-chip-compact">
                 <div className="reporter-avatar-compact">
                   {reporterName.charAt(0).toUpperCase()}
                 </div>
                 <div className="reporter-info-compact">
-                  <div className="reporter-name-compact">Reporter</div>
+                  <div className="reporter-name-compact">{reporterName}</div>
                 </div>
               </div>
               <input id="reporter-name" type="hidden" value={reporterName} />

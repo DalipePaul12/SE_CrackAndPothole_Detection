@@ -778,11 +778,11 @@
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 35px 16px 24px;
+  padding: 22px 16px 16px;
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
-  margin-bottom: 2rem;
+  margin: 4px 0 1.1rem;
   overflow-x: auto;
 }
 
@@ -810,14 +810,14 @@
 }
 
 .sub-step-dot {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: 2px solid var(--border-strong);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--text-muted);
   background: var(--card);
@@ -859,7 +859,7 @@
   height: 2px;
   background: var(--border-strong);
   min-width: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   transition: background var(--transition-fast);
 }
 
@@ -1032,7 +1032,7 @@
   max-height: 92vh;
   overflow-y: auto;
   border-radius: var(--radius-2xl);
-  padding: 1.75rem;
+  padding: 1.35rem 1.5rem;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1074,14 +1074,12 @@
 
 .sub-modal-header {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 1.25rem;
-  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 0.75rem;
   padding-right: 40px;
 }
-
 .sub-modal-title {
   font-size: 1.25rem;
   font-weight: 800;
@@ -1097,18 +1095,19 @@
 
 .sub-modal-header-right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
 }
 
 .sub-modal-actions-row {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
-
 .sub-modal-action-btn {
   display: flex;
   align-items: center;
@@ -1165,11 +1164,11 @@
   display: flex;
   border-bottom: 1px solid var(--border-strong);
   margin-top: 0;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.85rem;
   gap: 6px;
   padding: 4px;
   overflow-x: auto;
-  min-height: 52px;
+  min-height: 40px;
   background: var(--card);
 }
 
@@ -1177,17 +1176,17 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 20px;
+  padding: 7px 16px;
   border: 1.5px solid var(--border-strong);
   border-bottom: none;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   background: var(--card-hover);
   color: var(--text);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
-  min-height: 40px;
+  min-height: 32px;
   flex-shrink: 0;
 }
 
@@ -1213,18 +1212,18 @@
 .sub-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .sub-detail-item {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 12px 14px;
+  padding: 9px 12px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
 }
 
 .sub-detail-key {
@@ -2165,9 +2164,8 @@
   }
 
   .sub-modal-header {
-    flex-direction: row;
+    flex-direction: column;
     align-items: flex-start;
-    justify-content: space-between;
     padding-right: 40px;
   }
   .sub-detail-grid {
@@ -2363,21 +2361,31 @@
   }
 
   /* Tabs */
+  /* Tabs — 4 equal columns, guaranteed no horizontal scroll */
   .sub-modal-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
     margin-bottom: 0.75rem;
-    min-height: 38px;
-    gap: 4px;
+    min-height: 34px;
+    gap: 3px;
     padding: 3px;
+    overflow: visible;
   }
   .sub-modal-tab {
-    padding: 6px 12px;
-    font-size: 0.78rem;
-    min-height: 32px;
-    gap: 4px;
+    padding: 6px 2px;
+    font-size: 0.62rem;
+    min-height: 30px;
+    gap: 2px;
+    min-width: 0;
+    justify-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .sub-modal-tab svg {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
   }
   .sub-tab-badge {
     font-size: 0.6rem;

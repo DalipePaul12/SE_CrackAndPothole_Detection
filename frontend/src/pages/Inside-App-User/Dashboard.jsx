@@ -110,11 +110,17 @@ function SparklineChart({ data, color = "#2ba81d" }) {
   );
 }
 
-function KPICard({ title, value, icon, colorClass, trend, sparkData, loading }) {
+function KPICard({ title, value, icon, colorClass, trend, sparkData, loading, onClick }) {
   if (loading) return <SkeletonCard />;
   const isPositive = trend >= 0;
   return (
-    <div className={`summary-card ${colorClass}`}>
+    <div
+      className={`summary-card ${colorClass}${onClick ? " summary-card--clickable" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => (e.key === "Enter" || e.key === " ") && onClick() : undefined}
+    >
       <h3>{title}{icon}</h3>
       <div className="kpi-body">
         <p>{value}</p>
@@ -129,6 +135,7 @@ function KPICard({ title, value, icon, colorClass, trend, sparkData, loading }) 
     </div>
   );
 }
+
 
 function PredictiveAlert({ data, prevData }) {
   const alert = useMemo(() => {
@@ -330,10 +337,10 @@ function CitizenDashboard() {
       <PredictiveAlert data={total} prevData={Math.max(0, total - 2)} />
 
       <div className="dashboard-summary">
-        <KPICard title="My Reports" value={total} icon={<GiBookCover className="icon" />} colorClass="total" trend={total > 0 ? 12 : 0} sparkData={sparkData} loading={loading} />
-        <KPICard title="Pending" value={pending} icon={<MdOutlinePendingActions className="icon" />} colorClass="pending" trend={pending > 0 ? -5 : 0} sparkData={[2, 3, pending, pending]} loading={loading} />
-        <KPICard title="In Progress" value={inProgress} icon={<FaExclamationCircle className="icon" />} colorClass="progress" trend={inProgress > 0 ? 8 : 0} sparkData={[0, 1, inProgress, inProgress]} loading={loading} />
-        <KPICard title="Resolved" value={resolved} icon={<IoMdCheckmarkCircleOutline className="icon" />} colorClass="completed" trend={resolved > 0 ? 20 : 0} sparkData={[0, 1, 1, resolved]} loading={loading} />
+        <KPICard title="My Reports" value={total} icon={<GiBookCover className="icon" />} colorClass="total" trend={total > 0 ? 12 : 0} sparkData={sparkData} loading={loading} onClick={() => navigate("/dashboard/submissions")} />
+        <KPICard title="Pending" value={pending} icon={<MdOutlinePendingActions className="icon" />} colorClass="pending" trend={pending > 0 ? -5 : 0} sparkData={[2, 3, pending, pending]} loading={loading} onClick={() => navigate("/dashboard/submissions?status=PENDING")} />
+        <KPICard title="In Progress" value={inProgress} icon={<FaExclamationCircle className="icon" />} colorClass="progress" trend={inProgress > 0 ? 8 : 0} sparkData={[0, 1, inProgress, inProgress]} loading={loading} onClick={() => navigate("/dashboard/submissions?status=IN_PROGRESS")} />
+        <KPICard title="Resolved" value={resolved} icon={<IoMdCheckmarkCircleOutline className="icon" />} colorClass="completed" trend={resolved > 0 ? 20 : 0} sparkData={[0, 1, 1, resolved]} loading={loading} onClick={() => navigate("/dashboard/submissions?status=RESOLVED")} />
       </div>
 
       <div className="dashboard-grid">
@@ -350,11 +357,25 @@ function CitizenDashboard() {
         </div>
 
         <div className="dashboard-panel">
-          <h3>Recent Submissions <LuActivity className="icon" aria-hidden="true" /></h3>
+          <div className="panel-header">
+            <h3>Recent Submissions <LuActivity className="icon" aria-hidden="true" /></h3>
+            {!loading && reports.length > 0 && (
+              <button className="panel-view-all-btn" onClick={() => navigate("/dashboard/submissions")}>
+                View All →
+              </button>
+            )}
+          </div>
           {loading ? <SkeletonPanel /> : (
             <ul className="activity-list">
               {reports.length > 0 ? reports.slice(0, 4).map((r) => (
-                <li key={r.id} className="activity-card">
+                <li
+                  key={r.id}
+                  className="activity-card activity-card--clickable"
+                  onClick={() => navigate(`/dashboard/submissions?report_id=${r.id}`)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && navigate(`/dashboard/submissions?report_id=${r.id}`)}
+                >
                   <span className="status-dot" style={{ background: statusColor(r.status) }} aria-hidden="true" />
                   <div className="activity-content">
                     <div className="activity-main">
@@ -374,6 +395,7 @@ function CitizenDashboard() {
           )}
         </div>
 
+        
         <div className="dashboard-panel-damagecategories">
           <h3>My Damage Types <FaChartPie className="icon" aria-hidden="true" /></h3>
           {loading ? <SkeletonPanel /> : damageStats.length === 0 ? (

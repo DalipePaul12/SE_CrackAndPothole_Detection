@@ -156,7 +156,41 @@ html, body { margin: 0; padding: 0; background: var(--mv-bg); }
 [data-theme="dark"] .mv-page-icon {
   box-shadow: 0 2px 8px rgba(82,183,136,0.22);
 }
+[data-theme="dark"] .mv-leaflet-instance .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.9);
+}
 
+/* Don't invert markers, popups, or the boundary polygon —
+   only the raster tiles underneath should flip */
+[data-theme="dark"] .mv-leaflet-instance .leaflet-marker-pane,
+[data-theme="dark"] .mv-leaflet-instance .leaflet-popup-pane,
+[data-theme="dark"] .mv-leaflet-instance .leaflet-overlay-pane {
+  filter: none;
+}
+
+/* ═══════════════════════════════════════════════
+   MARKER CLUSTER BUBBLES
+═══════════════════════════════════════════════ */
+.mv-cluster {
+  background: var(--mv-primary);
+  color: #fff;
+  border-radius: 50%;
+  border: 3px solid var(--mv-surface);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.30);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: var(--mv-font);
+  transition: background 0.3s, border-color 0.3s;
+}
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+  background: transparent !important;
+}
+.marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+  background: transparent !important;
+}
 .mv-title-group {
   display: flex;
   flex-direction: column;
@@ -890,6 +924,76 @@ html, body { margin: 0; padding: 0; background: var(--mv-bg); }
 }
 
 /* ═══════════════════════════════════════════════
+   INFO CARD — grouped rows with icons + dividers
+═══════════════════════════════════════════════ */
+.mv-info-card {
+  background: var(--mv-surface-2);
+  border: 1px solid var(--mv-border);
+  border-radius: var(--mv-r-lg);
+  overflow: hidden;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.mv-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.mv-info-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mv-r-md);
+  background: var(--mv-primary-subtle);
+  color: var(--mv-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.3s, color 0.3s;
+}
+
+.mv-info-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.mv-info-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--mv-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  transition: color 0.3s;
+}
+
+.mv-info-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--mv-text);
+  line-height: 1.4;
+  transition: color 0.3s;
+}
+
+.mv-info-sub {
+  font-family: var(--mv-mono);
+  font-size: 0.66rem;
+  color: var(--mv-muted);
+  margin-top: 0.1rem;
+  transition: color 0.3s;
+}
+
+.mv-info-divider {
+  height: 1px;
+  background: var(--mv-border);
+  margin: 0 0.9rem;
+  transition: background 0.3s;
+}
+
+/* ═══════════════════════════════════════════════
    BOTTOM STRIP — report carousel
 ═══════════════════════════════════════════════ */
 .mv-strip {
@@ -1152,9 +1256,24 @@ html, body { margin: 0; padding: 0; background: var(--mv-bg); }
    RESPONSIVE — Small (≤ 480px)
 ═══════════════════════════════════════════════ */
 @media (max-width: 480px) {
+  .mv-topbar {
+    height: auto;
+    min-height: var(--mv-topbar-h);
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 0.55rem 1rem;
+    gap: 0.5rem 0.75rem;
+  }
+  .mv-topbar-left { flex-shrink: 0; }
   .mv-page-title { font-size: 0.82rem; }
   .mv-subtitle   { display: none; }
-  .mv-stat-pills { display: flex; }
+  .mv-stat-pills {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    order: 3;
+    gap: 0.35rem;
+  }
   .mv-pill--blue, .mv-pill--green { display: none; }
   .mv-tile-group { display: none; }
   .mv-panel      { height: 75vh; max-height: 75vh; }

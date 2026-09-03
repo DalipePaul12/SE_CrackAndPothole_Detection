@@ -72,23 +72,26 @@ const sevWeight = (r) => {
 
 function exportCSV(rows, label = "page") {
   const headers = ["ID", "Type", "Severity", "AI Conf", "Status", "Location", "Street", "Barangay", "Reporter", "Date"];
-  const escape  = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const escape  = (v) => `"${String(v ?? "-").replace(/"/g, '""')}"`;
   const lines   = [
     headers.map(escape).join(","),
     ...rows.map((r) => [
       padId(r.id),
       damageType(r),
       severity(r),
-      confVal(r) != null ? `${confVal(r)}%` : "",
-      r.status ?? "",
+      confVal(r) != null ? `${confVal(r)}%` : "-",
+      r.status ?? "-",
       location(r),
-      r.street_name ?? "",
-      r.barangay ?? "",
+      r.street_name ?? "-",
+      r.barangay ?? "-",
       r.owner?.full_name ?? "Anonymous",
-      r.created_at ? new Date(r.created_at).toLocaleDateString() : "",
+      r.created_at ? new Date(r.created_at).toLocaleDateString() : "-",
     ].map(escape).join(",")),
   ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  // UTF-8 BOM ("\uFEFF") is required or Excel misreads non-ASCII chars
+  // (like the em dash "—") as ANSI, producing garbled "â€"" symbols.
+  const csvContent = "\uFEFF" + lines.join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href = url;
@@ -507,17 +510,18 @@ export default function AdminAllReports() {
             <button className="btn-filter-toggle" onClick={() => setShowFilters((p) => !p)}>
               <Settings size={16} /> Filters {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
-            <button className="btn-export" onClick={() => exportCSV(reports, "page")}>
-              <Download size={16} /> Export Page
+            <button className="btn-export" onClick={() => exportCSV(reports, "page")} title={`Exports only the ${reports.length} rows currently shown on this page`}>
+              <Download size={16} /> Export Page ({reports.length})
             </button>
             <button
               className="btn-export btn-export--all"
               onClick={exportAll}
               disabled={exportAllLoading}
+              title="Exports every report matching your active filters, across all pages"
             >
               {exportAllLoading
                 ? <><Loader2 size={16} className="spin" /> Exporting…</>
-                : <><Download size={16} /> Export All</>}
+                : <><Download size={16} /> Export All ({total.toLocaleString()})</>}
             </button>
           </div>
         </div>
@@ -561,14 +565,44 @@ export default function AdminAllReports() {
               </select>
             </div>
 
-            <div className="filter-group filter-group--datefrom">
-              <label>Date From</label>
-              <input type="date" value={filters.dateFrom} onChange={(e) => setFilter("dateFrom", e.target.value)} />
-            </div>
-
-            <div className="filter-group filter-group--dateto">
-              <label>Date To</label>
-              <input type="date" value={filters.dateTo} onChange={(e) => setFilter("dateTo", e.target.value)} />
+            <div className="filter-group filter-group--daterange">
+              <label>Date Range</label>
+              <div className="date-preset-row">
+                {[
+                  { label: "7 Days",  days: 7   },
+                  { label: "30 Days", days: 30  },
+                  { label: "90 Days", days: 90  },
+                ].map(({ label, days }) => {
+                  const from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+                  const to   = new Date().toISOString().slice(0, 10);
+                  const isActive = filters.dateFrom === from && filters.dateTo === to;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      className={`date-preset-btn ${isActive ? "active" : ""}`}
+                      onClick={() => {
+                        setFilters((p) => ({ ...p, dateFrom: from, dateTo: to }));
+                        setPage(1);
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  className={`date-preset-btn ${!filters.dateFrom && !filters.dateTo ? "active" : ""}`}
+                  onClick={() => { setFilters((p) => ({ ...p, dateFrom: "", dateTo: "" })); setPage(1); }}
+                >
+                  All Time
+                </button>
+              </div>
+              <div className="date-custom-row">
+                <input type="date" value={filters.dateFrom} onChange={(e) => setFilter("dateFrom", e.target.value)} aria-label="Date from" />
+                <span className="date-range-sep">to</span>
+                <input type="date" value={filters.dateTo} onChange={(e) => setFilter("dateTo", e.target.value)} aria-label="Date to" />
+              </div>
             </div>
 
             <div className="filter-group filter-conf-group filter-group--conf">

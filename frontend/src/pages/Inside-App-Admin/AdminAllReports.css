@@ -2182,3 +2182,53 @@
   .vmr-header, .vmr-body { padding-left: 16px; padding-right: 16px; }
   .vmr-tabs { padding: 0 12px; }
 }
+
+/* ── Date range presets ─────────────────────────────────────────────────── */
+.filter-group--daterange {
+  grid-column: span 2;
+}
+.date-preset-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.date-preset-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--subtext);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.date-preset-btn:hover {
+  border-color: var(--primary, #2ba81d);
+  color: var(--primary, #2ba81d);
+}
+.date-preset-btn.active {
+  background: var(--primary, #2ba81d);
+  border-color: var(--primary, #2ba81d);
+  color: #fff;
+}
+.date-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.date-custom-row input[type="date"] {
+  flex: 1;
+  min-width: 0;
+}
+.date-range-sep {
+  font-size: 0.78rem;
+  color: var(--subtext);
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .filter-group--daterange { grid-column: 1 / -1; }
+  .date-custom-row { flex-wrap: wrap; }
+}

@@ -568,12 +568,34 @@
 .selected-row  { background: var(--primary-subtle) !important; }
 .critical-row  { border-left: 3px solid var(--danger); }
 
+.report-number-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .report-number {
   font-weight: 800;
   font-size: 0.9rem;
   color: var(--text);
   font-family: 'DM Mono', monospace;
   white-space: nowrap;
+}
+
+.notes-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 100px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .report-location {
@@ -1863,6 +1885,9 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
   text-align: center;
 }
 
+.vmr-tab-badge--alert {
+  background: var(--danger, #ef4444);
+}
 /* ── Body ───────────────────────────────────────────────────────── */
 .vmr-body {
   padding: 20px 24px;

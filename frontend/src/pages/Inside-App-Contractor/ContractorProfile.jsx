@@ -1,14 +1,4 @@
-/**
- * ContractorProfile.jsx
- *
- * Shows the logged-in contractor's profile and lets them toggle their
- * availability for new project assignments.
- *
- * Data sources:
- *  - GET /users/me              → full profile (including is_available)
- *  - PATCH /contractor/availability → toggle is_available
- *  - useContractorProjects      → project counts for the stats strip
- */
+
 import { useState, useEffect, useCallback } from "react";
 import {
   User,

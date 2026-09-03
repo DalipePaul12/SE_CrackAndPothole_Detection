@@ -742,3 +742,35 @@ body.dark .damage-type-badge {
   .contribution-stats { gap: 8px; }
   .progress-steps     { overflow-x: auto; padding-bottom: 4px; }
 }
+
+/* ── Clickable KPI cards & activity cards ──────────────────────────────── */
+.summary-card--clickable,
+.activity-card--clickable {
+  cursor: pointer;
+}
+.summary-card--clickable:active {
+  transform: translateY(-1px) scale(0.99);
+}
+.activity-card--clickable:focus-visible,
+.summary-card--clickable:focus-visible {
+  outline: 2px solid #12691c;
+  outline-offset: 2px;
+}
+body.dark .activity-card--clickable:focus-visible,
+body.dark .summary-card--clickable:focus-visible {
+  outline-color: #5cd65c;
+}
+
+.panel-view-all-btn {
+  background: none;
+  border: none;
+  color: #2ba81d;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.15s;
+}
+.panel-view-all-btn:hover { color: #155318; text-decoration: underline; }
+body.dark .panel-view-all-btn { color: #5cd65c; }
+body.dark .panel-view-all-btn:hover { color: #86efac; }

@@ -25,6 +25,7 @@ import { BiError } from "react-icons/bi";
 
 import { useUser } from "../../hooks/useUser";
 import { useReports } from "../../hooks/useReports";
+import { useReportStats } from "../../hooks/useReportStats";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 const PAGE_SIZE = 6;
@@ -449,7 +450,16 @@ function MyProfile() {
     updatePassword,
   } = useUser();
 
-  const { reports, loading: reportsLoading, stats: reportStats } = useReports({ mine: true });
+  const { reports, loading: reportsLoading } = useReports({ mine: true });
+
+  // FIX: useReports() only exposes the current PAGE of reports (max 15),
+  // not the true account-wide total — its return value never included a
+  // `stats` field, so the old `reportStats` destructure here was always
+  // undefined and every stat card silently fell back to reports.length /
+  // reports.filter(...).length, i.e. counts scoped to a single page.
+  // useReportStats() hits /reports/mine/stats, a real DB aggregate query,
+  // and is the same hook MySubmissions.jsx already uses for its stat cards.
+  const { stats: reportStats, loading: statsLoading } = useReportStats();
 
   const [showConfirm, setShowConfirm]   = useState(false);
   const [activeTab, setActiveTab]       = useState("feed");
@@ -560,9 +570,12 @@ function MyProfile() {
   const visibleReports = filteredReports.slice(0, visibleCount);
   const hasMore        = visibleCount < filteredReports.length;
 
-  const totalPosts = reportStats?.total ?? reports.length;
-  const resolved   = reportStats?.resolved ?? reports.filter((r) => r.status === "RESOLVED").length;
-  const inProgress = reportStats?.inProgress ?? reports.filter((r) => r.status === "IN_PROGRESS").length;
+  // FIX: these three now come from the /reports/mine/stats aggregate
+  // (reportStats), not from the current paginated `reports` array. The
+  // backend field is `in_progress` (snake_case), not `inProgress`.
+  const totalPosts = reportStats?.total       ?? reports.length;
+  const resolved   = reportStats?.resolved    ?? reports.filter((r) => r.status === "RESOLVED").length;
+  const inProgress = reportStats?.in_progress ?? reports.filter((r) => r.status === "IN_PROGRESS").length;
 
   /* ─── Avatar Upload ─── */
   const handleAvatarChange = async (e) => {
@@ -692,15 +705,15 @@ function MyProfile() {
 
           <div className="profile-stats">
             <div className="stat-card">
-              <span>{totalPosts}</span>
+              <span>{statsLoading ? "—" : totalPosts}</span>
               <p>Total Posts</p>
             </div>
             <div className="stat-card">
-              <span>{resolved}</span>
+              <span>{statsLoading ? "—" : resolved}</span>
               <p>Resolved</p>
             </div>
             <div className="stat-card">
-              <span>{inProgress}</span>
+              <span>{statsLoading ? "—" : inProgress}</span>
               <p>In Progress</p>
             </div>
             <div

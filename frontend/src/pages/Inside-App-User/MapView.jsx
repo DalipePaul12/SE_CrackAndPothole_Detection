@@ -5,6 +5,9 @@ import {
   Polygon, useMap, Circle, ZoomControl,
 } from "react-leaflet";
 import L from "leaflet";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import "leaflet/dist/leaflet.css";
 import { useTheme } from "../Contexts/ThemeContext";
 import { resolveMediaUrl } from "../../utils/mediaUrl";
@@ -73,7 +76,51 @@ const STATUS_LABEL = {
 };
 
 const getStatusLabel = (s) => STATUS_LABEL[normStatus(s)] || s || "—";
+const STATUS_COLOR = {
+  pending:     "#f59e0b",
+  verified:    "#3b82f6",
+  in_progress: "#3b82f6",
+  resolved:    "#22c55e",
+  declined:    "#ef4444",
+};
+const getStatusColor = (s) => STATUS_COLOR[normStatus(s)] || "#6b7280";
 
+const esc = (s) =>
+  String(s ?? "—")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+function buildPopupHTML(r) {
+  const thumb = getThumb(r);
+  const sevLabel = normSev(r.ai_severity) === "critical" ? "Critical"
+    : normSev(r.ai_severity) === "non_critical" ? "Non_Critical" : "Unknown";
+  const desc = (r.description || "").slice(0, 140) + (r.description?.length > 140 ? "…" : "");
+  return `
+    <div class="mv-popup">
+      <div class="mv-popup-head">
+        <span class="mv-popup-id">#${r.id}</span>
+        <span class="mv-popup-sev" style="background:${getSevColor(r.ai_severity)}">${esc(sevLabel)}</span>
+      </div>
+      ${thumb ? `
+        <div class="mv-popup-thumb" data-thumb="${esc(thumb)}" data-video="${isVideo(r)}">
+          ${isVideo(r)
+            ? `<video src="${esc(thumb)}" muted playsinline preload="metadata" style="width:100%;height:112px;object-fit:cover;display:block"></video>`
+            : `<img src="${esc(thumb)}" alt="Report evidence" />`}
+        </div>` : ""
+      }
+      <div class="mv-popup-body">
+        <p class="mv-popup-desc">${esc(desc)}</p>
+        <div class="mv-popup-meta">
+          <span class="mv-popup-status">${esc(getStatusLabel(r.status))}</span>
+          <span class="mv-popup-barangay">${esc(r.barangay || "—")}</span>
+        </div>
+        <button class="mv-popup-btn" data-rid="${r.id}">View Details</button>
+      </div>
+    </div>
+  `;
+}
 // ─── Date filter helper ───────────────────────────────────────────────────────
 const DATE_FILTERS = [
   { label: "All time",   value: "all"   },
@@ -104,14 +151,14 @@ const TILES = {
   street: {
     label: "Street", icon: <Map size={12} />,
     light: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    dark:  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attr:  '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> / CartoDB',
+    dark:  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attr:  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
   dark: {
     label: "Dark", icon: <Layers size={12} />,
-    light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    dark:  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attr:  '&copy; <a href="https://carto.com/attributions">CartoDB</a> / OSM',
+    light: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    dark:  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attr:  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
   satellite: {
     label: "Satellite", icon: <CircleIcon size={12} />,
@@ -260,6 +307,78 @@ function DensityLayer({ reports }) {
       }}
     />
   ));
+}
+
+function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
+  const map           = useMap();
+  const groupRef       = useRef(null);
+  const reportsRef     = useRef(reports);
+  const onClickRef     = useRef(onMarkerClick);
+  const onLightboxRef  = useRef(onLightbox);
+  reportsRef.current    = reports;
+  onClickRef.current    = onMarkerClick;
+  onLightboxRef.current = onLightbox;
+
+  useEffect(() => {
+    groupRef.current = L.markerClusterGroup({
+      chunkedLoading: true,
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      maxClusterRadius: 60,
+      iconCreateFunction(cluster) {
+        const count = cluster.getChildCount();
+        const size  = count < 10 ? 36 : count < 50 ? 42 : 48;
+        return L.divIcon({
+          className: "",
+          html: `<div class="mv-cluster" style="width:${size}px;height:${size}px">${count}</div>`,
+          iconSize:   [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+      },
+    });
+    map.addLayer(groupRef.current);
+    return () => { map.removeLayer(groupRef.current); };
+  }, [map]);
+
+  useEffect(() => {
+    const handlePopupOpen = (e) => {
+      const el = e.popup.getElement();
+      if (!el) return;
+      const btn = el.querySelector("[data-rid]");
+      if (btn) {
+        const id = parseInt(btn.dataset.rid, 10);
+        btn.onclick = () => {
+          const report = reportsRef.current.find((r) => r.id === id);
+          if (report) { map.closePopup(); onClickRef.current(report); }
+        };
+      }
+      const thumbEl = el.querySelector("[data-thumb]");
+      if (thumbEl) {
+        thumbEl.onclick = () => {
+          onLightboxRef.current(thumbEl.dataset.thumb, thumbEl.dataset.video === "true");
+        };
+      }
+    };
+    map.on("popupopen", handlePopupOpen);
+    return () => map.off("popupopen", handlePopupOpen);
+  }, [map]);
+
+  useEffect(() => {
+    if (!groupRef.current) return;
+    groupRef.current.clearLayers();
+    const markers = reports.map((r) => {
+      const m = L.marker(
+        [parseFloat(r.latitude), parseFloat(r.longitude)],
+        { icon: getIcon(r) }
+      );
+      m.bindPopup(buildPopupHTML(r), { maxWidth: 260, className: "mv-popup-wrap" });
+      m.on("click", () => onClickRef.current(r));
+      return m;
+    });
+    groupRef.current.addLayers(markers);
+  }, [reports]);
+
+  return null;
 }
 
 function Lightbox({ src, isVideo, onClose }) {
@@ -581,74 +700,13 @@ export default function MapView() {
                 {viewMode === "heat"    && <HeatmapLayer reports={filtered} />}
                 {viewMode === "density" && <DensityLayer reports={filtered} />}
 
-                {viewMode === "markers" && filtered.map((r) => {
-                  const thumb = getThumb(r);
-                  return (
-                    <Marker
-                      key={r.id}
-                      position={[parseFloat(r.latitude), parseFloat(r.longitude)]}
-                      icon={getIcon(r)}
-                      eventHandlers={{ click: () => openPanel(r) }}
-                    >
-                      {/* Minimal popup — just a quick-peek before the panel opens */}
-                      <Popup className="mv-popup-wrap">
-                        <div className="mv-popup">
-                          <div className="mv-popup-head">
-                            <span className="mv-popup-id">#{r.id}</span>
-                            <span
-                              className="mv-popup-sev"
-                              style={{ background: getSevColor(r.ai_severity) }}
-                            >
-                              {normSev(r.ai_severity) === "critical"
-                                ? "Critical"
-                                : normSev(r.ai_severity) === "non_critical"
-                                ? "Non_Critical"
-                                : "Unknown"}
-                            </span>
-                          </div>
-
-                          <div className="mv-popup-body">
-                            <p className="mv-popup-desc">
-                              {(r.description || "").slice(0, 140)}
-                              {r.description?.length > 140 ? "…" : ""}
-                            </p>
-
-                            <div className="mv-popup-meta">
-                              <span className="mv-popup-status">{getStatusLabel(r.status)}</span>
-                              <span className="mv-popup-barangay">
-                                <MapPin size={10} strokeWidth={2} />
-                                {r.barangay || "—"}
-                              </span>
-                            </div>
-
-                            {thumb && (
-                              <div
-                                className="mv-popup-thumb"
-                                onClick={(e) => { e.stopPropagation(); setLightbox(thumb); setLightboxIsVideo(isVideo(r)); }}
-                              >
-                                {isVideo(r) ? (
-                                  <video
-                                    src={thumb}
-                                    muted
-                                    playsInline
-                                    preload="metadata"
-                                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                                  />
-                                ) : (
-                                  <img src={thumb} alt="Report evidence" />
-                                )}
-                              </div>
-                            )}
-
-                            <button className="mv-popup-btn" onClick={() => openPanel(r)}>
-                              View Details
-                            </button>
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  );
-                })}
+                {viewMode === "markers" && (
+                  <ClusterLayer
+                    reports={filtered}
+                    onMarkerClick={openPanel}
+                    onLightbox={(src, video) => { setLightbox(src); setLightboxIsVideo(video); }}
+                  />
+                )}
               </MapContainer>
             )}
           </div>
@@ -691,7 +749,14 @@ export default function MapView() {
                         ? "Non_Critical"
                         : "Unknown"}
                     </span>
-                    <span className="mv-badge mv-badge--status">
+                    <span
+                      className="mv-badge mv-badge--status"
+                      style={{
+                        backgroundColor: getStatusColor(selected.status) + "20",
+                        color: getStatusColor(selected.status),
+                        border: `1px solid ${getStatusColor(selected.status)}40`,
+                      }}
+                    >
                       {getStatusLabel(selected.status)}
                     </span>
                   </div>
@@ -731,49 +796,58 @@ export default function MapView() {
                     </div>
                   )}
 
-                  {/* ── Description ── */}
+                  {/* ── Description (kept standalone — often multi-line) ── */}
                   <div className="mv-panel-section">
                     <h3>Description</h3>
                     <p>{selected.description || "No description provided."}</p>
                   </div>
 
-                  {/* ── Location ── */}
-                  <div className="mv-panel-section">
-                    <h3>Location</h3>
-                    <p className="mv-panel-row">
-                      <Navigation size={14} />
-                      {selected.barangay || "—"}
-                    </p>
-                    <p className="mv-panel-coords">
-                      {parseFloat(selected.latitude).toFixed(6)}°,{" "}
-                      {parseFloat(selected.longitude).toFixed(6)}°
-                    </p>
-                  </div>
+                  {/* ── Info card — grouped rows with icons and dividers ── */}
+                  <div className="mv-info-card">
+                    <div className="mv-info-item">
+                      <div className="mv-info-icon"><Navigation size={14} /></div>
+                      <div className="mv-info-text">
+                        <span className="mv-info-label">Location</span>
+                        <span className="mv-info-value">{selected.barangay || "—"}</span>
+                        <span className="mv-info-sub">
+                          {parseFloat(selected.latitude).toFixed(6)}°,{" "}
+                          {parseFloat(selected.longitude).toFixed(6)}°
+                        </span>
+                      </div>
+                    </div>
 
-                  {/* ── Damage type ── */}
-                  <div className="mv-panel-section">
-                    <h3>Damage Type</h3>
-                    <p>
-                      {selected.ai_damage_type
-                        ? selected.ai_damage_type
-                            .replace(/_/g, " ")
-                            .replace(/\b\w/g, (l) => l.toUpperCase())
-                        : "—"}
-                    </p>
-                  </div>
+                    <div className="mv-info-divider" />
 
-                  {/* ── Date reported ── */}
-                  <div className="mv-panel-section">
-                    <h3>Date Reported</h3>
-                    <p className="mv-panel-row">
-                      <Clock size={14} />
-                      {new Date(
-                        selected.created_at ?? selected.date_reported ?? 0
-                      ).toLocaleString("en-PH", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                    </p>
+                    <div className="mv-info-item">
+                      <div className="mv-info-icon"><AlertTriangle size={14} /></div>
+                      <div className="mv-info-text">
+                        <span className="mv-info-label">Damage Type</span>
+                        <span className="mv-info-value">
+                          {selected.ai_damage_type
+                            ? selected.ai_damage_type
+                                .replace(/_/g, " ")
+                                .replace(/\b\w/g, (l) => l.toUpperCase())
+                            : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mv-info-divider" />
+
+                    <div className="mv-info-item">
+                      <div className="mv-info-icon"><Clock size={14} /></div>
+                      <div className="mv-info-text">
+                        <span className="mv-info-label">Date Reported</span>
+                        <span className="mv-info-value">
+                          {new Date(
+                            selected.created_at ?? selected.date_reported ?? 0
+                          ).toLocaleString("en-PH", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </>
@@ -802,20 +876,9 @@ export default function MapView() {
                   >
                     {thumb ? (
                       isVideo(r) ? (
-                        <video
-                          className="mv-strip-thumb"
-                          src={thumb}
-                          muted
-                          playsInline
-                          preload="metadata"
-                        />
+                        <video className="mv-strip-thumb" src={thumb} muted playsInline preload="metadata" />
                       ) : (
-                        <img
-                          className="mv-strip-thumb"
-                          src={thumb}
-                          alt=""
-                          loading="lazy"
-                        />
+                        <img className="mv-strip-thumb" src={thumb} alt="" loading="lazy" />
                       )
                     ) : (
                       <div className="mv-strip-thumb mv-strip-thumb--empty">

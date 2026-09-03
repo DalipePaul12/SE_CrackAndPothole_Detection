@@ -39,6 +39,8 @@ function makeMarkdownComponents(pageLinks, navigate, onNavigate) {
   };
 }
 
+const NEAR_BOTTOM_THRESHOLD_PX = 80;
+
 export default function ChatbotWidget({ userName = null, pendingReportCount = null }) {
   const {
     messages,
@@ -54,14 +56,40 @@ export default function ChatbotWidget({ userName = null, pendingReportCount = nu
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
+  const wasNearBottomRef = useRef(true);
   const navigate = useNavigate();
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (wasNearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [messages, loading]);
+
+  const handleMessagesScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    wasNearBottomRef.current = distanceFromBottom < NEAR_BOTTOM_THRESHOLD_PX;
+  };
+
+  // Lock background page scroll while the chat panel is open on mobile —
+  // without this, a touch-scroll gesture inside .chatbot-messages can get
+  // captured by the page behind it instead, making the chat feel frozen.
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevPosition = document.body.style.position;
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.width = "100%";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.position = prevPosition;
+      document.body.style.width = "";
+    };
+  }, [isOpen]);
 
   // Focus input when opening
   useEffect(() => {
@@ -78,11 +106,13 @@ export default function ChatbotWidget({ userName = null, pendingReportCount = nu
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
+    wasNearBottomRef.current = true;
     sendMessage(input.trim());
     setInput("");
   };
 
   const handleSuggestion = (text) => {
+    wasNearBottomRef.current = true;
     sendMessage(text);
   };
 
@@ -134,7 +164,11 @@ export default function ChatbotWidget({ userName = null, pendingReportCount = nu
           </div>
 
           {/* Messages */}
-          <div className="chatbot-messages" ref={scrollRef}>
+          <div
+            className="chatbot-messages"
+            ref={scrollRef}
+            onScroll={handleMessagesScroll}
+          >
             {messages.map((msg, idx) => (
               <div
                 key={idx}

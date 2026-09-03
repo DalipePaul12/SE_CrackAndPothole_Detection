@@ -192,6 +192,35 @@ const mediaFull = (r, idx = 0) => {
   return { url: resolveMediaUrl(att.file_url), type: att.media_type };
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// NOTES / COMMENTS NOTIFICATION HELPERS
+// NOTE: adjust these field names if getReports() uses different keys for
+// the aggregate comment count on each report.
+// ═══════════════════════════════════════════════════════════════════════════
+const commentCount = (r) =>
+  r.comment_count ?? r.comments_count ?? r.notes_count ?? r.total_comments ?? 0;
+
+const NOTES_SEEN_KEY = "amr_notes_seen";
+
+function loadNotesSeen() {
+  try { return JSON.parse(localStorage.getItem(NOTES_SEEN_KEY) || "{}"); }
+  catch { return {}; }
+}
+function saveNotesSeen(map) {
+  try { localStorage.setItem(NOTES_SEEN_KEY, JSON.stringify(map)); }
+  catch { }
+}
+
+// Unread = total comments on the report minus how many the admin had
+// already seen the last time they opened the Notes tab for it.
+function unreadNotesCount(r, seenMap) {
+  if (!r) return 0;
+  const total = commentCount(r);
+  if (!total) return 0;
+  const seen = seenMap[r.id] ?? 0;
+  return Math.max(0, total - seen);
+}
+
 const GEO_CACHE_KEY = "amr_geo_cache";
 
 function loadGeoCache() {
@@ -543,12 +572,14 @@ function AdminManageReports() {
 
   // Project map: report_id → project (for Assigned To column + ViewModal)
   const [projectByReportId, setProjectByReportId] = useState({});
+
+  // How many comments the admin has already seen per report_id, so we can
+  // compute an "unread notes" badge (table row + ViewModal Notes tab).
+  const [seenCounts, setSeenCounts] = useState(() => loadNotesSeen());
   const [bulkMode,       setBulkMode]       = useState(null);
   const [bulkConfirm,    setBulkConfirm]    = useState(null); // { status, label, verb, danger }
   const [exportAllLoading, setExportAllLoading] = useState(false);
 
-  const [countdown, setCountdown] = useState(30);
-  const timerRef = useRef(null);
 
   // ═════════════════════════════════════════════════════════════════
   // COMMENTED OUT: Teams state — moved to next version
@@ -713,13 +744,23 @@ function AdminManageReports() {
     }
   }, []);
 
+  // markNotesSeen — called by ViewModal when the admin views the Notes tab,
+  // so the unread badge (row + tab) clears for that report.
+  const markNotesSeen = useCallback((reportId, count) => {
+    setSeenCounts(prev => {
+      if (prev[reportId] === count) return prev;
+      const next = { ...prev, [reportId]: count };
+      saveNotesSeen(next);
+      return next;
+    });
+  }, []);
+
   // fetchPage — always uses the current server-side filter state via closure.
   // Call with a page number; server filters (status/damage_type/severity) are
   // applied here so the backend returns only matching rows before pagination.
   const fetchPage = useCallback(async (pg = 1) => {
     setLoading(true);
     setError(null);
-    setCountdown(30);
 
     const res = await getReports({
       page:        pg,
@@ -737,6 +778,7 @@ function AdminManageReports() {
     }
 
     const raw = res.data?.results ?? [];
+    console.log("SAMPLE REPORT OBJECT:", raw[0]); // TEMP — remove after checking
     setReports(raw);
     setTotalCount(res.data?.total ?? 0);
     setPage(pg);
@@ -748,17 +790,6 @@ function AdminManageReports() {
 
   // Re-fetch from page 1 whenever the server-side filter callback changes.
   useEffect(() => { fetchPage(1); fetchProjects(); }, [fetchPage, fetchProjects]);
-
-  // Auto-refresh: tick down and refresh the *current* page with current filters.
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) { fetchPage(page); return 30; }
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timerRef.current);
-  }, [fetchPage, page]);
 
   const handleSort = (col) => {
     if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -807,12 +838,10 @@ function AdminManageReports() {
   return (
     <div className="manage-container">
       <StatsCards reports={reports} totalCount={totalCount} />
-
       <div className="manage-filters">
         <div className="filters-top-row">
           <h2 className="manage-title">Manage Reports</h2>
           <div className="refresh-area">
-            <span className="refresh-countdown">Auto-refresh in {countdown}s</span>
             <button className="refresh-btn" onClick={() => fetchPage(page)}>
               <IcoRefresh size={12} /> Refresh
             </button>
@@ -1019,6 +1048,7 @@ function AdminManageReports() {
                 const isCrit   = sev === "critical";
                 const isSelec  = selected.has(r.id);
                 const media    = mediaFull(r);
+                const unread   = unreadNotesCount(r, seenCounts);
 
                 return (
                   <tr
@@ -1031,7 +1061,14 @@ function AdminManageReports() {
                     </td>
 
                     <td className="col-report">
-                      <div className="report-number">#{String(r.id).padStart(3, "0")}</div>
+                      <div className="report-number-row">
+                        <span className="report-number">#{String(r.id).padStart(3, "0")}</span>
+                        {unread > 0 && (
+                          <span className="notes-dot" title={`${unread} new note${unread !== 1 ? "s" : ""}`}>
+                            {unread > 9 ? "9+" : unread}
+                          </span>
+                        )}
+                      </div>
                       <div className="report-location">
                         <span className="report-loc-barangay">{barangay(r)}</span>
                         {street(r) && (
@@ -1169,11 +1206,13 @@ function AdminManageReports() {
           report={viewReport}
           project={projectByReportId[viewReport.id] ?? null}
           openAssign={viewOpenAssign}
+          unreadNotes={unreadNotesCount(viewReport, seenCounts)}
           onClose={() => { setViewReport(null); setViewOpenAssign(false); }}
           onMarkComplete={r => { setCompleteReport(r); setViewReport(null); setViewOpenAssign(false); }}
           onCancel={r       => { setCancelReport(r);   setViewReport(null); setViewOpenAssign(false); }}
           onVerify={id      => { handleVerify(id); setViewReport(p => p ? { ...p, status: REPORT_STATUS.VERIFIED } : null); }}
           onAssigned={handleAssigned}
+          onNotesSeen={markNotesSeen}
         />,
         document.body
       )}
@@ -1400,7 +1439,7 @@ function CommentSection({ reportId }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // TABBED ViewModal — matches AdminManageRequests popup design
 // ═══════════════════════════════════════════════════════════════════════════
-function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComplete, onCancel, onVerify, onAssigned }) {
+function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, onClose, onMarkComplete, onCancel, onVerify, onAssigned, onNotesSeen }) {
   const st     = r.status?.toLowerCase();
   const sev    = severity(r).toLowerCase();
   const pri    = getPriority(r);
@@ -1426,6 +1465,14 @@ function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComp
     return () => { cancelled = true; };
   }, [st, project?.id]);
 
+  // Mark notes as seen (clears the unread badge) once the admin actually
+  // opens the Notes tab for this report.
+  useEffect(() => {
+    if (activeTab === "notes") {
+      onNotesSeen?.(r.id, commentCount(r));
+    }
+  }, [activeTab, r.id]);
+
   const statusLabel = STATUS_LABELS[st] ?? (st ? st.charAt(0).toUpperCase() + st.slice(1) : "Unknown");
 
   const dateStr = (iso) => iso
@@ -1435,7 +1482,7 @@ function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComp
   const tabs = [
     { id: "details",    label: "Details",    icon: IcoClipboard },
     { id: "media",      label: "Media",      icon: IcoCamera,  badge: mCount > 0 ? mCount : null },
-    { id: "notes",      label: "Notes",      icon: IcoUsers },
+    { id: "notes",      label: "Notes",      icon: IcoUsers,   badge: unreadNotes > 0 ? unreadNotes : null, alertBadge: unreadNotes > 0 },
     { id: "actions",    label: "Actions",    icon: IcoShield,  badge: isTerminal ? null : 3 },
     { id: "updates",    label: "Updates",    icon: IcoClock },
     ...(st === REPORT_STATUS.RESOLVED
@@ -1469,7 +1516,11 @@ function ViewModal({ report: r, project, openAssign = false, onClose, onMarkComp
             >
               <tab.icon size={14} />
               {tab.label}
-              {tab.badge != null && <span className="vmr-tab-badge">{tab.badge}</span>}
+              {tab.badge != null && (
+                <span className={`vmr-tab-badge ${tab.alertBadge ? "vmr-tab-badge--alert" : ""}`}>
+                  {tab.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1868,144 +1919,6 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// COMMENTED OUT: AssignModal — moved to next version
-// ═══════════════════════════════════════════════════════════════════════════
-/*
-function AssignModal({ report: r, bulkIds, teams, setTeams, onClose, onAssign }) {
-  const [tab,        setTab]        = useState("existing");
-  const [chosenTeam, setChosenTeam] = useState(null);
-  const [saving,     setSaving]     = useState(false);
-  const [newName,    setNewName]    = useState("");
-  const [newLeader,  setNewLeader]  = useState("");
-  const [newMembers, setNewMembers] = useState(new Set());
-
-  const isBulk = !!bulkIds;
-  const title  = isBulk
-    ? `Assign ${bulkIds.length} Reports`
-    : `Assign Report #${String(r?.id ?? "").padStart(3, "0")}`;
-
-  const toggleMember = name => setNewMembers(prev => {
-    const n = new Set(prev);
-    n.has(name) ? n.delete(name) : n.add(name);
-    return n;
-  });
-
-  const handleConfirm = async () => {
-    if (tab === "existing" && !chosenTeam) return;
-    setSaving(true);
-    if (tab === "create") {
-      if (!newName.trim()) { setSaving(false); return; }
-      const created = { id: Date.now(), name: newName.trim(), leader: newLeader, members: [...newMembers] };
-      setTeams(prev => [...prev, created]);
-      await onAssign((r ?? { id: bulkIds?.[0] }).id, created);
-    } else {
-      await onAssign((r ?? { id: bulkIds?.[0] }).id, chosenTeam);
-    }
-    setSaving(false);
-  };
-
-  return (
-    <ModalShell maxWidth={520} onClose={onClose}>
-      <CloseBtn onClose={onClose} />
-      <ModalTitle>
-        <div className="assign-modal-title">
-          <IcoUsers size={20} className="assign-modal-title-icon" /> {title}
-        </div>
-      </ModalTitle>
-
-      <div className="tab-container">
-        <button className={`tab-btn ${tab === "existing" ? "tab-btn-active" : ""}`} onClick={() => setTab("existing")}>Existing Teams</button>
-        <button className={`tab-btn ${tab === "create" ? "tab-btn-active" : ""}`}   onClick={() => setTab("create")}>
-          <div className="label-with-icon">
-            <IcoPlus size={14} /> Create New Team
-          </div>
-        </button>
-      </div>
-
-      {tab === "existing" && (
-        <div className="worker-list">
-          {teams.map(t => {
-            const chosen = chosenTeam?.id === t.id;
-            return (
-              <div key={t.id} className={`worker-card ${chosen ? "selected-worker" : ""}`} onClick={() => setChosenTeam(t)}>
-                <div className="worker-avatar">{initials(t.name)}</div>
-                <div className="worker-name">
-                  <div className="team-name-text">{t.name}</div>
-                  <div className="team-meta-text">
-                    Lead: {t.leader || "—"} · {t.members.length} member{t.members.length !== 1 ? "s" : ""}
-                  </div>
-                </div>
-                {chosen && <div className="worker-check"><IcoCheck size={18} /></div>}
-              </div>
-            );
-          })}
-          {teams.length === 0 && <div className="no-data">No teams yet. Create one in the other tab.</div>}
-        </div>
-      )}
-
-      {tab === "create" && (
-        <div className="create-tab-container">
-          <div className="completion-form">
-            <label className="completion-label">Team Name <span className="required">*</span></label>
-            <input
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              placeholder="e.g. Team Delta"
-              className="completion-comment form-input-styled"
-            />
-          </div>
-          <div className="completion-form custom-select">
-            <label className="completion-label">
-              <div className="label-with-icon">
-                <IcoStar size={14} className="label-icon" /> Team Leader
-              </div>
-            </label>
-            <select value={newLeader} onChange={e => setNewLeader(e.target.value)} className="completion-comment select-fullwidth">
-              <option value="">Select a team leader…</option>
-              {WORKERS.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
-            </select>
-          </div>
-          <div className="completion-form">
-            <label className="completion-label">
-              <div className="label-with-icon">
-                <IcoUsers size={14} className="label-icon" /> Team Members
-              </div>
-            </label>
-            <div className="worker-list">
-              {WORKERS.map(w => {
-                const checked  = newMembers.has(w.name);
-                const isLeader = w.name === newLeader;
-                return (
-                  <label key={w.id} className={`worker-card ${checked ? "selected-worker" : ""} ${isLeader ? "worker-card-leader" : ""}`}>
-                    <input type="checkbox" className="amr-cb" checked={checked || isLeader} disabled={isLeader} onChange={() => !isLeader && toggleMember(w.name)} />
-                    <div className="worker-avatar worker-avatar-xs">{initials(w.name)}</div>
-                    <span className="worker-name worker-name-sm">{w.name}</span>
-                    {isLeader && <Badge text="Leader" className="pri-badge pri-low" />}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="modal-actions-row">
-        <button
-          className="complete-btn modal-action-btn"
-          disabled={saving || (tab === "existing" && !chosenTeam) || (tab === "create" && !newName.trim())}
-          onClick={handleConfirm}
-        >
-          {saving ? "Assigning…" : tab === "create" ? "Create Team & Assign" : "Confirm Assignment"}
-        </button>
-        <button className="admin-decline-btn modal-action-btn modal-decline-btn" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    </ModalShell>
-  );
-}
-*/
 
 function CancelModal({ report: r, onClose, onCancel }) {
   const [step,   setStep]   = useState(1);
