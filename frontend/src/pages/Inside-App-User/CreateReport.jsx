@@ -9,6 +9,13 @@
  *   5. Added scanning animation grid + scan-line during analysis
  *   6. Multi-detection badge row replaces single preview-result-badge
  *   7. All other logic, hooks, modals, location, video flow — UNCHANGED
+ *
+ * FIX (this pass): realtime camera detection loop was firing faster than the
+ * backend's rate limit, and failures (429 / timeout / auth) were silently
+ * swallowed with no visible signal — so the live bbox/mask overlay would
+ * appear to "never work" after a short time, with no error shown. Fixed by
+ * pacing the loop to REALTIME_FRAME_INTERVAL_MS, downscaling frames before
+ * upload via snapRealtimeFrameBlob, and logging + surfacing repeated failures.
  */
 
 import React, {
@@ -49,7 +56,7 @@ import {
 } from "../../utils/geolocationUtils";
 import { readExifGps } from "../../utils/exifUtils";
 
-// ─── Constants (UNCHANGED) ────────────────────────────────────────────────────
+// ─── Constants (UNCHANGED except the 3 REALTIME_* additions below) ───────────
 const DAMAGE_TYPE_BACKEND     = { POTHOLE: "pothole", CRACK: "crack" };
 const SEVERITY_BACKEND = {
   CRITICAL:     "critical",
@@ -60,6 +67,11 @@ const MAX_REC_SECS            = 10;
 const MAX_ANALYSIS_RETRIES    = 3;
 const ANGLE_MIN               = 45;
 const ANGLE_MAX               = 75;
+
+// ── NEW: realtime loop pacing/downscale/failure-tracking constants ──────────
+const REALTIME_FRAME_INTERVAL_MS = 350; // ~2.8 fps — stays safely under the backend's 300/min limit
+const REALTIME_MAX_DIM           = 480; // downscale live frames before upload (bandwidth + latency)
+const REALTIME_MAX_CONSEC_FAILS  = 6;   // consecutive failed/limited frames before surfacing a warning
 
 const VIDEO_MIME_TYPES = new Set([
   "video/mp4","video/webm","video/quicktime",
@@ -74,7 +86,7 @@ function isVideoFile(file) {
   return VIDEO_EXTENSIONS.has(ext);
 }
 
-// ─── Shared helpers (UNCHANGED) ───────────────────────────────────────────────
+// ─── Shared helpers (UNCHANGED, plus new snapRealtimeFrameBlob) ──────────────
 function normalizeDamageType(label) {
   if (!label) return null;
   const l = label.toLowerCase();
@@ -97,6 +109,21 @@ async function snapFrameBlob(videoEl, w, h) {
   canvas.height  = h ?? videoEl.videoHeight ?? 480;
   canvas.getContext("2d").drawImage(videoEl, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+}
+
+// ── NEW: lightweight, downscaled capture used ONLY by the live detection
+// loop. Photo/video capture still uses snapFrameBlob() at full resolution.
+async function snapRealtimeFrameBlob(videoEl) {
+  const vw = videoEl.videoWidth || 640;
+  const vh = videoEl.videoHeight || 360;
+  const scale = Math.min(1, REALTIME_MAX_DIM / Math.max(vw, vh));
+  const w = Math.max(1, Math.round(vw * scale));
+  const h = Math.max(1, Math.round(vh * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d").drawImage(videoEl, 0, 0, w, h);
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.7));
 }
 
 function distanceFeedback(bbox) {
@@ -263,7 +290,6 @@ function FullscreenCamera({
 }
 
 // ─── DetectionFilmstrip (UNCHANGED) ───────────────────────────────────────────
-// ─── DetectionFilmstrip (UNCHANGED) ───────────────────────────────────────────
 function DetectionFilmstrip({ snapshots }) {
   const [lightbox, setLightbox] = useState(null);
   if (!snapshots || snapshots.length === 0) return null;
@@ -334,28 +360,21 @@ function DetectionFilmstrip({ snapshots }) {
 
 function HFConfidenceBar({ confidence, status, rawScores }) {
   if (confidence === null || confidence === undefined) return null;
-  
+
   const isAI = status === "rejected";
-  
-  // FIXED: Use the correct scores from backend
-  // Backend sends:
-  // - confidence = artificial_score when AI, real_score when REAL
-  // - rawScores._artificial_score = raw AI score
-  // - rawScores._real_score = raw real score
-  
+
   const artificialScore = rawScores?._artificial_score ?? 0;
   const realScore = rawScores?._real_score ?? 0;
-  
-  // Display: show the relevant score based on status
-  const displayPct = isAI 
-    ? Math.round(artificialScore * 100)   // AI: show AI confidence in red
-    : Math.round(realScore * 100);        // REAL: show real confidence in green
-  
+
+  const displayPct = isAI
+    ? Math.round(artificialScore * 100)
+    : Math.round(realScore * 100);
+
   const fill = isAI
-    ? "linear-gradient(90deg,#ef4444,#dc2626)"   // Red = AI
-    : "linear-gradient(90deg,#22c55e,#16a34a)";  // Green = Real
-  
-  const labelText = isAI 
+    ? "linear-gradient(90deg,#ef4444,#dc2626)"
+    : "linear-gradient(90deg,#22c55e,#16a34a)";
+
+  const labelText = isAI
     ? `AI-Generated Confidence`
     : `Authenticity Confidence`;
 
@@ -369,9 +388,9 @@ function HFConfidenceBar({ confidence, status, rawScores }) {
         </span>
       </div>
       <div className="hf-bar-track">
-        <div className="hf-bar-fill" style={{ 
-          width: `${displayPct}%`, 
-          background: fill 
+        <div className="hf-bar-fill" style={{
+          width: `${displayPct}%`,
+          background: fill
         }} />
       </div>
       {isAI && (
@@ -612,9 +631,6 @@ function CreateReport({ onClose }) {
 
   const [requiresReview, setRequiresReview] = useState(false);
   const [reviewReason,   setReviewReason]   = useState(null);
-  // ── Manual-review fallback: unlocked after MAX_ANALYSIS_RETRIES failed
-  // retries, lets the user bypass the AI-analysis requirement instead of
-  // being stuck unable to submit at all when the AI/YOLO service is down.
   const [manualReviewOverride, setManualReviewOverride] = useState(false);
   const [isHybrid,        setIsHybrid]        = useState(false);
   const [secondaryDamage, setSecondaryDamage] = useState(null);
@@ -651,8 +667,6 @@ function CreateReport({ onClose }) {
       if (success) {
         pushOfflineToast({ type: "success", message: `Queued report #${reportId} submitted successfully.` });
       } else if (partial) {
-        // Report was created, but its photo/video still needs to upload —
-        // distinct from a full submission failure.
         pushOfflineToast({
           type: "warning",
           message: `Report #${reportId} was submitted, but the photo/video upload failed. It will keep retrying — the report itself is saved.`,
@@ -677,21 +691,20 @@ function CreateReport({ onClose }) {
   const submittingRef    = useRef(false);
 
   // ── NEW: natural image size via hook (for correct mask scaling) ────────────
-  // ── NEW: natural image size via hook (for correct mask scaling) ────────────
   const naturalSize = useNaturalSize(previewMediaRef);
 
   // ── FIX: ResizeObserver for reliable previewSize regardless of load timing ─
   useEffect(() => {
     const el = previewMediaRef.current;
     if (!el || !preview) return;
-    
+
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         setPreviewSize({ width, height });
       }
     });
-    
+
     ro.observe(el);
     return () => ro.disconnect();
   }, [preview]);
@@ -773,7 +786,6 @@ function CreateReport({ onClose }) {
           setAiConfidence(conf);
           setPredictionResult(prediction);
 
-          // ── NEW: normalise detections for mask overlay ─────────────────
           const rawDets = result.data?.all_detections ?? [];
           console.log('[DEBUG] all_detections:', JSON.stringify(rawDets, null, 2));
           setAllDetections(rawDets.map(normalizePrediction).filter(Boolean));
@@ -802,7 +814,6 @@ if (ai_validation && typeof ai_validation === "object") {
   setHfConfidence(ai_validation.confidence ?? null);
   setHfModel(ai_validation.model ?? null);
   setHfRawScores(ai_validation.raw_scores ?? null);
-  // Reset only review flags here, NOT analyzeError
   setRequiresReview(false);
   setReviewReason(null);
 
@@ -812,7 +823,6 @@ if (ai_validation && typeof ai_validation === "object") {
       break;
 
     case "skipped":
-      // HF unavailable / token missing — treat as real, don't block submission
       setImageType("REAL");
       break;
 
@@ -831,7 +841,6 @@ if (ai_validation && typeof ai_validation === "object") {
     case "error":
     case "failed":
     case "unavailable":
-      // Soft-fail: let user submit but flag for review
       setImageType("REAL");
       setRequiresReview(true);
       setReviewReason("AI authenticity check unavailable — flagged for manual review");
@@ -839,12 +848,10 @@ if (ai_validation && typeof ai_validation === "object") {
 
     default:
       console.warn("[HF] Unexpected ai_validation.status:", hfStat, ai_validation);
-      // Don't block — fall back to treating as real
       setImageType("REAL");
       break;
   }
 } else {
-  // No ai_validation at all — soft-fail, don't block the user
   setHfStatus(null);
   setHfConfidence(null);
   setHfModel(null);
@@ -885,14 +892,14 @@ if (ai_validation && typeof ai_validation === "object") {
 
   // ── Retry handler — re-runs analysis on the same file, tracks attempt count ─
   const handleRetryAnalysis = useCallback(() => {
-    if (!file || isAnalyzing) return;   // guard: ignore clicks while already running
+    if (!file || isAnalyzing) return;
     setRetryCount((c) => c + 1);
     runFullAnalysis(file);
   }, [file, isAnalyzing, runFullAnalysis]);
 
   // ── Camera helpers (UNCHANGED) ─────────────────────────────────────────────
   const stopCamera = useCallback(() => {
-    detectionLoopRef.current = false; // signals the self-pacing detection loop to stop
+    detectionLoopRef.current = false;
     clearInterval(recordTimerRef.current);
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current._discard = true;
@@ -910,6 +917,7 @@ if (ai_validation && typeof ai_validation === "object") {
     setViewfinderSize({ width: 0, height: 0 });
   }, []);
 
+  // ── startCamera — CHANGED: paced/downscaled realtime loop + failure logging
   const startCamera = useCallback(async () => {
     setCameraError(null);
     try {
@@ -927,13 +935,14 @@ if (ai_validation && typeof ai_validation === "object") {
       // requests or queued-up fetches. detectionLoopRef acts as a stop flag.
       detectionLoopRef.current = true;
       (async () => {
+        let consecFails = 0;
         while (detectionLoopRef.current) {
           if (!videoRef.current || videoRef.current.readyState < 2) {
-            await new Promise((r) => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 150));
             continue;
           }
           try {
-            const blob  = await snapFrameBlob(videoRef.current);
+            const blob  = await snapRealtimeFrameBlob(videoRef.current);
             const fd    = new FormData();
             fd.append("file", blob, "frame.jpg");
             const token = tokenStorage.getAccess();
@@ -945,6 +954,7 @@ if (ai_validation && typeof ai_validation === "object") {
               headers:     token ? { Authorization: `Bearer ${token}` } : {},
             });
             if (res.ok) {
+              consecFails = 0;
               const { data } = await res.json();
               const allDets  = data?.all_detections ?? [];
               const pred     = data?.prediction;
@@ -974,12 +984,21 @@ if (ai_validation && typeof ai_validation === "object") {
                   height: videoRef.current.offsetHeight || 360,
                 });
               }
+            } else {
+              // ── NEW: surface failures instead of swallowing them silently ──
+              consecFails++;
+              console.warn(`[realtime-detect] HTTP ${res.status} on frame request (consecutive fails: ${consecFails})`);
+              if (consecFails >= REALTIME_MAX_CONSEC_FAILS) {
+                setCameraError((prev) => prev ?? "Live detection is temporarily unavailable — you can still capture normally.");
+              }
             }
-          } catch {
-            // Network errors / AbortError are silently skipped — loop continues
+          } catch (err) {
+            // ── NEW: log instead of fully silent catch ──
+            consecFails++;
+            console.warn(`[realtime-detect] request error: ${err?.name ?? err} (consecutive fails: ${consecFails})`);
           }
-          // Minimum inter-frame gap keeps CPU sane when inference is very fast
-          await new Promise((r) => setTimeout(r, 100));
+          // Paced gap keeps us safely under the backend rate limit
+          await new Promise((r) => setTimeout(r, REALTIME_FRAME_INTERVAL_MS));
         }
       })();
     } catch (err) {
@@ -1028,7 +1047,7 @@ if (ai_validation && typeof ai_validation === "object") {
         const captured = new File([blob], "snap_video.webm", { type: "video/webm" });
         setFile(captured);
         setPreview(URL.createObjectURL(blob));
-        detectionLoopRef.current = false; // signals the self-pacing detection loop to stop
+        detectionLoopRef.current = false;
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         if (videoRef.current) videoRef.current.srcObject = null;
@@ -1118,7 +1137,7 @@ if (ai_validation && typeof ai_validation === "object") {
       async ({ coords: c }) => {
         const lat = c.latitude, lng = c.longitude;
         setCoords({ lat, lng });
-        setLocationSource(null); // live GPS wins — clear any EXIF flag
+        setLocationSource(null);
         try {
           const res  = await fetch(NOMINATIM_URL(lat, lng));
           const data = await res.json();
@@ -1161,9 +1180,6 @@ if (ai_validation && typeof ai_validation === "object") {
     setPreview(URL.createObjectURL(f));
     setFormError("");
 
-    // ── EXIF GPS fallback (gallery uploads only) ──────────────────────────
-    // If browser GPS already set coords, skip entirely — live GPS wins.
-    // If coords is still null, attempt to read GPS tags from the image EXIF.
     if (!coords) {
       const gps = await readExifGps(f);
       if (gps) {
@@ -1186,7 +1202,6 @@ if (ai_validation && typeof ai_validation === "object") {
           setStreetName(`${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}`);
         }
       }
-      // If no GPS found, leave coords null — blocked-submission path is unchanged.
     }
 
     await runFullAnalysis(f);
@@ -1202,13 +1217,10 @@ if (ai_validation && typeof ai_validation === "object") {
     setManualReviewOverride(false);
     resetAnalysis();
     if (fileRef.current) fileRef.current.value = "";
-    stopCamera(); // ← FIX: ensure camera stream is killed
+    stopCamera();
   }, [resetAnalysis, stopCamera]);
 
   // ── Form validation ────────────────────────────────────────────────────────
-  // manualReviewOverride (unlocked after MAX_ANALYSIS_RETRIES failed retries)
-  // bypasses the AI-analysis requirement so a down AI/YOLO service can't
-  // block the core "submit a report" action entirely.
   const validateForm = useCallback(() => {
     if (!file)        { setFormError("Evidence required: Please upload or capture a photo/video."); return; }
     if (isAnalyzing)  { setFormError("Please wait for AI analysis to complete."); return; }
@@ -1269,9 +1281,6 @@ if (ai_validation && typeof ai_validation === "object") {
     }
   }, [pushOfflineToast]);
 
-  // ── Submit — optimistic: UI confirms instantly, network work runs in the
-  //    background via performBackgroundSubmit. submittingRef blocks duplicate
-  //    clicks synchronously, before React even re-renders the disabled button.
   const handleSubmitConfirm = useCallback(() => {
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -1308,9 +1317,6 @@ if (ai_validation && typeof ai_validation === "object") {
       },
     };
 
-    // UI confirms immediately — analysis already ran client-side, so we
-    // already know this submission is valid. The button flips to
-    // "Submitted!" and the modal closes right away.
     setSubmitSuccess(true);
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -1346,9 +1352,6 @@ if (ai_validation && typeof ai_validation === "object") {
   const recProgress    = (recordingTime / MAX_REC_SECS) * 100;
   const showAngleHUD   = cameraActive && phoneAngle !== null;
 
-  // Render overlay for ANY returned detection — decoupled from liveDetection.detected.
-  // detected=true (conf >= REALTIME_CONF_THRESHOLD) only controls the status pill text.
-  // This prevents the double-gate that swallowed detections just below the threshold.
   const viewfinderOverlayDetections = liveDetection.boxes?.length
     ? liveDetection.boxes.map((b) => ({
         label:      b.class ?? b.label,
@@ -1361,16 +1364,12 @@ if (ai_validation && typeof ai_validation === "object") {
       }))
     : [];
 
-  // Full detection objects for SegmentationMask — same decoupling as above.
   const viewfinderMaskDetections = liveDetection.boxes?.length
     ? liveDetection.boxes
     : [];
 
-  // ── NEW: Derived mask data ─────────────────────────────────────────────────
-  // Use allDetections (multi-mask) when available; fall back to predictionResult
-const maskDetections = useMemo(() => allDetections, [allDetections]);
+  const maskDetections = useMemo(() => allDetections, [allDetections]);
 
-// FIXED — use either previewSize OR naturalSize; add ResizeObserver fallback
 const effectiveSize = useMemo(() => {
   if (previewSize.width > 0 && previewSize.height > 0) return previewSize;
   if (naturalSize.width > 0 && naturalSize.height > 0) return naturalSize;
@@ -1494,7 +1493,6 @@ const showMask = analysisComplete &&
             >
               {preview ? (
                 <div className="preview-container">
-                  {/* ── Media element ── */}
                   {file && isVideoFile(file) ? (
                     <video ref={previewMediaRef} src={preview}
                       className="preview-img" muted autoPlay loop playsInline controls
@@ -1516,7 +1514,6 @@ const showMask = analysisComplete &&
 />
                   )}
 
-                  {/* ── Scan animation while analysing ── */}
                   {isAnalyzing && (
                     <>
                       <div className="seg-scan-grid"  aria-hidden="true" />
@@ -1524,10 +1521,6 @@ const showMask = analysisComplete &&
                     </>
                   )}
 
-                  {/* ══════════════════════════════════════════════════════════
-                      NEW: True YOLOv11 polygon segmentation mask overlay
-                      Replaces the old <SegmentationMask boxes=…> rect renderer
-                  ══════════════════════════════════════════════════════════ */}
                   {showMask && (
                     <SegmentationMask
                       predictions={maskDetections}
@@ -1539,7 +1532,6 @@ const showMask = analysisComplete &&
                     />
                   )}
 
-                  {/* ── Multi-detection badges ── */}
                   {analysisComplete && maskDetections.length > 0 && (
                     <>
                       {maskDetections.length > 1 && (
@@ -1573,14 +1565,12 @@ const showMask = analysisComplete &&
                     </>
                   )}
 
-                  {/* Trash button */}
                   {!isSubmitting && !isAnalyzing && (
                     <button className="trash-btn" onClick={clearMedia} aria-label="Remove file">
                       <FaRegTrashAlt aria-hidden="true" />
                     </button>
                   )}
 
-                  {/* Analyzing overlay */}
                   {isAnalyzing && (
                     <div className="preview-analyzing-overlay" aria-live="polite">
                       <FaSpinner className="spin-icon" aria-hidden="true" />
@@ -1657,10 +1647,10 @@ const showMask = analysisComplete &&
               </p>
             )}
                        {hfConfidence !== null && !isAnalyzing && (
-              <HFConfidenceBar 
-                confidence={hfConfidence} 
-                status={hfStatus} 
-                rawScores={hfRawScores || {}}  // ← FIXED: use hfRawScores, not predictionResult
+              <HFConfidenceBar
+                confidence={hfConfidence}
+                status={hfStatus}
+                rawScores={hfRawScores || {}}
               />
             )}
             {analyzeError && !isAnalyzing && (

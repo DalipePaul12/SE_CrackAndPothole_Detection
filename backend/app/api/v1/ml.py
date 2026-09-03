@@ -149,26 +149,25 @@ async def analyze_media(
                 if prediction is not None
                 else None
             ),
-# FIXED — add image_width / image_height
-                "all_detections": [
-                    {
-                        "class":          d.get("class", "damage"),
-                        "label":          d.get("label", d.get("class", "damage")),
-                        "confidence":     d.get("confidence", 0),
-                        "severity":       d.get("severity"),
-                        "box":            d.get("box"),
-                        "norm_bbox":      d.get("norm_bbox"),
-                        "segments":       d.get("segments"),
-                        "segments_norm":  d.get("segments_norm"),
-                        "image_width":    d.get("image_width"),   # ← ADD
-                        "image_height":   d.get("image_height"),  # ← ADD
-                        "x_norm":         d.get("x_norm"),
-                        "y_norm":         d.get("y_norm"),
-                        "w_norm":         d.get("w_norm"),
-                        "h_norm":         d.get("h_norm"),
-                    }
-                    for d in all_detections
-                ],
+            "all_detections": [
+                {
+                    "class":          d.get("class", "damage"),
+                    "label":          d.get("label", d.get("class", "damage")),
+                    "confidence":     d.get("confidence", 0),
+                    "severity":       d.get("severity"),
+                    "box":            d.get("box"),
+                    "norm_bbox":      d.get("norm_bbox"),
+                    "segments":       d.get("segments"),
+                    "segments_norm":  d.get("segments_norm"),
+                    "image_width":    d.get("image_width"),
+                    "image_height":   d.get("image_height"),
+                    "x_norm":         d.get("x_norm"),
+                    "y_norm":         d.get("y_norm"),
+                    "w_norm":         d.get("w_norm"),
+                    "h_norm":         d.get("h_norm"),
+                }
+                for d in all_detections
+            ],
         },
     }
 
@@ -287,7 +286,7 @@ async def analyze_video(
 # ── POST /ml/analyze/realtime  (live camera overlay — MULTI-DETECTION) ────────
 
 @router.post("/analyze/realtime", status_code=status.HTTP_200_OK)
-@limiter.limit("120/minute")
+@limiter.limit("300/minute")
 async def analyze_realtime(
     request: Request,
     file: UploadFile = File(...),
@@ -296,6 +295,13 @@ async def analyze_realtime(
     """
     Lightweight single-frame detection for live camera overlay.
     Skips HuggingFace check, runs at 320 px for speed (~50–150 ms).
+
+    NOTE: limit raised from 120/minute to 300/minute — the frontend
+    self-pacing loop in CreateReport.jsx sends a frame roughly every
+    350ms (~171 req/min max), which was blowing past the old 120/minute
+    cap after ~20s of continuous camera use. Once rate-limited, frames
+    silently stopped updating the overlay with no visible error, which
+    looked identical to "detection never worked at all."
     """
     content_type = (file.content_type or "").lower()
     if content_type not in _ALLOWED_IMAGE_TYPES:

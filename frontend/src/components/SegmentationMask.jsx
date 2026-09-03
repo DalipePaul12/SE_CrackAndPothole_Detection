@@ -1,27 +1,3 @@
-/**
- * SegmentationMask.jsx
- *
- * True YOLOv11 segmentation polygon renderer.
- * Replaces the old rectangular <rect>-based mask with accurate contour paths.
- *
- * Backend payload expected per detection:
- * {
- *   class: "pothole" | "crack",
- *   confidence: 0.94,
- *   severity: "critical" | "non_critical" | "low" | "moderate" | ...,
- *   box: [x1, y1, x2, y2],          // absolute pixel coords in original image
- *   segments: [[x,y], [x,y], ...],  // absolute pixel polygon points
- *   // OR normalized variants:
- *   segments_norm: [[xn,yn], ...],   // 0-1 normalized
- *   norm_bbox: [x1n,y1n,x2n,y2n],   // normalized box
- * }
- *
- * Props:
- *   predictions  – array of detection objects from backend
- *   imageSize    – { width, height } of the rendered <img> or <video> element
- *   naturalSize  – { width, height } of the original image (for coordinate scaling)
- *   onHover      – optional (index) => void callback
- */
 
 import React, { useCallback, useMemo, useState } from "react";
 
