@@ -921,15 +921,27 @@ if (ai_validation && typeof ai_validation === "object") {
   const startCamera = useCallback(async () => {
     setCameraError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setCameraActive(true);
+const stream = await navigator.mediaDevices.getUserMedia({
+  video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+});
+streamRef.current = stream;
+
+// Wait for <video> to mount — fixes race where getUserMedia resolves
+// before React commits the FullscreenCamera portal.
+let attempts = 0;
+while (!videoRef.current && attempts < 100) {
+  await new Promise((r) => setTimeout(r, 20));
+  attempts++;
+}
+if (videoRef.current) {
+  videoRef.current.srcObject = stream;
+  await videoRef.current.play();
+} else {
+  console.error("[camera] video element never mounted — could not attach stream");
+  setCameraError("Camera view failed to load. Please retry.");
+  return;
+}
+setCameraActive(true);
       // Self-pacing detection loop: the next frame is only sent after current
       // inference completes, so slow backend responses never cause overlapping
       // requests or queued-up fetches. detectionLoopRef acts as a stop flag.
@@ -946,7 +958,7 @@ if (ai_validation && typeof ai_validation === "object") {
             const fd    = new FormData();
             fd.append("file", blob, "frame.jpg");
             const token = tokenStorage.getAccess();
-            const res   = await fetch("/api/v1/ml/analyze/realtime", {
+            const res   = await fetch("https://snap2fix-backend-155503391300.asia-southeast1.run.app/api/v1/ml/analyze/realtime", {
               method:      "POST",
               body:        fd,
               signal:      AbortSignal.timeout(4000),
@@ -1103,7 +1115,7 @@ if (ai_validation && typeof ai_validation === "object") {
         const fd = new FormData();
         fd.append("file", blob, "warmup.jpg");
         const warmupToken = tokenStorage.getAccess();
-        await fetch("/api/v1/ml/analyze/realtime", {
+        await fetch("https://snap2fix-backend-155503391300.asia-southeast1.run.app/api/v1/ml/analyze/realtime", {
           method: "POST", body: fd, credentials: "include",
           signal: AbortSignal.timeout(10_000),
           headers: warmupToken ? { Authorization: `Bearer ${warmupToken}` } : {},
