@@ -8,21 +8,6 @@ import {
   getSeverityStats,
 } from "../api/analytics";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// useAnalytics.js  —  FIXED
-//
-// PROBLEM SEEN IN SCREENSHOT:
-//   A citizen user was seeing the AdminDashboard layout because Dashboard.jsx
-//   was reading role from stale localStorage before AuthContext resolved.
-//   The analytics hook was also firing /analytics/hotspots which is admin-only
-//   → 403 → the "Failed to load" banner appeared for citizens too.
-//
-// FIXES:
-//   1. Accept `role` param so the hook knows which endpoints to call.
-//   2. Citizens skip hotspots (admin-only) — prevents the 403 banner.
-//   3. Cache keyed by role so admin and citizen caches don't collide.
-//   4. Proper token check before firing (same pattern as useReports).
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { tokenStorage } from "../api/client";
 

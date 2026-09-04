@@ -1,13 +1,4 @@
-"""
-settings.py — Admin-only system settings endpoints.
 
-GET  /api/v1/settings                     — return current settings (creates singleton row if absent)
-PUT  /api/v1/settings                     — persist settings (partial update — only sent fields written)
-POST /api/v1/settings/reset-report-statuses — bulk-reset non-terminal reports to pending
-GET  /api/v1/settings/audit-log/export    — stream audit_logs as CSV download
-
-All routes require admin or superadmin role.
-"""
 import csv
 import io
 import logging

@@ -542,7 +542,7 @@ const AdminSettings = () => {
                       disabled={loading}
                     />
                     <span className="toggle-slider"></span>
-                    Require 2FA for All Admin Accounts
+                    Require 2FA for All  Accounts
                   </label>
                 </div>
                 <div className="form-group">

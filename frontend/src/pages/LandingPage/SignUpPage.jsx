@@ -33,6 +33,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const [otpKey, setOtpKey] = useState(0); // forces OTPboxes remount on error/resend
 
   const [modal, setModal] = useState({
@@ -60,8 +61,28 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const passwordChecks = {
+    lowercase: /[a-z]/.test(formData.password),
+    uppercase: /[A-Z]/.test(formData.password),
+    number: /[0-9]/.test(formData.password),
+    symbol: /[^A-Za-z0-9]/.test(formData.password),
+    length: formData.password.length >= 8,
+  };
+
+  const isPasswordValid = Object.values(passwordChecks).every(Boolean);
+
   const handleSignUpSubmit = async (e) => {
     e.preventDefault();
+
+    if (!isPasswordValid) {
+      showModal(
+        "Weak Password",
+        "Please meet all password requirements before continuing.",
+        "warning",
+        () => setModal((m) => ({ ...m, show: false }))
+      );
+      return;
+    }
 
     if (formData.password !== formData.confirmPassword) {
       showModal(
@@ -284,6 +305,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       required
                       value={formData.password}
                       onChange={handleChange}
+                      onFocus={() => setPasswordFocused(true)}
                     />
                     <span
                       className="toggle-eye"
@@ -295,6 +317,34 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       {showPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
                     </span>
                   </div>
+
+                  {(passwordFocused || formData.password) && (
+                    <div className="password-requirements">
+                      <p className="password-req-title">Password must contain:</p>
+                      <ul>
+                        <li className={passwordChecks.lowercase ? "req-pass" : "req-fail"}>
+                          <span className="req-icon">{passwordChecks.lowercase ? "✓" : "✕"}</span>
+                          At least one lowercase letter
+                        </li>
+                        <li className={passwordChecks.uppercase ? "req-pass" : "req-fail"}>
+                          <span className="req-icon">{passwordChecks.uppercase ? "✓" : "✕"}</span>
+                          At least one uppercase letter
+                        </li>
+                        <li className={passwordChecks.number ? "req-pass" : "req-fail"}>
+                          <span className="req-icon">{passwordChecks.number ? "✓" : "✕"}</span>
+                          At least one number
+                        </li>
+                        <li className={passwordChecks.symbol ? "req-pass" : "req-fail"}>
+                          <span className="req-icon">{passwordChecks.symbol ? "✓" : "✕"}</span>
+                          At least one symbol
+                        </li>
+                        <li className={passwordChecks.length ? "req-pass" : "req-fail"}>
+                          <span className="req-icon">{passwordChecks.length ? "✓" : "✕"}</span>
+                          Minimum 8 characters
+                        </li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
 
                 <div className="sign-up-label-form">
@@ -319,9 +369,18 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       {showConfirmPassword ? <BsFillEyeFill /> : <BsFillEyeSlashFill />}
                     </span>
                   </div>
+
+                  {formData.confirmPassword && (
+                    <div className={`password-match-msg ${formData.password === formData.confirmPassword ? "match-pass" : "match-fail"}`}>
+                      <span className="req-icon">
+                        {formData.password === formData.confirmPassword ? "✓" : "✕"}
+                      </span>
+                      {formData.password === formData.confirmPassword ? "Passwords match" : "Passwords do not match"}
+                    </div>
+                  )}
                 </div>
 
-                <button type="submit" disabled={loading}>
+                <button type="submit" disabled={loading || !isPasswordValid}>
                   {loading ? "Creating Account..." : "Create Account"}
                   {!loading && <IoMdDoneAll className="finish-signup" />}
                 </button>

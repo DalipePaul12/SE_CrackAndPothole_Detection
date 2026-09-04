@@ -39,6 +39,7 @@ body.dark {
 .admin-sidebar {
   width: var(--admin-width);
   height: 100vh;
+  height: 100dvh; /* accounts for mobile browser address bar — 100vh overshoots on phones */
   background: linear-gradient(180deg, var(--admin-bg-from), var(--admin-bg-to));
   color: var(--admin-text);
   position: fixed;
@@ -54,6 +55,13 @@ body.dark {
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
   overflow: hidden;
+}
+
+@media (max-width: 1023px) {
+  .admin-sidebar.mobile-open {
+    overflow-y: auto;      /* guarantee Logout is reachable even if content overflows */
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 .admin-sidebar.collapsed {
@@ -203,7 +211,7 @@ body.dark {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow-y: auto;
+  overflow-y: visible;   /* let the outer sidebar handle scrolling on mobile, not this nested box */
   overflow-x: hidden;
   justify-content: flex-start;
   padding-right: 4px;
@@ -376,6 +384,8 @@ body.dark {
   .admin-sidebar.mobile-open {
     width: var(--admin-width);
     padding: 12px 10px;
+    height: 100dvh;
+    min-height: 100dvh;
   }
 
   .admin-sidebar.mobile-open .admin-sidebar-brand,
@@ -424,4 +434,10 @@ body.dark {
   margin-bottom: 8px;
   padding-bottom: 8px;
   min-height: 36px;
+}
+
+@media (max-width: 1023px) {
+  .admin-sidebar.mobile-open .admin-sidebar-footer {
+    margin-top: 24px;   /* was `auto` — no longer forces footer to viewport bottom */
+  }
 }

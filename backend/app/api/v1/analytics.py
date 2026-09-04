@@ -48,7 +48,11 @@ def _get_redis():
     if _redis_client is None:
         url = os.getenv("REDIS_URL")
         if url:
-            _redis_client = aioredis.from_url(url, decode_responses=True)
+            try:
+                _redis_client = aioredis.from_url(url, decode_responses=True)
+            except Exception as exc:
+                logger.warning("Redis client init failed: %s", exc)
+                return None
     return _redis_client
 
 
@@ -240,13 +244,17 @@ async def get_hotspots(
     if (c := await _cache_get("hotspots")) is not None:
         return _ok(c)
 
-    rows = (await db.execute(
-        select(Report.barangay, func.count(Report.id).label("cnt"))
-        .group_by(Report.barangay)
-        .order_by(func.count(Report.id).desc())
-        .limit(10)
-    )).all()
-    data = [{"barangay": bgy or "Unidentified", "count": cnt} for bgy, cnt in rows]
+    try:
+        rows = (await db.execute(
+            select(Report.barangay, func.count(Report.id).label("cnt"))
+            .group_by(Report.barangay)
+            .order_by(func.count(Report.id).desc())
+            .limit(10)
+        )).all()
+        data = [{"barangay": bgy or "Unidentified", "count": cnt} for bgy, cnt in rows]
+    except Exception:
+        logger.exception("Failed to compute hotspots")
+        data = []
     await _cache_set("hotspots", data)
     return _ok(data)
 
@@ -256,19 +264,14 @@ async def get_hotspots(
 @limiter.limit("30/minute")
 async def get_barangay_trend(
     request: Request,
-    barangay: str = Query(..., description="Barangay name to filter by"),
+    barangay: str | None = Query(None, description="Barangay name to filter by. Omit for all barangays."),
     days: int = Query(30, ge=7, le=365, description="Lookback window in days"),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
-    """
-    Time-series of open vs. resolved report counts for a single barangay.
 
-    Granularity auto-scales: 'day' for <= 60-day windows, 'week' otherwise.
-    Returns [{ period: "YYYY-MM-DD", open_count: int, resolved_count: int }]
-    ordered by period ascending.
-    """
-    cache_key = f"barangay_trend:{barangay.lower().strip()}:{days}"
+    barangay_key = barangay.lower().strip() if barangay else "all"
+    cache_key = f"barangay_trend:{barangay_key}:{days}"
     if (c := await _cache_get(cache_key)) is not None:
         return _ok(c)
 
@@ -286,11 +289,12 @@ async def get_barangay_trend(
             func.sum(case((Report.status.notin_(terminal), 1), else_=0)).label("open_count"),
             func.sum(case((Report.status == ReportStatus.RESOLVED,  1), else_=0)).label("resolved_count"),
         )
-        .where(Report.barangay.ilike(barangay.strip()))
         .where(Report.created_at >= cutoff)
         .group_by(period_col)
         .order_by(period_col)
     )
+    if barangay:
+        stmt = stmt.where(Report.barangay.ilike(barangay.strip()))
 
     rows = (await db.execute(stmt)).all()
     data = [

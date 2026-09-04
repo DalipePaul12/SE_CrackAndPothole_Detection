@@ -1,15 +1,4 @@
-/**
- * frontend/src/api/settings.js
- *
- * Admin settings API — requires admin or superadmin role.
- *
- * GET  /api/v1/settings  → getSettings()
- * PUT  /api/v1/settings  → updateSettings(payload)
- *
- * Payload keys are snake_case (matching the backend schema).
- * The AdminSettings component converts camelCase ↔ snake_case via
- * fromApi() / toApi() helpers defined locally in the component.
- */
+
 
 import { api } from "./client";
 

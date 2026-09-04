@@ -32,7 +32,6 @@ const TREND_RANGES  = ["Daily", "Weekly", "Monthly"];
 const BARANGAYS     = ["All", "Panghulo", "Dampalit", "Catmon", "Tonsuya", "Tañong", "Tambobong"];
 const DATE_RANGES   = ["All time", "This week", "This month", "Last 3 months"];
 const SEVERITY_OPTS = ["All", "Critical", "Medium", "Low"];
-const POLL_MS       = 60_000;
 
 function statusKey(s) {
   return (s ?? "").toLowerCase().replace(/[\s_]+/g, "");
@@ -85,7 +84,7 @@ export default function AdminPanel() {
     barangayRanking,
     severityStats,
     loading: loadingAnalytics,
-  } = useAnalytics();
+  } = useAnalytics({ role: "admin" });
 
   const [sla,             setSla]             = useState(null);
   const [aiInsights,      setAiInsights]      = useState(null);
@@ -149,8 +148,7 @@ export default function AdminPanel() {
 
   useEffect(() => {
     loadExtra();
-    const poll = setInterval(loadExtra, POLL_MS);
-    return () => { cancelRef.current = true; clearInterval(poll); };
+    return () => { cancelRef.current = true; };
   }, [loadExtra]);
 
   // Auto-select top barangay once ranking data arrives.
