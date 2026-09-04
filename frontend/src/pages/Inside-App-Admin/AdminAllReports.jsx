@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import "./AdminAllReports.css";
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal";
 import { getReports, updateReport, deleteReport, addComment } from "../../api/reports";
-import { getProjects, getProjectCompletion } from "../../api/projects";
+import { getProjects, getProjectCompletion, getAvailableContractors, assignContractor, createProject } from "../../api/projects";
 import { sendNotification } from "../../api/notifications";
 import { REPORT_STATUS } from "../../constants/reportStatus";
 import { resolveMediaUrl } from "../../utils/mediaUrl";
@@ -943,7 +943,125 @@ export default function AdminAllReports() {
     </>
   );
 }
+const ASSIGN_STATUS_LABELS = {
+  scheduled:   "Assigned",
+  in_progress: "In Progress",
+  completed:   "Completed",
+  cancelled:   "Cancelled",
+};
 
+function AssignContractorSection({ report, initialProject, onAssigned }) {
+  const [contractors, setContractors] = useState([]);
+  const [project,     setProject]     = useState(initialProject || null);
+  const [selectedId,  setSelectedId]  = useState(
+    initialProject?.contractor?.id ?? initialProject?.contractor_id ?? null
+  );
+  const [loading,   setLoading]   = useState(true);
+  const [assigning, setAssigning] = useState(false);
+  const [error,     setError]     = useState(null);
+  const [success,   setSuccess]   = useState(null);
+
+  useEffect(() => {
+    getAvailableContractors().then((res) => {
+      if (res.success) setContractors(res.data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleAssign = async () => {
+    if (!selectedId) return;
+    setAssigning(true); setError(null); setSuccess(null);
+
+    let projectId = project?.id;
+    if (!projectId) {
+      const res = await createProject({ report_id: report.id });
+      if (!res.success) {
+        setError(res.error || "Failed to create project");
+        setAssigning(false);
+        return;
+      }
+      projectId = res.data?.id;
+      setProject(res.data);
+    }
+
+    const res = await assignContractor(projectId, selectedId);
+    if (!res.success) {
+      setError(res.error || "Failed to assign contractor");
+      setAssigning(false);
+      return;
+    }
+    setProject(res.data);
+    const found = contractors.find((c) => c.id === selectedId);
+    setSuccess(`Assigned to ${found?.full_name || "contractor"}`);
+    setAssigning(false);
+    onAssigned?.(res.data);
+  };
+
+  const projStatus   = project?.status?.toLowerCase();
+  const assignedName = project?.contractor?.full_name
+                     ?? project?.contractor?.email
+                     ?? contractors.find((c) => c.id === project?.contractor_id)?.full_name
+                     ?? null;
+
+  return (
+    <div className="vmr-action-card">
+      <div className="vmr-action-hdr">
+        <Wrench size={20} className="vmr-action-ico vmr-ico-start" />
+        <div><h4>Assign Contractor</h4><p>Assign and track a contractor for this report</p></div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border)", marginTop: 14, paddingTop: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "8px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.82rem", color: "var(--subtext)" }}>Current:</span>
+          {project ? (
+            <>
+              <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}>
+                {assignedName || "No contractor yet"}
+              </span>
+              {projStatus && (
+                <span style={{ fontSize: "0.7rem", fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: "rgba(76,175,80,0.15)", color: "var(--primary)" }}>
+                  {ASSIGN_STATUS_LABELS[projStatus] ?? projStatus}
+                </span>
+              )}
+            </>
+          ) : (
+            <span style={{ fontSize: "0.85rem", color: "var(--subtext)", fontStyle: "italic" }}>
+              Unassigned — no project created yet
+            </span>
+          )}
+        </div>
+
+        {loading ? (
+          <p style={{ fontSize: "0.85rem", color: "var(--subtext)" }}>Loading contractors…</p>
+        ) : (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select
+              style={{ flex: 1, background: "var(--input-bg,var(--card))", border: "1px solid var(--input-border,var(--border))", borderRadius: 8, padding: "8px 12px", fontSize: "0.88rem", color: "var(--text)", fontFamily: "inherit", outline: "none" }}
+              value={selectedId ?? ""}
+              onChange={(e) => setSelectedId(Number(e.target.value) || null)}
+            >
+              <option value="">Select a contractor…</option>
+              {contractors.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.full_name || c.email} · {c.active_project_count} active · {c.is_available ? "✓ Available" : "✗ Busy"}
+                </option>
+              ))}
+            </select>
+            <button
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", background: (!selectedId || assigning) ? "var(--border)" : "var(--primary)", color: (!selectedId || assigning) ? "var(--subtext)" : "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: "0.83rem", fontWeight: 700, cursor: (!selectedId || assigning) ? "not-allowed" : "pointer" }}
+              disabled={!selectedId || assigning}
+              onClick={handleAssign}
+            >
+              {assigning ? "Assigning…" : project?.contractor_id ? "Reassign" : "Assign"}
+            </button>
+          </div>
+        )}
+        {error   && <div style={{ fontSize: "0.78rem", color: "var(--danger,#ef4444)", fontWeight: 600, marginTop: 6 }}>{error}</div>}
+        {success && <div style={{ fontSize: "0.78rem", color: "#16a34a", fontWeight: 600, marginTop: 6 }}>✓ {success}</div>}
+      </div>
+    </div>
+  );
+}
 /* ═══════════════════════════════════════════════════════════════
    REPORT MODAL
    ═══════════════════════════════════════════════════════════════ */
@@ -962,6 +1080,18 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const [customMsg,      setCustomMsg]     = useState("");
   const [completion,     setCompletion]     = useState(null);
   const [compLoading,    setCompLoading]    = useState(false);
+  const [lightboxUrl,    setLightboxUrl]    = useState(null);
+  const [project,        setProject]        = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getProjects().then((res) => {
+      if (cancelled || !res.success) return;
+      const proj = (res.data ?? []).find((p) => p.report_id === r.id);
+      setProject(proj ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [r.id]);
 
   const transitions = STATUS_TRANSITIONS[r.status] ?? [];
   const attachments = r.media_attachments ?? [];
@@ -972,23 +1102,16 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
 
   // Fetch completion details lazily when the report is RESOLVED
   useEffect(() => {
-    if (r.status !== REPORT_STATUS.RESOLVED) return;
+    if (r.status !== REPORT_STATUS.RESOLVED || !project?.id) return;
     let cancelled = false;
     setCompLoading(true);
     setCompletion(null);
-    (async () => {
-      try {
-        const projsRes = await getProjects();
-        const proj = (projsRes.data ?? []).find(p => p.report_id === r.id);
-        if (!proj || cancelled) { if (!cancelled) setCompLoading(false); return; }
-        const cRes = await getProjectCompletion(proj.id);
-        if (!cancelled) setCompletion(cRes.data ?? null);
-      } catch { /* non-fatal */ } finally {
-        if (!cancelled) setCompLoading(false);
-      }
-    })();
+    getProjectCompletion(project.id)
+      .then((res) => { if (!cancelled) setCompletion(res.data ?? null); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setCompLoading(false); });
     return () => { cancelled = true; };
-  }, [r.id, r.status]);
+  }, [r.status, project?.id]);
 
   useEffect(() => {
     const fn = (e) => { if (e.key === "Escape") onClose(); };
@@ -1274,6 +1397,14 @@ return (
                 </div>
               </div>
 
+              {(r.status === REPORT_STATUS.VERIFIED || r.status === REPORT_STATUS.IN_PROGRESS) && (
+                <AssignContractorSection
+                  report={r}
+                  initialProject={project}
+                  onAssigned={(proj) => setProject(proj)}
+                />
+              )}
+
               {transitions.length > 0 ? (
                 <div className="vmr-action-card">
                   <div className="vmr-action-hdr">
@@ -1455,7 +1586,14 @@ return (
                       <p className="vmr-compl-photos-lbl"><Camera size={13} /> Completion Photos</p>
                       <div className="vmr-compl-photos-row">
                         {completion.completion_photos.map((ph) => (
-                          <img key={ph.id} src={resolveMediaUrl(ph.file_url)} alt={ph.file_name ?? "Completion photo"} className="vmr-compl-photo" />
+                          <img
+                            key={ph.id}
+                            src={resolveMediaUrl(ph.file_url)}
+                            alt={ph.file_name ?? "Completion photo"}
+                            className="vmr-compl-photo"
+                            style={{ cursor: "pointer" }}
+                            onClick={() => setLightboxUrl(resolveMediaUrl(ph.file_url))}
+                          />
                         ))}
                       </div>
                     </div>
@@ -1467,6 +1605,27 @@ return (
 
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="vmr-lightbox-overlay"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="vmr-lightbox-close"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close preview"
+          >
+            <X size={22} />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Completion photo full view"
+            className="vmr-lightbox-img"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

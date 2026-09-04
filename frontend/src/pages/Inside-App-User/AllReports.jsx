@@ -5,11 +5,14 @@ import {
   ChevronDown, ChevronUp, ImageOff, MapPin, Calendar,
   Activity, Shield, TrendingUp, Database, Search,
   FileText, Clock, Image as ImageIcon, Wrench, CircleCheck,
-  ShieldX, CheckCheck, Send, FileSearch, Info,
+  ShieldX, CheckCheck, Send, FileSearch, Info, Camera, ZoomIn, Wallet,
 } from "lucide-react";
 import "./AllReports.css";
 import { useReports } from "../../hooks/useReports";
 import { SkeletonTableRow } from "../../components/SkeletonRow";
+// ASSUMPTION: adjust this path/export name to match your actual API module.
+// Must be reachable by a citizen (report owner), not admin-only.
+import { getProjects, getProjectCompletion } from "../../api/projects";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
@@ -131,17 +134,53 @@ function ReportModal({ report, onClose }) {
   const imageUrl = getImageUrl(report);
   const [imgError, setImgError] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
+  const [lightboxUrl, setLightboxUrl] = useState(null);
   const status = report.status ?? "";
+  const isResolved = status === "RESOLVED";
+
+  // ── Completion data (resolved reports only, citizen-safe subset) ───────
+  const [completion,  setCompletion]  = useState(report.completion ?? null);
+  const [compLoading, setCompLoading] = useState(false);
+  const [compError,   setCompError]   = useState(null);
+
+  useEffect(() => {
+    if (!isResolved || report.completion) return;
+    let cancelled = false;
+    setCompLoading(true);
+    setCompError(null);
+
+    (async () => {
+      try {
+        const projsRes = await getProjects();
+        const proj = (projsRes?.data ?? []).find((p) => p.report_id === report.id);
+        if (!proj) {
+          if (!cancelled) setCompError("no-linked-project");
+          return;
+        }
+        const cRes = await getProjectCompletion(proj.id);
+        console.log("[DEBUG] project found:", proj);
+        console.log("[DEBUG] completion response:", cRes);
+        if (!cancelled) setCompletion(cRes?.data ?? null);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[ReportModal] Failed to load completion for report #${report.id}:`, err);
+        if (!cancelled) setCompError("fetch-failed");
+      } finally {
+        if (!cancelled) setCompLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isResolved, report.completion, report.id]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    document.body.classList.add("report-modal-open");
+    document.body.classList.add("arm-modal-open");
     return () => {
       document.body.style.overflow = "";
-      document.body.classList.remove("report-modal-open");
+      document.body.classList.remove("arm-modal-open");
     };
   }, []);
-
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
@@ -152,6 +191,7 @@ function ReportModal({ report, onClose }) {
     { id: "details",  label: "Details",  Icon: FileText },
     { id: "timeline", label: "Timeline", Icon: Clock },
     { id: "media",    label: "Media",    Icon: ImageIcon },
+    ...(isResolved ? [{ id: "completion", label: "Completion", Icon: CircleCheck }] : []),
   ];
 
   return createPortal(
@@ -201,48 +241,69 @@ function ReportModal({ report, onClose }) {
           {activeTab === "details" && (
             <div>
               <div className="arm-detail-grid">
-                {[
-                  { key: "Damage Type", val: report.ai_damage_type ?? "—", Icon: FileText },
-                  { key: "Severity",    val: report.ai_severity ?? "—",    Icon: TrendingUp },
-                  { key: "Submitted",   val: fmtDate(report.created_at),  Icon: Calendar },
-                  { key: "Barangay",    val: report.barangay ?? "—",       Icon: MapPin },
-                  { key: "Street",      val: report.street_name ?? "—",    Icon: MapPin },
-                  {
-                    key: "Coordinates",
-                    val: report.latitude != null && report.longitude != null
-                      ? `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}`
-                      : "—",
-                    Icon: MapPin,
-                  },
-                  ...(report.upvote_count > 0 ? [{ key: "Upvotes", val: `${report.upvote_count} people`, Icon: TrendingUp }] : []),
-                ].map(({ key, val, Icon }) => (
-                  <div key={key} className="arm-detail-item">
-                    <span className="arm-detail-key"><Icon size={12} aria-hidden="true" />{key}</span>
-                    <span className={key === "Severity" ? `arm-detail-val severity ${toClass(report.ai_severity ?? "")}` : "arm-detail-val"}>
-                      {val}
-                    </span>
+                <div className="arm-detail-item">
+                  <div className="arm-detail-key"><AlertTriangle size={13} aria-hidden="true" /><span>DAMAGE TYPE</span></div>
+                  <div className="arm-detail-val">{report.ai_damage_type ?? "—"}</div>
+                </div>
+
+                <div className="arm-detail-item">
+                  <div className="arm-detail-key"><TrendingUp size={13} aria-hidden="true" /><span>SEVERITY</span></div>
+                  <div className={`arm-detail-val severity-pill ${toClass(report.ai_severity ?? "")}`}>
+                    {(report.ai_severity ?? "—").toString().toUpperCase()}
                   </div>
-                ))}
+                </div>
+
+                <div className="arm-detail-item">
+                  <div className="arm-detail-key"><Clock size={13} aria-hidden="true" /><span>SUBMITTED</span></div>
+                  <div className="arm-detail-val">{fmtDate(report.created_at)}</div>
+                </div>
+
+                <div className="arm-detail-item">
+                  <div className="arm-detail-key"><MapPin size={13} aria-hidden="true" /><span>BARANGAY</span></div>
+                  <div className="arm-detail-val">{report.barangay ?? "—"}</div>
+                </div>
+
+                <div className="arm-detail-item">
+                  <div className="arm-detail-key"><MapPin size={13} aria-hidden="true" /><span>STREET</span></div>
+                  <div className="arm-detail-val">{report.street_name ?? "—"}</div>
+                </div>
+
+                {report.latitude != null && report.longitude != null && (
+                  <div className="arm-detail-item">
+                    <div className="arm-detail-key"><MapPin size={13} aria-hidden="true" /><span>COORDINATES</span></div>
+                    <div className="arm-detail-val">{report.latitude.toFixed(5)}, {report.longitude.toFixed(5)}</div>
+                  </div>
+                )}
+
+                {report.upvote_count > 0 && (
+                  <div className="arm-detail-item">
+                    <div className="arm-detail-key"><Activity size={13} aria-hidden="true" /><span>UPVOTES</span></div>
+                    <div className="arm-detail-val">{report.upvote_count} people</div>
+                  </div>
+                )}
 
                 {report.ai_confidence != null && (
-                  <div className="arm-detail-item" style={{ gridColumn: "span 2" }}>
-                    <span className="arm-detail-key"><Activity size={12} aria-hidden="true" />AI Confidence</span>
+                  <div className="arm-detail-item arm-detail-item--full">
+                    <div className="arm-detail-key"><Shield size={13} aria-hidden="true" /><span>AI CONFIDENCE</span></div>
                     <div className="arm-confidence-wrap">
                       <span className="arm-confidence-text">{(report.ai_confidence * 100).toFixed(1)}%</span>
-                      <div className="arm-confidence-track">
-                        <span className="arm-confidence-fill" style={{ width: `${(report.ai_confidence * 100).toFixed(0)}%` }} />
-                      </div>
+                      <span className="arm-confidence-track">
+                        <span
+                          className="arm-confidence-fill"
+                          style={{ width: `${Math.min(100, report.ai_confidence * 100)}%` }}
+                        />
+                      </span>
                     </div>
                   </div>
                 )}
-              </div>
 
-              {report.description && (
-                <div className="arm-detail-description">
-                  <span className="arm-detail-key"><Info size={12} aria-hidden="true" />Description</span>
-                  <p>{report.description}</p>
-                </div>
-              )}
+                {report.description && (
+                  <div className="arm-detail-item arm-detail-item--full">
+                    <div className="arm-detail-key"><Info size={13} aria-hidden="true" /><span>DESCRIPTION</span></div>
+                    <p className="arm-detail-desc-text">{report.description}</p>
+                  </div>
+                )}
+              </div>
 
               {status === "DECLINED" && report.decline_reason && (
                 <div className="decline-reason">
@@ -263,18 +324,25 @@ function ReportModal({ report, onClose }) {
               )}
             </div>
           )}
-
           {activeTab === "timeline" && <ReportTimeline report={report} />}
 
           {activeTab === "media" && (
             <div className="arm-modal-media">
               {imageUrl && !imgError ? (
-                <img
-                  src={imageUrl}
-                  alt={`Report #${report.id} media`}
-                  onError={() => setImgError(true)}
-                  loading="lazy"
-                />
+                <button
+                  type="button"
+                  className="arm-media-zoom-btn"
+                  onClick={() => setLightboxUrl(imageUrl)}
+                  aria-label="Expand image"
+                >
+                  <img
+                    src={imageUrl}
+                    alt={`Report #${report.id} media`}
+                    onError={() => setImgError(true)}
+                    loading="lazy"
+                  />
+                  <span className="arm-media-zoom-hint"><ZoomIn size={14} /> Tap to expand</span>
+                </button>
               ) : (
                 <div className="no-image">
                   <ImageOff size={32} />
@@ -283,8 +351,109 @@ function ReportModal({ report, onClose }) {
               )}
             </div>
           )}
+
+          {activeTab === "completion" && isResolved && (
+            <div className="arm-completion-tab">
+              {compLoading ? (
+                <p className="arm-compl-loading">Loading completion details…</p>
+              ) : compError === "no-linked-project" ? (
+                <p className="arm-compl-empty">
+                  This report is resolved, but no repair project has been linked to it yet.
+                  Please check back later or contact support if this persists.
+                </p>
+              ) : compError === "fetch-failed" ? (
+                <p className="arm-compl-empty">
+                  Couldn't load completion details right now. Please try again later.
+                </p>
+              ) : !completion ? (
+                <p className="arm-compl-empty">No completion details available yet.</p>
+              ) : (
+                <>
+                  <div className="arm-info-grid">
+                    {completion.completed_at && (
+                      <div className="arm-info-card">
+                        <div className="arm-info-hdr"><Calendar size={13} aria-hidden="true" /><span>COMPLETED ON</span></div>
+                        <div className="arm-info-body">
+                          <div className="arm-info-row"><span className="arm-info-lbl">Date</span><span className="arm-info-val">{fmtDate(completion.completed_at)}</span></div>
+                        </div>
+                      </div>
+                    )}
+                    {completion.actual_cost != null && (
+                      <div className="arm-info-card">
+                        <div className="arm-info-hdr"><Wallet size={13} aria-hidden="true" /><span>REPAIR COST</span></div>
+                        <div className="arm-info-body">
+                          <div className="arm-info-row">
+                            <span className="arm-info-lbl">Total</span>
+                            <span className="arm-info-val arm-cost-val">
+                              ₱{Number(completion.actual_cost).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {completion.notes && (
+                      <div className="arm-info-card arm-info-card--full">
+                        <div className="arm-info-hdr"><Info size={13} aria-hidden="true" /><span>REPAIR NOTES</span></div>
+                        <div className="arm-info-body"><p className="arm-info-desc-text">{completion.notes}</p></div>
+                      </div>
+                    )}
+                  </div>
+
+                  {completion.completion_photos?.length > 0 && (
+                    <div className="arm-compl-photos">
+                      <p className="arm-compl-photos-lbl"><Camera size={13} /> Completion Photos</p>
+                      <div className="arm-compl-photos-row">
+                        {completion.completion_photos.map((ph) => {
+                          const url = resolveMediaUrl(ph.file_url);
+                          return (
+                            <button
+                              key={ph.id}
+                              type="button"
+                              className="arm-compl-photo-btn"
+                              onClick={() => setLightboxUrl(url)}
+                              aria-label="Expand completion photo"
+                            >
+                              <img
+                                src={url}
+                                alt={ph.file_name ?? "Completion photo"}
+                                className="arm-compl-photo"
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="arm-lightbox-overlay"
+          onClick={() => setLightboxUrl(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded photo"
+        >
+          <button
+            className="arm-lightbox-close"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close preview"
+          >
+            <X size={22} />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Expanded view"
+            className="arm-lightbox-img"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>,
     document.body
   );

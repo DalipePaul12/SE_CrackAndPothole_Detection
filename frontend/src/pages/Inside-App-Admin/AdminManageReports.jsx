@@ -1452,6 +1452,7 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
   const [completion,  setCompletion]  = useState(null);
   const [compLoading, setCompLoading] = useState(false);
   const [showAssign,  setShowAssign]  = useState(openAssign);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
 
   useEffect(() => {
     if (st !== REPORT_STATUS.RESOLVED || !project?.id) return;
@@ -1790,6 +1791,8 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
                             src={resolveMediaUrl(ph.file_url)}
                             alt={ph.file_name ?? "Completion photo"}
                             className="vmr-compl-photo"
+                            style={{ cursor: "pointer" }}
+                            onClick={() => setLightboxUrl(resolveMediaUrl(ph.file_url))}
                           />
                         ))}
                       </div>
@@ -1801,6 +1804,27 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
           )}
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="vmr-lightbox-overlay"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="vmr-lightbox-close"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close preview"
+          >
+            <IcoX size={22} />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Completion photo full view"
+            className="vmr-lightbox-img"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
