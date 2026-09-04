@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useDarkMode } from "../hooks/useDarkMode";
 import { useAuthContext } from "../pages/Contexts/AuthContext.jsx";
-
+import ConfirmChangesModal from "../pages/PopUps/ConfirmChangesModal.jsx";
 import {
   LayoutDashboard, BookOpen, Map, ClipboardList, BookText, GitBranch,
   Sun, Moon, ChevronLeft, ChevronRight, LogOut, Settings, Users, ScrollText
@@ -51,6 +51,7 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   const { user } = useAuthContext();
   const isSuperAdmin = user?.role === "superadmin";
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -62,7 +63,7 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
     if (onClose) onClose();
   }, [location.pathname]);
 
-  const handleLogout = () => {
+  const confirmLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     sessionStorage.clear();
@@ -196,13 +197,25 @@ function AdminSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
         </Link>
         <button
           className="admin-footer-btn admin-logout-btn"
-          onClick={handleLogout}
+          onClick={() => setShowLogoutConfirm(true)}
           title={isCollapsed ? "Logout" : ""}
         >
           <LogOut size={18} />
           <span className={isCollapsed ? "hidden" : ""}>Logout</span>
         </button>
       </div>
+
+      {showLogoutConfirm && (
+        <ConfirmChangesModal
+          title="Log Out?"
+          message="You will be signed out of this session."
+          confirmText="Log Out"
+          variant="info"
+          hideCancel={false}
+          onConfirm={() => { setShowLogoutConfirm(false); confirmLogout(); }}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
+      )}
     </aside>
   );
 }

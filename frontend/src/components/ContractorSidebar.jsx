@@ -2,6 +2,7 @@ import "./ContractorSidebar.css";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useDarkMode } from "../hooks/useDarkMode";
+import ConfirmChangesModal from "../pages/PopUps/ConfirmChangesModal.jsx";
 
 import {
   LayoutDashboard, ClipboardList, CheckSquare,
@@ -48,6 +49,7 @@ function ContractorSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   const navigate  = useNavigate();
   const { isDark, toggle } = useDarkMode();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -59,7 +61,7 @@ function ContractorSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
     if (onClose) onClose();
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleLogout = () => {
+  const confirmLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     sessionStorage.clear();
@@ -143,13 +145,25 @@ function ContractorSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
 
         <button
           className="contractor-footer-btn contractor-logout-btn"
-          onClick={handleLogout}
+          onClick={() => setShowLogoutConfirm(true)}
           title={isCollapsed ? "Logout" : ""}
         >
           <LogOut size={18} />
           <span className={isCollapsed ? "hidden" : ""}>Logout</span>
         </button>
       </div>
+
+      {showLogoutConfirm && (
+        <ConfirmChangesModal
+          title="Log Out?"
+          message="You will be signed out of this session."
+          confirmText="Log Out"
+          variant="info"
+          hideCancel={false}
+          onConfirm={() => { setShowLogoutConfirm(false); confirmLogout(); }}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
+      )}
     </aside>
   );
 }

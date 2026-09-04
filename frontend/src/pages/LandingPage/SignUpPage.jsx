@@ -85,7 +85,7 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
       });
 
       if (!res.success) {
-        throw res.error || new Error("Registration failed.");
+        throw new Error(res.error || "Registration failed."); 
       }
 
       showModal(

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useTheme } from "../pages/Contexts/ThemeContext";
 import { useNotifications } from "../pages/Contexts/NotificationContext";
 import CreateReport from "../pages/Inside-App-User/CreateReport";
+import ConfirmChangesModal from "../pages/PopUps/ConfirmChangesModal.jsx";
 
 import {
   LayoutDashboard, BookOpen, Map, User, Compass,
@@ -52,6 +53,7 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onReportM
   const location = useLocation();
   const navigate = useNavigate();
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const isDark = theme === "dark";
 
@@ -65,7 +67,7 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onReportM
     if (onClose) onClose();
   }, [location.pathname]);
 
-  const handleLogout = () => {
+  const confirmLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     sessionStorage.clear();
@@ -211,13 +213,25 @@ function UserSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onReportM
 
         <button
           className="user-footer-btn user-logout-btn"
-          onClick={handleLogout}
+          onClick={() => setShowLogoutConfirm(true)}
           title={isCollapsed ? "Logout" : ""}
         >
           <LogOut size={18} />
           <span className={isCollapsed ? "hidden" : ""}>Logout</span>
         </button>
       </div>
+
+      {showLogoutConfirm && (
+        <ConfirmChangesModal
+          title="Log Out?"
+          message="You will be signed out of this session."
+          confirmText="Log Out"
+          variant="info"
+          hideCancel={false}
+          onConfirm={() => { setShowLogoutConfirm(false); confirmLogout(); }}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
+      )}
     </aside>
   );
 }
