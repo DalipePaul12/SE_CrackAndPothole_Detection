@@ -330,6 +330,34 @@ input[type="password"]::-webkit-textfield-decoration-container {
 }
 
 /* ============================================
+   FIELD VALIDATION — ERROR STATE
+   ============================================ */
+.icon-input-signup input.input-error,
+.sign-up-label-form select.input-error {
+  border-color: #c0392b !important;
+  background-color: rgba(192, 57, 43, 0.06);
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.12);
+}
+
+.icon-input-signup input.input-error:focus,
+.sign-up-label-form select.input-error:focus {
+  border-color: #c0392b !important;
+  box-shadow: 0 0 0 4px rgba(192, 57, 43, 0.18);
+}
+
+.field-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+  padding-left: 0.35rem;
+  font-size: clamp(0.7rem, 1.8vw, 0.78rem);
+  font-weight: 600;
+  color: #c0392b;
+  animation: fadeIn 0.2s ease forwards;
+}
+
+/* ============================================
    CUSTOM STYLED DROPDOWNS
    ============================================ */
 .sign-up-label-form select {

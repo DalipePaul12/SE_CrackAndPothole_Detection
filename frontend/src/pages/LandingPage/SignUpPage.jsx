@@ -34,7 +34,9 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
-  const [otpKey, setOtpKey] = useState(0); // forces OTPboxes remount on error/resend
+   const [otpKey, setOtpKey] = useState(0); // forces OTPboxes remount on error/resend
+  const [touched, setTouched] = useState({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const [modal, setModal] = useState({
     show: false, title: "", message: "", variant: "info", onConfirm: null,
@@ -71,8 +73,41 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
 
   const isPasswordValid = Object.values(passwordChecks).every(Boolean);
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid = emailRegex.test(formData.email.trim());
+  const isFullNameValid = formData.full_name.trim().length >= 2;
+  const isConfirmPasswordValid =
+    formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password;
+
+  const showError = (field, isValid) => (touched[field] || submitAttempted) && !isValid;
+
+  const handleBlur = (e) => {
+    setTouched((prev) => ({ ...prev, [e.target.name]: true }));
+  };
+
   const handleSignUpSubmit = async (e) => {
     e.preventDefault();
+    setSubmitAttempted(true);
+
+    if (!isFullNameValid) {
+      showModal(
+        "Invalid Name",
+        "Please enter your full name (at least 2 characters).",
+        "warning",
+        () => setModal((m) => ({ ...m, show: false }))
+      );
+      return;
+    }
+
+    if (!isEmailValid) {
+      showModal(
+        "Invalid Email",
+        "Please enter a valid email address.",
+        "warning",
+        () => setModal((m) => ({ ...m, show: false }))
+      );
+      return;
+    }
 
     if (!isPasswordValid) {
       showModal(
@@ -232,8 +267,13 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       required
                       value={formData.full_name}
                       onChange={handleChange}
+                      onBlur={handleBlur}
+                      className={showError("full_name", isFullNameValid) ? "input-error" : ""}
                     />
                   </div>
+                  {showError("full_name", isFullNameValid) && (
+                    <span className="field-error-msg">Full name must be at least 2 characters.</span>
+                  )}
                 </div>
 
                 <div className="sign-up-label-form">
@@ -247,8 +287,13 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       required
                       value={formData.email}
                       onChange={handleChange}
+                      onBlur={handleBlur}
+                      className={showError("email", isEmailValid) ? "input-error" : ""}
                     />
                   </div>
+                  {showError("email", isEmailValid) && (
+                    <span className="field-error-msg">Please enter a valid email address.</span>
+                  )}
                 </div>
 
                 <div className="sign-up-label-form-province-city">
@@ -306,6 +351,8 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       value={formData.password}
                       onChange={handleChange}
                       onFocus={() => setPasswordFocused(true)}
+                      onBlur={handleBlur}
+                      className={showError("password", isPasswordValid) ? "input-error" : ""}
                     />
                     <span
                       className="toggle-eye"
@@ -358,6 +405,8 @@ function SignUpPage({ isOpen, onClose, onSwitchToLogin }) {
                       required
                       value={formData.confirmPassword}
                       onChange={handleChange}
+                      onBlur={handleBlur}
+                      className={showError("confirmPassword", isConfirmPasswordValid) ? "input-error" : ""}
                     />
                     <span
                       className="toggle-eye"
