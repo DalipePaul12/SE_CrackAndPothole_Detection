@@ -111,6 +111,7 @@ async def _fetch_report_or_404(db: AsyncSession, report_id: int) -> Report:
             selectinload(Report.media_attachments),
             selectinload(Report.owner),
             selectinload(Report.ai_detections),
+            selectinload(Report.frame_detections),
         )
         .where(Report.id == report_id)
     )
@@ -210,6 +211,59 @@ async def _build_report_list(
         )
         items.append(item)
     return items
+
+
+async def _save_detection_snapshots(
+    db: AsyncSession,
+    report_id: int,
+    snapshots: list,
+) -> None:
+    """
+    Upload each already-annotated (masked/boxed) filmstrip snapshot to
+    Supabase Storage and persist it as a FrameDetection row. Best-effort
+    per snapshot — one bad/undecodable snapshot never blocks the others
+    or fails the whole report submission (the report itself is already
+    committed by the time this runs).
+    """
+    import base64 as _b64
+
+    from app.core.supabase_storage import upload_report_file
+    from app.models.frame_detection import FrameDetection
+
+    for snap in snapshots:
+        try:
+            raw_bytes = _b64.b64decode(snap.image_b64)
+        except Exception:
+            logger.warning(
+                "Skipping undecodable detection snapshot frame=%s for report %d",
+                getattr(snap, "frame", "?"), report_id,
+            )
+            continue
+
+        storage_subpath = f"{report_id}/frames/{snap.frame}_{snap.label}.jpg"
+        try:
+            frame_url = upload_report_file(
+                file_bytes=raw_bytes,
+                storage_path=storage_subpath,
+                content_type="image/jpeg",
+            )
+        except Exception as exc:
+            logger.error(
+                "Frame snapshot upload failed report=%d frame=%s: %s",
+                report_id, snap.frame, exc,
+            )
+            continue
+
+        db.add(FrameDetection(
+            report_id=report_id,
+            frame_index=snap.frame,
+            damage_type=snap.label,
+            confidence=snap.confidence,
+            image_url=frame_url,
+            timestamp_seconds=snap.timestamp_seconds,
+        ))
+
+    await db.commit()
 
 
 def _normalize_status(status_input: ReportStatus | str | None) -> ReportStatus | None:
@@ -321,6 +375,10 @@ async def create_report(
             )
 
     report = await report_service.create_report(db, data, current_user.id)
+
+    if data.detection_snapshots:
+        await _save_detection_snapshots(db, report.id, data.detection_snapshots)
+
     report = await _fetch_report_or_404(db, report.id)
     upvote_count = await report_service.get_upvote_count(db, report.id)
     response = ReportResponse.model_validate(report)

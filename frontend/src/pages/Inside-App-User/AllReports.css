@@ -1349,6 +1349,31 @@ body.dark .no-image {
   display: block;
 }
 
+/* ── Media tab: stacked sections (evidence, then detection frames) ── */
+.arm-media-tab-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.arm-media-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.arm-media-block-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--subtext);
+  margin: 0;
+}
+
 /* ── Media tap-to-expand ─────────────────────────────────────── */
 .arm-media-zoom-btn {
   position: relative;
@@ -1467,9 +1492,82 @@ body.dark .no-image {
   justify-content: center;
   cursor: pointer;
   transition: background 0.2s ease;
+  z-index: 2;
 }
 .arm-lightbox-close:hover {
   background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Lightbox body wraps image + prev/next + counter ─────────── */
+.arm-lightbox-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 92vw;
+  touch-action: pan-y;
+}
+
+.arm-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  z-index: 2;
+}
+.arm-lightbox-nav:hover { background: rgba(255, 255, 255, 0.28); }
+.arm-lightbox-prev { left: 8px; }
+.arm-lightbox-next { right: 8px; }
+
+.arm-lightbox-counter {
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.9;
+  text-align: center;
+  padding: 0 12px;
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Mobile: bigger, thumb-reachable tap targets; keep nav buttons
+   from covering the image on narrow screens */
+@media (max-width: 768px) {
+  .arm-lightbox-nav {
+    width: 42px;
+    height: 42px;
+  }
+  .arm-lightbox-prev { left: 4px; }
+  .arm-lightbox-next { right: 4px; }
+  .arm-lightbox-counter {
+    font-size: 0.74rem;
+  }
+}
+
+/* ── Fix: floating chat/support widgets overlapping modal content.
+   Broaden the selector list so common widget markup patterns are
+   caught even if they don't match the exact classes already listed
+   above. ───────────────────────────────────────────────────────── */
+body.arm-modal-open .chat-fab,
+body.arm-modal-open .floating-chat,
+body.arm-modal-open .support-widget,
+body.arm-modal-open [class*="ChatWidget"],
+body.arm-modal-open [class*="chat-bubble"],
+body.arm-modal-open [id*="chat"],
+body.arm-modal-open iframe[title*="chat" i] {
+  display: none !important;
 }
 
 /* Mobile compact tuning */
@@ -1603,6 +1701,14 @@ body.dark .no-image {
   .arm-modal-media img,
   .arm-modal-media video {
     max-height: 220px;
+  }
+
+  .arm-media-tab-wrap {
+    gap: 14px;
+  }
+
+  .arm-media-block-label {
+    font-size: 0.66rem;
   }
 
   .arm-media-zoom-hint {

@@ -125,6 +125,9 @@ function IcoSliders({ size = 16, ...p }) {
 function IcoDownload({ size = 16, ...p }) {
   return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
 }
+function IcoPlay({ size = 12, ...p }) {
+  return <svg width={size} height={size} className="ico-flex-shrink" viewBox="0 0 24 24" fill="currentColor" {...p}><polygon points="6 3 20 12 6 21 6 3"/></svg>;
+}
 
 // ─── CSV Export ────────────────────────────────────────────────────────────
 function exportCSV(rows, label = "page") {
@@ -1088,7 +1091,23 @@ function AdminManageReports() {
                     </td>
 
                     <td className="col-photo" onClick={e => e.stopPropagation()}>
-                      {media?.url ? (
+                      {media?.url && media.type === "video" ? (
+                        <div
+                          className="photo-thumb photo-thumb--video-wrap"
+                          onClick={e => { e.stopPropagation(); setViewReport(r); }}
+                        >
+                          <video
+                            src={media.url}
+                            className="photo-thumb"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                          <span className="photo-thumb-play-badge" aria-hidden="true">
+                            <IcoPlay size={10} />
+                          </span>
+                        </div>
+                      ) : media?.url ? (
                         <img
                           src={media.url}
                           alt=""
@@ -1458,7 +1477,28 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
   const [completion,  setCompletion]  = useState(null);
   const [compLoading, setCompLoading] = useState(false);
   const [showAssign,  setShowAssign]  = useState(openAssign);
-  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [lightboxItems, setLightboxItems] = useState([]); // [{ url, label }]
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [mediaIndex,  setMediaIndex]  = useState(0);
+
+  const lightboxUrl   = lightboxItems[lightboxIndex]?.url ?? null;
+  const openLightbox  = (items, startIndex = 0) => { setLightboxItems(items); setLightboxIndex(startIndex); };
+  const closeLightbox = () => { setLightboxItems([]); setLightboxIndex(0); };
+  const lightboxNext  = () => setLightboxIndex((i) => (i + 1) % lightboxItems.length);
+  const lightboxPrev  = () => setLightboxIndex((i) => (i - 1 + lightboxItems.length) % lightboxItems.length);
+
+  useEffect(() => { setMediaIndex(0); }, [r.id]);
+
+  useEffect(() => {
+    if (lightboxItems.length === 0) return;
+    const fn = (e) => {
+      if (e.key === "Escape")    closeLightbox();
+      if (e.key === "ArrowRight") lightboxNext();
+      if (e.key === "ArrowLeft")  lightboxPrev();
+    };
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
+  }, [lightboxItems.length]);
 
   useEffect(() => {
     if (st !== REPORT_STATUS.RESOLVED || !project?.id) return;
@@ -1593,21 +1633,105 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
             <div className="vmr-media-tab">
               {mCount > 0 ? (
                 <>
-                  {r.media_attachments.map((att, i) => {
-                    const url = resolveMediaUrl(att.file_url);
-                    return att.media_type === "video"
-                      ? <video key={i} src={url} controls className="vmr-media-main" />
-                      : <img key={i} src={url} alt={`Media ${i + 1}`} className="vmr-media-main" />;
-                  })}
+                  <div style={{ position: "relative", width: "100%", maxWidth: "100%", display: "flex", justifyContent: "center" }}>
+                    {(() => {
+                      const att = r.media_attachments[mediaIndex] ?? r.media_attachments[0];
+                      const url = resolveMediaUrl(att.file_url);
+                      return att.media_type === "video"
+                        ? <video key={mediaIndex} src={url} controls className="vmr-media-main" />
+                        : <img key={mediaIndex} src={url} alt={`Media ${mediaIndex + 1}`} className="vmr-media-main" />;
+                    })()}
+                    {mCount > 1 && (
+                      <>
+                        <button type="button" aria-label="Previous media"
+                          onClick={() => setMediaIndex((i) => (i - 1 + mCount) % mCount)}
+                          style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "1.1rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                        >‹</button>
+                        <button type="button" aria-label="Next media"
+                          onClick={() => setMediaIndex((i) => (i + 1) % mCount)}
+                          style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "1.1rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                        >›</button>
+                      </>
+                    )}
+                  </div>
+
+                  {mCount > 1 && (
+                    <>
+                      <p style={{ fontSize: "0.78rem", color: "var(--subtext)", margin: "4px 0 0" }}>{mediaIndex + 1} / {mCount}</p>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                        {r.media_attachments.map((att, i) => (
+                          <button key={i} type="button" onClick={() => setMediaIndex(i)}
+                            style={{ width: 52, height: 52, borderRadius: 8, overflow: "hidden", padding: 0, cursor: "pointer", background: "var(--bg-secondary)", border: i === mediaIndex ? "2px solid var(--primary)" : "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}
+                          >
+                            {att.media_type === "video"
+                              ? (
+                                <>
+                                  <video
+                                    src={resolveMediaUrl(att.file_url)}
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  />
+                                  <span
+                                    aria-hidden="true"
+                                    style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 20, height: 20, borderRadius: "50%", background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                  >
+                                    <IcoPlay size={10} style={{ color: "#fff" }} />
+                                  </span>
+                                </>
+                              )
+                              : <img src={resolveMediaUrl(att.file_url)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
               ) : (
                 <div className="vmr-media-empty"><IcoCamera size={48}/><p>No media attached</p></div>
+              )}
+
+              {r.frame_detections?.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--subtext)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                    Detection Frames ({r.frame_detections.length})
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
+                    {(() => {
+                      const framesWithImages = r.frame_detections.filter((f) => f.image_url);
+                      return r.frame_detections.map((fd) => (
+                        <button
+                          key={fd.id}
+                          type="button"
+                          onClick={() => {
+                            if (!fd.image_url) return;
+                            const items = framesWithImages.map((f) => ({
+                              url: resolveMediaUrl(f.image_url),
+                              label: `${f.damage_type} ${Math.round(f.confidence * 100)}%`,
+                            }));
+                            const startIndex = framesWithImages.findIndex((f) => f.id === fd.id);
+                            openLightbox(items, startIndex);
+                          }}
+                          style={{ border: "none", padding: 0, cursor: fd.image_url ? "pointer" : "default", borderRadius: 8, overflow: "hidden", position: "relative" }}
+                        >
+                          {fd.image_url && (
+                            <img src={resolveMediaUrl(fd.image_url)} alt={fd.damage_type} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+                          )}
+                          <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: "0.6rem", fontWeight: 700, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "1px 5px", borderRadius: 6 }}>
+                            {fd.damage_type} {Math.round(fd.confidence * 100)}%
+                          </span>
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                </div>
               )}
             </div>
           )}
 
           {/* NOTES */}
-          {activeTab === "notes" && (
+            {activeTab === "notes" && (
             <div className="vmr-notes-tab">
               {r.description && (
                 <div className="vmr-note-card">
@@ -1791,14 +1915,20 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
                     <div className="vmr-compl-photos">
                       <div className="vmr-compl-photos-lbl">Completion Photos</div>
                       <div className="vmr-compl-photos-row">
-                        {completion.completion_photos.map(ph => (
+                        {completion.completion_photos.map((ph, phIdx) => (
                           <img
                             key={ph.id}
                             src={resolveMediaUrl(ph.file_url)}
                             alt={ph.file_name ?? "Completion photo"}
                             className="vmr-compl-photo"
                             style={{ cursor: "pointer" }}
-                            onClick={() => setLightboxUrl(resolveMediaUrl(ph.file_url))}
+                            onClick={() => openLightbox(
+                              completion.completion_photos.map((p) => ({
+                                url: resolveMediaUrl(p.file_url),
+                                label: p.file_name ?? "Completion photo",
+                              })),
+                              phIdx
+                            )}
                           />
                         ))}
                       </div>
@@ -1814,21 +1944,46 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
       {lightboxUrl && (
         <div
           className="vmr-lightbox-overlay"
-          onClick={() => setLightboxUrl(null)}
+          onClick={closeLightbox}
         >
           <button
             className="vmr-lightbox-close"
-            onClick={() => setLightboxUrl(null)}
+            onClick={closeLightbox}
             aria-label="Close preview"
           >
             <IcoX size={22} />
           </button>
-          <img
-            src={lightboxUrl}
-            alt="Completion photo full view"
-            className="vmr-lightbox-img"
-            onClick={(e) => e.stopPropagation()}
-          />
+
+          {lightboxItems.length > 1 && (
+            <>
+              <button
+                type="button"
+                aria-label="Previous image"
+                onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}
+                style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: "1.4rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+              >‹</button>
+              <button
+                type="button"
+                aria-label="Next image"
+                onClick={(e) => { e.stopPropagation(); lightboxNext(); }}
+                style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: "1.4rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+              >›</button>
+            </>
+          )}
+
+          <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+            <img
+              src={lightboxUrl}
+              alt={lightboxItems[lightboxIndex]?.label ?? "Preview"}
+              className="vmr-lightbox-img"
+            />
+            {lightboxItems.length > 1 && (
+              <span style={{ color: "#fff", fontSize: "0.82rem", opacity: 0.85 }}>
+                {lightboxIndex + 1} / {lightboxItems.length}
+                {lightboxItems[lightboxIndex]?.label ? ` — ${lightboxItems[lightboxIndex].label}` : ""}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>

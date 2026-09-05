@@ -15,7 +15,7 @@ import {
   ChevronLeft, ChevronRight, CircleCheck, Clock, Wrench,
   Send, FileSearch, Trash2, Pencil, Share2, Bot, ZoomIn,
   MessageSquare, Info, ShieldX, CheckCheck, MapPin, ChevronDown,
-  Sparkles,
+  Sparkles, Play,
 } from "lucide-react";
 
 const BASE_URL  = import.meta.env.VITE_API_URL || "";
@@ -179,18 +179,38 @@ function NoteComposer({ reportId, onSent }) {
     );
 }
 
-function Lightbox({ src, alt, onClose }) {
+function Lightbox({ items, initialIndex = 0, onClose }) {
+  const [index, setIndex] = useState(initialIndex);
+  const touchStartXRef = useRef(null);
+
+  const next = useCallback(() => setIndex((i) => (i + 1) % items.length), [items.length]);
+  const prev = useCallback(() => setIndex((i) => (i - 1 + items.length) % items.length), [items.length]);
+
   useEffect(() => {
     document.body.style.overflow = "hidden";
     document.body.classList.add("report-modal-open");
-    const h = (e) => { if (e.key === "Escape") onClose(); };
+    const h = (e) => {
+      if (e.key === "Escape")    onClose();
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft")  prev();
+    };
     document.addEventListener("keydown", h);
     return () => {
       document.body.style.overflow = "";
       document.body.classList.remove("report-modal-open");
       document.removeEventListener("keydown", h);
     };
-  }, [onClose]);
+  }, [onClose, next, prev]);
+
+  const handleTouchStart = (e) => { touchStartXRef.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e) => {
+    if (touchStartXRef.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchStartXRef.current;
+    if (Math.abs(dx) > 40) { dx < 0 ? next() : prev(); }
+    touchStartXRef.current = null;
+  };
+
+  const current = items[index];
 
   return (
     <div
@@ -200,11 +220,35 @@ function Lightbox({ src, alt, onClose }) {
       aria-modal="true"
       aria-label="Image preview"
     >
-      <div className="sub-lightbox-inner" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="sub-lightbox-inner"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <button className="sub-lightbox-close" onClick={onClose} aria-label="Close">
           <X size={18} />
         </button>
-        <img src={src} alt={alt} className="sub-lightbox-img" />
+
+        {items.length > 1 && (
+          <>
+            <button className="sub-lightbox-nav sub-lightbox-prev" onClick={prev} aria-label="Previous image">
+              <ChevronLeft size={20} />
+            </button>
+            <button className="sub-lightbox-nav sub-lightbox-next" onClick={next} aria-label="Next image">
+              <ChevronRight size={20} />
+            </button>
+          </>
+        )}
+
+        <img src={current?.url} alt={current?.label ?? "Full preview"} className="sub-lightbox-img" />
+
+        {items.length > 1 && (
+          <div className="sub-lightbox-counter">
+            {index + 1} / {items.length}
+            {current?.label ? ` — ${current.label}` : ""}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -347,7 +391,7 @@ function DeleteConfirmModal({ report, onConfirm, onCancel, loading, error }) {
 
 function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGenerated, initialTab = "details" }) {
   const [comments, setComments]           = useState([]);
-  const [lightboxSrc, setLightboxSrc]     = useState(null);
+  const [lightboxState, setLightboxState] = useState(null); // { items, index }
   const [imgErr1, setImgErr1]             = useState(false);
   const [imgErr2, setImgErr2]             = useState(false);
   const [activeTab, setActiveTab]         = useState(initialTab);
@@ -373,7 +417,15 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
   const proofUrl    = !imgErr2 ? mediaUrl(proofAtt)    : null;
   const liveStatus  = normalizeStatus(liveReport.status);
   const isResolved  = liveStatus === "RESOLVED";
-  const canEdit     = liveStatus === "PENDING" || liveStatus === "DECLINED";
+
+  const openLightbox  = (items, index = 0) => setLightboxState({ items, index });
+  const closeLightbox = () => setLightboxState(null);
+
+  // Evidence + repair proof share one swipeable gallery
+  const mediaGalleryItems = [
+    originalUrl ? { url: originalUrl, label: "Damage Evidence" } : null,
+    (isResolved && proofUrl) ? { url: proofUrl, label: "Repair Proof" } : null,
+  ].filter(Boolean);  const canEdit     = liveStatus === "PENDING" || liveStatus === "DECLINED";
   const canDelete   = liveStatus === "PENDING" || liveStatus === "DECLINED";
 
   const startEdit = () => {
@@ -693,7 +745,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
                           src={originalUrl}
                           alt="Damage evidence"
                           className="sub-zoomable"
-                          onClick={() => setLightboxSrc(originalUrl)}
+                          onClick={() => openLightbox(mediaGalleryItems, 0)}
                           onError={() => setImgErr1(true)}
                         />
                       )
@@ -711,6 +763,40 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
                   )}
                 </div>
 
+                {liveReport.frame_detections?.length > 0 && (
+                  <div className="sub-media-block">
+                    <p className="sub-media-label"><Video size={14} aria-hidden="true" />Detection Frames ({liveReport.frame_detections.length})</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
+                      {(() => {
+                        const framesWithImages = liveReport.frame_detections.filter((f) => f.image_url);
+                        return liveReport.frame_detections.map((fd) => (
+                          <button
+                            key={fd.id}
+                            type="button"
+                            onClick={() => {
+                              if (!fd.image_url) return;
+                              const items = framesWithImages.map((f) => ({
+                                url: resolveMediaUrl(f.image_url),
+                                label: `${f.damage_type} ${Math.round(f.confidence * 100)}%`,
+                              }));
+                              const startIndex = framesWithImages.findIndex((f) => f.id === fd.id);
+                              openLightbox(items, startIndex);
+                            }}
+                            style={{ border: "none", padding: 0, cursor: fd.image_url ? "pointer" : "default", borderRadius: 8, overflow: "hidden", position: "relative" }}
+                          >
+                            {fd.image_url && (
+                              <img src={resolveMediaUrl(fd.image_url)} alt={fd.damage_type} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+                            )}
+                            <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: "0.6rem", fontWeight: 700, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "1px 5px", borderRadius: 6 }}>
+                              {fd.damage_type} {Math.round(fd.confidence * 100)}%
+                            </span>
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
+
                 {isResolved && (
                   <div className="sub-media-block">
                     <p className="sub-media-label"><Wrench size={14} aria-hidden="true" />Repair Proof</p>
@@ -723,7 +809,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
                             src={proofUrl}
                             alt="Repair proof"
                             className="sub-zoomable"
-                            onClick={() => setLightboxSrc(proofUrl)}
+                            onClick={() => openLightbox(mediaGalleryItems, mediaGalleryItems.findIndex((i) => i.label === "Repair Proof"))}
                             onError={() => setImgErr2(true)}
                           />
                         )
@@ -815,8 +901,12 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
         </div>
       </div>
 
-      {lightboxSrc && (
-        <Lightbox src={lightboxSrc} alt="Full preview" onClose={() => setLightboxSrc(null)} />
+      {lightboxState && (
+        <Lightbox
+          items={lightboxState.items}
+          initialIndex={lightboxState.index}
+          onClose={closeLightbox}
+        />
       )}
 
       {showDeleteConfirm && (
@@ -852,7 +942,20 @@ function ReportCard({ report, onView }) {
       <div className="sub-card-thumb">
         {thumbUrl ? (
           att.media_type === "video"
-            ? <Video size={22} aria-hidden="true" />
+            ? (
+              <div className="sub-thumb-video-wrap">
+                <video
+                  src={thumbUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  onError={() => setImgError(true)}
+                />
+                <span className="sub-thumb-play-badge" aria-hidden="true">
+                  <Play size={14} fill="#fff" />
+                </span>
+              </div>
+            )
             : <img src={thumbUrl} alt="Report thumbnail" onError={() => setImgError(true)} />
         ) : (
           <Image size={22} aria-hidden="true" />
@@ -915,7 +1018,20 @@ function TableRow({ report, onView }) {
         <div className="sub-row-thumb">
           {thumbUrl ? (
             att.media_type === "video"
-              ? <Video size={18} aria-hidden="true" />
+              ? (
+                <div className="sub-thumb-video-wrap">
+                  <video
+                    src={thumbUrl}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    onError={() => setImgError(true)}
+                  />
+                  <span className="sub-thumb-play-badge" aria-hidden="true">
+                    <Play size={12} fill="#fff" />
+                  </span>
+                </div>
+              )
               : <img src={thumbUrl} alt="" onError={() => setImgError(true)} />
           ) : (
             <Image size={18} aria-hidden="true" />

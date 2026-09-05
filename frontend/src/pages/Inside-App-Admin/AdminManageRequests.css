@@ -270,7 +270,7 @@
 .report-thumb {
   width: 48px;
   height: 48px;
-  border-radius: 10px;
+  border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
   border: 2px solid var(--border);
@@ -280,7 +280,6 @@
 
 .report-thumb:hover { transform: scale(1.08); }
 
-.report-thumb--video,
 .report-thumb--empty {
   display: flex;
   align-items: center;
@@ -288,8 +287,40 @@
   background: var(--primary-subtle);
   font-size: 1.4rem;
   color: var(--primary);
+  border-radius: 50%;
 }
 
+.report-thumb--video-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.report-thumb--video-wrap .report-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 50%;
+}
+
+.report-thumb-play-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
 .report-location {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -1544,6 +1575,14 @@
   .report-thumb {
     width: 36px;
     height: 36px;
+  }
+  .report-thumb--video-wrap {
+    width: 36px;
+    height: 36px;
+  }
+  .report-thumb-play-badge {
+    width: 16px;
+    height: 16px;
   }
   .admin-confirm-btn,
   .admin-decline-btn {

@@ -193,30 +193,63 @@ def _adaptive_threshold(label: str, blur: float, is_video: bool = False) -> floa
 
 # ── Filmstrip snapshot helper ────────────────────────────────────────────────
 
-def _annotate_frame(frame_bgr: np.ndarray, boxes: list[dict], label: str) -> str:
-    """Draw bounding boxes and return base64 JPEG."""
+def _annotate_frame(frame_bgr: np.ndarray, boxes: list[dict], label: str | None = None) -> str:
+    """Draw bounding boxes + segmentation masks and return base64 JPEG.
+
+    Each box is colored/labeled using its OWN `label` field when present
+    (so a frame with both pothole + crack boxes renders both correctly),
+    falling back to the `label` argument for older single-type callers.
+
+    Rendering rule:
+      - The bounding box is ALWAYS a thin outline only (never filled) — it
+        marks the general detection region, not the damage shape itself.
+      - When a real segmentation polygon is available (has_mask=True), the
+        exact damage shape is filled + outlined separately, inside the box.
+      - If no mask data exists for a detection, only the outline + label
+        are drawn — never a synthetic fill standing in for a real mask.
+    """
     annotated = frame_bgr.copy()
-    color = (0, 60, 220) if label == "pothole" else (0, 140, 255)
+    h, w = annotated.shape[:2]
 
     for b in boxes:
+        box_label = b.get("label", label) or "damage"
+        color = (0, 60, 220) if box_label == "pothole" else (0, 140, 255)
+
         x1 = int(round(b["x"]))
         y1 = int(round(b["y"]))
         x2 = int(round(b["x"] + b["width"]))
         y2 = int(round(b["y"] + b["height"]))
 
-        h, w = annotated.shape[:2]
         x1 = max(0, min(x1, w - 1))
         y1 = max(0, min(y1, h - 1))
         x2 = max(0, min(x2, w))
         y2 = max(0, min(y2, h))
 
-        overlay = annotated.copy()
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
-        cv2.addWeighted(overlay, 0.15, annotated, 0.85, 0, annotated)
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+        # ── Real segmentation mask (exact damage shape) — drawn first so
+        #    the box outline and label pill layer cleanly on top of it.
+        segments = b.get("segments")
+        if b.get("has_mask") and segments:
+            # Video pipeline always wraps as [points]; guard defensively
+            # in case a flat list ever reaches this function.
+            polygon = (
+                segments[0]
+                if segments and isinstance(segments[0], (list, tuple))
+                   and segments[0] and isinstance(segments[0][0], (list, tuple, float, int))
+                   and isinstance(segments[0][0], (list, tuple))
+                else segments
+            )
+            pts = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
+            if len(pts) >= 3:
+                mask_overlay = annotated.copy()
+                cv2.fillPoly(mask_overlay, [pts], color)
+                cv2.addWeighted(mask_overlay, 0.35, annotated, 0.65, 0, annotated)
+                cv2.polylines(annotated, [pts], isClosed=True, color=color, thickness=2, lineType=cv2.LINE_AA)
+
+        # ── Bounding box — thin outline only, never filled.
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 1, lineType=cv2.LINE_AA)
 
         conf_pct = int(b["confidence"] * 100)
-        text = f"{label.upper()} {conf_pct}%"
+        text = f"{box_label.upper()} {conf_pct}%"
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
         pill_y1 = max(y1 - th - 8, 0)
         pill_y2 = max(y1, th + 8)
@@ -231,6 +264,67 @@ def _annotate_frame(frame_bgr: np.ndarray, boxes: list[dict], label: str) -> str
     _, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 78])
     return base64.b64encode(jpeg.tobytes()).decode("utf-8")
 
+
+def _to_legacy_box_fields(det: dict) -> dict:
+    """_infer_frame_all() returns absolute coords as det['box']=[x1,y1,x2,y2].
+    The temporal tracker + _annotate_frame still expect x/y/width/height —
+    this adapter adds those without dropping segments/segments_norm/has_mask,
+    so masks survive all the way from YOLO into the video's all_detections."""
+    if det.get("box"):
+        x1, y1, x2, y2 = det["box"]
+        return {**det, "x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1}
+    return det
+
+
+def _select_diverse_snapshots(candidates: list[dict], max_snapshots: int) -> list[dict]:
+    """
+    Pick up to `max_snapshots` representative per-second frames, spread
+    across every distinct damage-type combination seen (pothole-only,
+    crack-only, both) instead of letting whichever label happens to
+    appear first in the loop fill every slot with near-duplicates.
+    Returns FEWER than max_snapshots when the video simply doesn't have
+    that many distinct detections — never pads with duplicates.
+    """
+    if not candidates:
+        return []
+
+    groups: dict[tuple, list[dict]] = defaultdict(list)
+    for c in candidates:
+        groups[c["labels"]].append(c)
+    for g in groups.values():
+        g.sort(key=lambda c: c["confidence"], reverse=True)
+
+    group_keys = list(groups.keys())
+    selected: list[dict] = []
+    seen_frames: set[int] = set()
+    idx = 0
+    safety = max_snapshots * len(group_keys) + 10
+    while len(selected) < max_snapshots and any(groups[k] for k in group_keys) and idx < safety:
+        key = group_keys[idx % len(group_keys)]
+        bucket = groups[key]
+        if bucket:
+            cand = bucket.pop(0)
+            if cand["frame_idx"] not in seen_frames:
+                selected.append(cand)
+                seen_frames.add(cand["frame_idx"])
+        idx += 1
+
+    selected.sort(key=lambda c: c["frame_idx"])
+
+    snapshots = []
+    for cand in selected:
+        try:
+            b64 = _annotate_frame(cand["frame_bgr"], cand["boxes"])
+            snapshots.append({
+                "frame": cand["frame_idx"],
+                "timestamp_seconds": cand["timestamp_seconds"],
+                "label": "+".join(cand["labels"]),
+                "confidence": cand["confidence"],
+                "image_b64": b64,
+            })
+        except Exception:
+            logger.warning("Snapshot render failed frame=%d", cand["frame_idx"], exc_info=True)
+    return snapshots
 
 # ── Core YOLO inference — LEGACY (video / realtime) ─────────────────────────
 
@@ -537,7 +631,7 @@ class _TemporalTracker:
 _TARGET_FPS = 5
 _MAX_FRAMES = 300
 _IMGSZ_VIDEO = 480
-_MAX_SNAPSHOTS = 12
+_MAX_SNAPSHOTS = 10
 
 
 def _video_ai_validation_placeholder() -> dict[str, Any]:
@@ -642,13 +736,20 @@ def _process_video_sync(
     skipped_blur = 0
     frame_stats: list[dict] = []
     detection_snapshots: list[dict] = []
+    snapshot_candidates: list[dict] = []
     t_start = time.perf_counter()
 
     try:
         src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        frame_indices = list(range(0, total_frames, max(1, int(src_fps))))
+        # base_indices = true "one sample per second" timeline. Everything
+        # in this set is eligible to become a filmstrip snapshot. The extra
+        # random samples below only help the temporal tracker CONFIRM a
+        # detection faster — they are never shown in the filmstrip, so the
+        # gallery can't fill up with near-duplicate consecutive frames.
+        base_indices = set(range(0, total_frames, max(1, int(src_fps))))
+        frame_indices = list(base_indices)
         if total_frames > 5:
             frame_indices.extend(
                 random.sample(range(0, total_frames), min(50, total_frames // 5))
@@ -656,8 +757,8 @@ def _process_video_sync(
         frame_indices = sorted(set(frame_indices))[:_MAX_FRAMES]
 
         logger.info(
-            "Video: fps=%.1f  total=%d  adaptive_samples=%d",
-            src_fps, total_frames, len(frame_indices),
+            "Video: fps=%.1f  total=%d  adaptive_samples=%d  base_samples=%d",
+            src_fps, total_frames, len(frame_indices), len(base_indices),
         )
 
         # Phase 1: Read frames into buffer
@@ -669,7 +770,11 @@ def _process_video_sync(
             blur = _blur_score(frame_bgr)
             if blur >= BLUR_SKIP_THRESHOLD:
                 frame_buffer.append(frame_bgr.copy())
-                frame_metadata.append({"frame_idx": frame_idx, "blur": blur})
+                frame_metadata.append({
+                    "frame_idx": frame_idx,
+                    "blur": blur,
+                    "is_base_sample": frame_idx in base_indices,
+                })
             else:
                 logger.debug("Frame %d skipped — blur=%.1f", frame_idx, blur)
 
@@ -677,51 +782,51 @@ def _process_video_sync(
         t_start = time.perf_counter()
 
         # Phase 2: Inference + filmstrip
+        # NOTE: now uses _infer_frame_all (box + segmentation polygon)
+        # instead of the legacy _infer_frame (box-only), so video
+        # detections carry real masks just like the image pipeline.
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             for i, frame_bgr in enumerate(frame_buffer):
                 blur = frame_metadata[i]["blur"]
                 frame_idx = frame_metadata[i]["frame_idx"]
+                is_base_sample = frame_metadata[i]["is_base_sample"]
                 enh_frame = _preprocess_video_frame(frame_bgr)
 
                 pothole_future = executor.submit(
-                    _infer_frame, _pothole_model, enh_frame, "pothole",
+                    _infer_frame_all, _pothole_model, enh_frame, "pothole",
                     _IMGSZ_VIDEO, _adaptive_threshold("pothole", blur, True),
                 )
                 crack_future = executor.submit(
-                    _infer_frame, _crack_model, enh_frame, "crack",
+                    _infer_frame_all, _crack_model, enh_frame, "crack",
                     _IMGSZ_VIDEO, _adaptive_threshold("crack", blur, True),
                 )
 
-                pothole_boxes = pothole_future.result()
-                crack_boxes = crack_future.result()
+                pothole_boxes = [_to_legacy_box_fields(d) for d in pothole_future.result()]
+                crack_boxes   = [_to_legacy_box_fields(d) for d in crack_future.result()]
 
                 tracker.update("pothole", pothole_boxes, blur)
                 tracker.update("crack", crack_boxes, blur)
 
-                for det_label, det_boxes in [
-                    ("pothole", pothole_boxes),
-                    ("crack", crack_boxes),
-                ]:
-                    if det_boxes and len(detection_snapshots) < _MAX_SNAPSHOTS:
-                        try:
-                            b64 = _annotate_frame(frame_bgr, det_boxes, det_label)
-                            detection_snapshots.append({
-                                "frame": frame_idx,
-                                "label": det_label,
-                                "confidence": round(
-                                    max(b["confidence"] for b in det_boxes), 4
-                                ),
-                                "image_b64": b64,
-                            })
-                        except Exception:
-                            logger.warning(
-                                "Snapshot failed frame=%d label=%s",
-                                frame_idx, det_label, exc_info=True,
-                            )
+                # Only base (~1/sec) frames become filmstrip candidates —
+                # bonus tracker-confirmation frames are skipped here so the
+                # gallery never fills with near-duplicate consecutive frames.
+                combined_boxes = pothole_boxes + crack_boxes
+                if is_base_sample and combined_boxes:
+                    labels_present = tuple(sorted({b["label"] for b in combined_boxes}))
+                    snapshot_candidates.append({
+                        "frame_idx": frame_idx,
+                        "timestamp_seconds": round(frame_idx / src_fps, 2) if src_fps else None,
+                        "labels": labels_present,
+                        "boxes": combined_boxes,
+                        "confidence": round(max(b["confidence"] for b in combined_boxes), 4),
+                        "frame_bgr": frame_bgr,
+                    })
 
                 frame_stats.append({"frame": frame_idx, "blur": round(blur, 1)})
                 processed += 1
+
+        detection_snapshots = _select_diverse_snapshots(snapshot_candidates, _MAX_SNAPSHOTS)
 
     finally:
         cap.release()
@@ -765,6 +870,13 @@ def _process_video_sync(
             ] if raw else None,
             "norm_bbox": bbox,
             "frames_seen": c.get("frames_seen", 0),
+            # Mask polygon from the most recent confirming frame — a
+            # single-frame representative mask for this tracked detection.
+            "segments":       raw.get("segments"),
+            "segments_norm":  raw.get("segments_norm"),
+            "has_mask":       raw.get("has_mask", False),
+            "image_width":    raw.get("image_width"),
+            "image_height":   raw.get("image_height"),
         }
         all_detections.append(det)
     all_detections.sort(key=lambda d: d.get("confidence", 0), reverse=True)
@@ -845,8 +957,11 @@ def _no_detection_result(
 
 # ── Public async: video pipeline ─────────────────────────────────────────────
 
-async def process_video_pipeline(file_path: str) -> dict[str, Any]:
-    ai_validation = await _video_ai_validation(file_path)
+async def process_video_pipeline(file_path: str, skip_authenticity: bool = False) -> dict[str, Any]:
+    ai_validation = (
+        _video_ai_validation_placeholder() if skip_authenticity
+        else await _video_ai_validation(file_path)
+    )
     return await asyncio.to_thread(_process_video_sync, file_path, ai_validation)
 
 
@@ -953,14 +1068,39 @@ def classification_service(inference_result: dict[str, Any]) -> dict[str, Any]:
 
 # ── Full pipeline — images (MULTI-DETECTION) ─────────────────────────────────
 
-async def process_media_pipeline(image_bytes: bytes) -> dict[str, Any]:
+def _skipped_authenticity_result() -> dict[str, Any]:
+    """Used when media comes from live camera capture — authenticity check
+    is meaningless here since there's no file to have been downloaded/faked."""
+    return {
+        "stage": "authenticity",
+        "status": "pass",
+        "reason": None,
+        "confidence": 0.0,
+        "data": {
+            "authentic": True,
+            "flagged": False,
+            "method": "skipped_live_capture",
+            "ai_validation": {
+                "is_ai_generated": False,
+                "confidence": 0.0,
+                "status": "skipped",
+                "method": "skipped_live_capture",
+                "raw_scores": {},
+            },
+        },
+    }
+
+
+async def process_media_pipeline(image_bytes: bytes, skip_authenticity: bool = False) -> dict[str, Any]:
     """
     Sequential pipeline: authenticity -> presence -> classification.
+    skip_authenticity=True is used for live camera captures, where the
+    authenticity check is not meaningful (no file to have been faked).
     """
     if not settings.AI_ENABLED:
         raise RuntimeError("AI_ENABLED=False in settings")
 
-    authenticity = await authenticity_service(image_bytes)
+    authenticity = _skipped_authenticity_result() if skip_authenticity else await authenticity_service(image_bytes)
     ai_validation = authenticity["data"]["ai_validation"]
 
     load_models()

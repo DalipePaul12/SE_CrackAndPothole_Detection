@@ -381,7 +381,7 @@ function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
   return null;
 }
 
-function Lightbox({ src, isVideo, onClose }) {
+function Lightbox({ src, isVideo, onClose, onNext, onPrev, hasNavigation, counter }) {
   useEffect(() => {
     const h = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", h);
@@ -393,11 +393,18 @@ function Lightbox({ src, isVideo, onClose }) {
         <button className="mv-lightbox-close" onClick={onClose} aria-label="Close">
           <X size={18} strokeWidth={2.5} />
         </button>
+        {hasNavigation && (
+          <>
+            <button className="mv-lightbox-nav mv-lightbox-nav--prev" onClick={onPrev} aria-label="Previous media">‹</button>
+            <button className="mv-lightbox-nav mv-lightbox-nav--next" onClick={onNext} aria-label="Next media">›</button>
+          </>
+        )}
         {isVideo ? (
           <video src={src} controls autoPlay style={{ maxWidth: "100%", maxHeight: "80vh" }} />
         ) : (
           <img src={src} alt="Report evidence" />
         )}
+        {counter && <span className="mv-lightbox-counter">{counter}</span>}
       </div>
     </div>
   );
@@ -420,7 +427,10 @@ export default function MapView() {
   const [flyTarget,    setFlyTarget]    = useState(null);
   const [lightbox,     setLightbox]     = useState(null);
   const [lightboxIsVideo, setLightboxIsVideo] = useState(false);
+  const [lightboxItems, setLightboxItems] = useState([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selected,     setSelected]     = useState(null);
+  const [mediaIndex,   setMediaIndex]   = useState(0);
   const [panelOpen,    setPanelOpen]    = useState(false);
   const [filtersOpen,  setFiltersOpen]  = useState(false);
 
@@ -461,6 +471,7 @@ export default function MapView() {
 
   const openPanel = useCallback((r) => {
     setSelected(r);
+    setMediaIndex(0);
     setPanelOpen(true);
     setFlyTarget([parseFloat(r.latitude), parseFloat(r.longitude)]);
   }, []);
@@ -473,6 +484,15 @@ export default function MapView() {
 
   const tile    = TILES[tileKey];
   const tileUrl = isDark ? tile.dark : tile.light;
+
+  const openGallery = useCallback((items, index = 0) => {
+    const validItems = items.filter((item) => item?.url);
+    if (!validItems.length) return;
+    setLightboxItems(validItems);
+    setLightboxIndex(Math.max(0, Math.min(index, validItems.length - 1)));
+    setLightbox(validItems[Math.max(0, Math.min(index, validItems.length - 1))].url);
+    setLightboxIsVideo(validItems[Math.max(0, Math.min(index, validItems.length - 1))].type === "video");
+  }, []);
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -733,7 +753,86 @@ export default function MapView() {
                 </div>
 
                 <div className="mv-panel-body">
-                  {/* ── Severity + status badges ── */}
+                  {(() => {
+                    const attachments = selected.media_attachments || [];
+                    const mediaCount = attachments.length;
+                    const currentAttachment = attachments[mediaIndex % Math.max(mediaCount, 1)];
+                    const currentUrl = currentAttachment ? resolveMediaUrl(currentAttachment.file_url) : getThumb(selected);
+                    const currentIsVideo = currentAttachment?.media_type === "video";
+                    const frameItems = (selected.frame_detections || [])
+                      .filter((frame) => frame.image_url)
+                      .map((frame) => ({
+                        url: resolveMediaUrl(frame.image_url),
+                        label: `${frame.damage_type || "Detection"} ${Math.round((frame.confidence || 0) * 100)}%`,
+                        type: "image",
+                      }));
+
+                    return (
+                      <>
+                        {/* ── Evidence media ── */}
+                        {currentUrl && (
+                          <div className="mv-media-viewer">
+                            {currentIsVideo ? (
+                              <video
+                                key={`${selected.id}-${mediaIndex}`}
+                                src={currentUrl}
+                                controls
+                                playsInline
+                                preload="metadata"
+                                className="mv-panel-media"
+                              />
+                            ) : (
+                              <button
+                                className="mv-panel-image"
+                                onClick={() => openGallery(
+                                  attachments.filter((attachment) => attachment.media_type !== "video").map((attachment) => ({
+                                    url: resolveMediaUrl(attachment.file_url), type: "image",
+                                  })),
+                                  attachments.slice(0, mediaIndex + 1).filter((attachment) => attachment.media_type !== "video").length - 1
+                                )}
+                                aria-label="Expand photo"
+                              >
+                                <img src={currentUrl} alt="Report evidence" loading="lazy" />
+                                <span className="mv-panel-image-overlay"><Maximize2 size={20} color="#fff" /><span>Expand</span></span>
+                              </button>
+                            )}
+                            {mediaCount > 1 && (
+                              <>
+                                <button className="mv-media-nav mv-media-nav--prev" onClick={() => setMediaIndex((i) => (i - 1 + mediaCount) % mediaCount)} aria-label="Previous media">‹</button>
+                                <button className="mv-media-nav mv-media-nav--next" onClick={() => setMediaIndex((i) => (i + 1) % mediaCount)} aria-label="Next media">›</button>
+                                <span className="mv-media-counter">{mediaIndex + 1} / {mediaCount}</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {mediaCount > 1 && (
+                          <div className="mv-media-thumbs" aria-label="Report media">
+                            {attachments.map((attachment, index) => (
+                              <button key={`${attachment.file_url}-${index}`} type="button" className={`mv-media-thumb${index === mediaIndex ? " mv-media-thumb--active" : ""}`} onClick={() => setMediaIndex(index)} aria-label={`View media ${index + 1}`}>
+                                {attachment.media_type === "video" ? <video src={resolveMediaUrl(attachment.file_url)} muted playsInline /> : <img src={resolveMediaUrl(attachment.file_url)} alt="" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {frameItems.length > 0 && (
+                          <section className="mv-frame-section">
+                            <h3>Detection Frames ({frameItems.length})</h3>
+                            <div className="mv-frame-grid">
+                              {frameItems.map((frame, index) => (
+                                <button key={`${frame.url}-${index}`} type="button" className="mv-frame-card" onClick={() => openGallery(frameItems, index)} aria-label={`View ${frame.label}`}>
+                                  <img src={frame.url} alt={frame.label} loading="lazy" />
+                                  <span>{frame.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </section>
+                        )}
+                      </>
+                    );
+                  })()}
+
                   <div className="mv-panel-badges">
                     <span
                       className="mv-badge mv-badge--sev"
@@ -760,41 +859,6 @@ export default function MapView() {
                       {getStatusLabel(selected.status)}
                     </span>
                   </div>
-
-                  {/* ── Evidence media ── */}
-                  {getThumb(selected) && (
-                    <div
-                      className="mv-panel-image"
-                      onClick={() => !isVideo(selected) && (setLightbox(getThumb(selected)), setLightboxIsVideo(false))}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={isVideo(selected) ? "Video evidence" : "View full-size evidence photo"}
-                      onKeyDown={(e) => e.key === "Enter" && !isVideo(selected) && (setLightbox(getThumb(selected)), setLightboxIsVideo(false))}
-                      style={isVideo(selected) ? { cursor: "default" } : undefined}
-                    >
-                      {isVideo(selected) ? (
-                        <video
-                          src={getThumb(selected)}
-                          muted
-                          playsInline
-                          controls
-                          preload="metadata"
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        />
-                      ) : (
-                        <>
-                          <img
-                            src={getThumb(selected)}
-                            alt="Report evidence"
-                            loading="lazy"
-                          />
-                          <div className="mv-panel-image-overlay">
-                            <Maximize2 size={20} color="#fff" />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
 
                   {/* ── Description (kept standalone — often multi-line) ── */}
                   <div className="mv-panel-section">
@@ -919,9 +983,21 @@ export default function MapView() {
       {/* Lightbox (full-screen media viewer) */}
       {lightbox && (
         <Lightbox
-          src={lightbox}
-          isVideo={lightboxIsVideo}
-          onClose={() => { setLightbox(null); setLightboxIsVideo(false); }}
+          src={lightboxItems.length ? lightboxItems[lightboxIndex]?.url : lightbox}
+          isVideo={lightboxItems.length ? lightboxItems[lightboxIndex]?.type === "video" : lightboxIsVideo}
+          onClose={() => { setLightbox(null); setLightboxIsVideo(false); setLightboxItems([]); }}
+          onNext={() => {
+            if (!lightboxItems.length) return;
+            const next = (lightboxIndex + 1) % lightboxItems.length;
+            setLightboxIndex(next); setLightbox(lightboxItems[next].url);
+          }}
+          onPrev={() => {
+            if (!lightboxItems.length) return;
+            const prev = (lightboxIndex - 1 + lightboxItems.length) % lightboxItems.length;
+            setLightboxIndex(prev); setLightbox(lightboxItems[prev].url);
+          }}
+          hasNavigation={lightboxItems.length > 1}
+          counter={lightboxItems.length > 1 ? `${lightboxIndex + 1} / ${lightboxItems.length}${lightboxItems[lightboxIndex]?.label ? ` — ${lightboxItems[lightboxIndex].label}` : ""}` : null}
         />
       )}
     </div>

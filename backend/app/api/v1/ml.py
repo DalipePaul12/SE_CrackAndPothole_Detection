@@ -10,12 +10,12 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
+    Form,
     HTTPException,
     Request,
     UploadFile,
     status,
 )
-
 from app.core.config import settings
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rate_limiter import limiter
@@ -74,6 +74,7 @@ def _validate_size(contents: bytes, media_type: MediaType, realtime: bool = Fals
 async def analyze_media(
     request: Request,
     file: UploadFile = File(...),
+    source: str = Form("upload"),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -95,8 +96,10 @@ async def analyze_media(
 
     _validate_size(contents, media_type)
 
+    skip_authenticity = source == "capture"
+
     try:
-        result = await process_media_pipeline(contents)
+        result = await process_media_pipeline(contents, skip_authenticity=skip_authenticity)
     except FileNotFoundError as exc:
         logger.error("Model file missing: %s", exc)
         raise HTTPException(
@@ -178,6 +181,7 @@ async def analyze_media(
 async def analyze_video(
     request: Request,
     file: UploadFile = File(...),
+    source: str = Form("upload"),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -201,6 +205,8 @@ async def analyze_video(
 
     _validate_size(contents, MediaType.video)
 
+    skip_authenticity = source == "capture"
+
     suffix   = Path(file.filename or "video.mp4").suffix.lower() or ".mp4"
     tmp_path: str | None = None
 
@@ -211,7 +217,7 @@ async def analyze_video(
         async with aiofiles.open(tmp_path, "wb") as tmp:
             await tmp.write(contents)
 
-        result = await asyncio.shield(process_video_pipeline(tmp_path))
+        result = await asyncio.shield(process_video_pipeline(tmp_path, skip_authenticity=skip_authenticity))
 
     except FileNotFoundError as exc:
         logger.error("Model file missing (video): %s", exc)
@@ -292,6 +298,7 @@ async def analyze_video(
                 "frames_skipped_blur": analytics.get("frames_skipped_blur", 0),
                 "elapsed_seconds":     analytics.get("elapsed_seconds", 0.0),
                 "frame_stats":         analytics.get("frame_stats", []),
+                "detection_snapshots": analytics.get("detection_snapshots", []),
             },
         },
     }

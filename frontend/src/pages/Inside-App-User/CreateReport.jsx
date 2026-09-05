@@ -320,7 +320,9 @@ function DetectionFilmstrip({ snapshots }) {
                   {snap.label.toUpperCase()}
                 </span>
                 <span className="filmstrip-card-conf">{Math.round(snap.confidence * 100)}%</span>
-                <span className="filmstrip-card-frame">#{snap.frame}</span>
+                <span className="filmstrip-card-frame">
+                  {snap.timestamp_seconds != null ? `${snap.timestamp_seconds.toFixed(1)}s` : `#${snap.frame}`}
+                </span>
               </div>
             </button>
           ))}
@@ -340,7 +342,11 @@ function DetectionFilmstrip({ snapshots }) {
               <span className="filmstrip-lb-conf">
                 {Math.round(snapshots[lightbox].confidence * 100)}% confidence
               </span>
-              <span className="filmstrip-lb-frame">Frame #{snapshots[lightbox].frame}</span>
+              <span className="filmstrip-lb-frame">
+                {snapshots[lightbox].timestamp_seconds != null
+                  ? `At ${snapshots[lightbox].timestamp_seconds.toFixed(1)}s`
+                  : `Frame #${snapshots[lightbox].frame}`}
+              </span>
             </div>
             <img src={`data:image/jpeg;base64,${snapshots[lightbox].image_b64}`}
               alt="Expanded detection frame" className="filmstrip-lb-img" />
@@ -746,7 +752,7 @@ function CreateReport({ onClose }) {
   }, []);
 
   // ── runFullAnalysis — CHANGED: extract allDetections from backend ──────────
-  const runFullAnalysis = useCallback(async (f) => {
+  const runFullAnalysis = useCallback(async (f, { source = "upload" } = {}) => {
     const thisId = ++analysisIdRef.current;
     resetAnalysis();
     setIsAnalyzing(true);
@@ -762,7 +768,7 @@ function CreateReport({ onClose }) {
         setAnalysisProgress("Checking video authenticity…");
         result = await analyzeVideo(f, (msg) => {
           if (analysisIdRef.current === thisId) setAnalysisProgress(msg);
-        });
+        }, { source });
         if (analysisIdRef.current !== thisId) return;
         if (!result.success) {
           setAnalyzeError(result.error || "Video analysis failed.");
@@ -790,15 +796,26 @@ function CreateReport({ onClose }) {
           setHfStatus(s);
           setHfConfidence(vidAIVal.confidence ?? null);
           setHfModel(vidAIVal.model ?? null);
+          // Video authenticity is an aggregate across sampled frames, so there's
+          // no single _artificial_score/_real_score pair the way a single image
+          // has. Synthesize one from the aggregate confidence + status so the
+          // Authenticity Confidence bar reflects the real number instead of
+          // defaulting to 0% (it reads from raw_scores, not hfConfidence directly).
+          const aggConf = vidAIVal.confidence ?? 0;
+          const isFlagged = s === "rejected" || s === "flagged_for_review";
+          setHfRawScores({
+            _artificial_score: isFlagged ? aggConf : 1 - aggConf,
+            _real_score: isFlagged ? 1 - aggConf : aggConf,
+          });
           if (s === "approved_for_classification" || s === "skipped") {
             setImageType("REAL");
-          } else if (s === "rejected") {
+          } else if (s === "rejected" || s === "flagged_for_review") {
             setImageType("AI-GENERATED");
             setRequiresReview(true);
-            setReviewReason("AI-generated image detected");
+            setReviewReason("AI-generated video detected across sampled frames");
           }
         } else {
-          setHfStatus("skipped"); setImageType("REAL");
+          setHfStatus("skipped"); setImageType("REAL"); setHfRawScores(null);
         }
 
         setDetectionSnapshots(result.data?.analytics?.detection_snapshots ?? []);
@@ -829,8 +846,8 @@ function CreateReport({ onClose }) {
       } else {
         // ── IMAGE PATH ────────────────────────────────────────────────────
         setCurrentStage("authenticity");
-        setAnalysisProgress("Checking authenticity…");
-        result = await analyzeMedia(f);
+        setAnalysisProgress(source === "capture" ? "Verifying capture…" : "Checking authenticity…");
+        result = await analyzeMedia(f, { source });
         if (analysisIdRef.current !== thisId) return;
         if (!result.success) {
           setAnalyzeError(result.error || "Analysis failed.");
@@ -1160,7 +1177,7 @@ setCameraActive(true);
     setPreview(URL.createObjectURL(blob));
     stopCamera();
     setCapturing(false);
-    await runFullAnalysis(captured);
+    await runFullAnalysis(captured, { source: "capture" });
   }, [capturing, stopCamera, runFullAnalysis]);
 
   const startRecording = useCallback(() => {
@@ -1191,7 +1208,7 @@ setCameraActive(true);
         setCameraActive(false);
         setShowCamera(false);
         setLiveDetection({ detected: false, label: null, confidence: 0, bbox: null, distance: null, status: "idle" });
-        await runFullAnalysis(captured);
+        await runFullAnalysis(captured, { source: "capture" });
       };
       mr.start(100);
       setIsRecording(true);
@@ -1335,7 +1352,7 @@ setCameraActive(true);
       }
     }
 
-    await runFullAnalysis(f);
+    await runFullAnalysis(f, { source: "upload" });
   }, [coords, runFullAnalysis]);
 
   const clearMedia = useCallback((e) => {
@@ -1438,6 +1455,17 @@ setCameraActive(true);
       is_hybrid:        isHybrid,
       secondary_damage: secondaryDamage ?? null,
       detection_note:   detectionNote   ?? null,
+      // Only videos produce filmstrip snapshots today — omit entirely for
+      // images so the payload stays small when there's nothing to send.
+      detection_snapshots: isVideo && detectionSnapshots.length > 0
+        ? detectionSnapshots.map((s) => ({
+            frame: s.frame,
+            timestamp_seconds: s.timestamp_seconds ?? null,
+            label: s.label,
+            confidence: s.confidence,
+            image_b64: s.image_b64,
+          }))
+        : null,
       ai_validation_status:     hfStatus     ?? null,
       ai_validation_confidence: hfConfidence ?? null,
       ai_validation_model:      hfModel      ?? null,
@@ -1521,8 +1549,7 @@ const effectiveSize = useMemo(() => {
 
 const showMask = analysisComplete &&
   maskDetections.length > 0 &&
-  effectiveSize !== null &&
-  !isVideoFile(file);
+  effectiveSize !== null;
 
   const switchTab = useCallback((id) => {
     stopCamera();
@@ -1738,11 +1765,6 @@ const showMask = analysisComplete &&
             </div>
           )}
 
-          {/* Filmstrip */}
-          {activeTab === "video" && analysisComplete && detectionSnapshots.length > 0 && (
-            <DetectionFilmstrip snapshots={detectionSnapshots} />
-          )}
-
           {/* Open camera buttons */}
           {!showCamera && !preview && activeTab === "photo" && (
             <button className="btn-use-camera" onClick={openCamera}
@@ -1872,6 +1894,10 @@ const showMask = analysisComplete &&
               </div>
             )}
           </div>
+
+          {activeTab === "video" && analysisComplete && detectionSnapshots.length > 0 && (
+            <DetectionFilmstrip snapshots={detectionSnapshots} />
+          )}
 
           <LiabilityDisclaimer accepted={disclaimerAccepted} onToggle={setDisclaimerAccepted} />
           {formError && (

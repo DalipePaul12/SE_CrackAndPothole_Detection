@@ -91,9 +91,10 @@ async def _try_hf(image_bytes: bytes) -> dict[str, Any] | None:
     token = (getattr(settings, "HF_API_TOKEN", None) or "").strip()
     if not token or len(token) < 20:
         logger.warning("HF_API_TOKEN missing or too short — skipping HF.")
+        logger.info(f"HF token in use, first/last 4 chars: {token[:4]}...{token[-4:] if len(token) > 4 else ''}")
         return None
 
-    url = f"https://api-inference.huggingface.co/models/{_HF_MODEL}"
+    url = f"https://router.huggingface.co/hf-inference/models/{_HF_MODEL}"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/octet-stream",
@@ -137,20 +138,41 @@ async def _hf_post(image_bytes: bytes, url: str, headers: dict) -> dict[str, Any
         # umm-maybe/AI-image-detector mapping:
         #   label_0 / "real" / "human"      = real
         #   label_1 / "artificial" / "fake" = AI
-        artificial_score: float = (
-            scores.get("artificial", 0.0)
-            or scores.get("ai-generated", 0.0)
-            or scores.get("fake", 0.0)
-            or scores.get("deepfake", 0.0)
-            or scores.get("generated", 0.0)
-            or scores.get("label_1", 0.0)
+        artificial_score_raw = (
+            scores.get("artificial")
+            if scores.get("artificial") is not None
+            else scores.get("ai-generated")
+            if scores.get("ai-generated") is not None
+            else scores.get("fake")
+            if scores.get("fake") is not None
+            else scores.get("deepfake")
+            if scores.get("deepfake") is not None
+            else scores.get("generated")
+            if scores.get("generated") is not None
+            else scores.get("label_1")
         )
-        real_score: float = (
-            scores.get("real", 0.0)
-            or scores.get("human", 0.0)
-            or scores.get("authentic", 0.0)
-            or scores.get("label_0", 0.0)
+        real_score_raw = (
+            scores.get("real")
+            if scores.get("real") is not None
+            else scores.get("human")
+            if scores.get("human") is not None
+            else scores.get("authentic")
+            if scores.get("authentic") is not None
+            else scores.get("label_0")
         )
+
+        # If the HF API returned only one label (top-1 response instead of
+        # the full distribution), the other score is genuinely missing —
+        # not zero. Derive it as the complement so a REAL result doesn't
+        # display as a misleading 0% just because "real"/"human" wasn't
+        # a key in the response.
+        if artificial_score_raw is None and real_score_raw is not None:
+            artificial_score_raw = max(0.0, 1.0 - real_score_raw)
+        if real_score_raw is None and artificial_score_raw is not None:
+            real_score_raw = max(0.0, 1.0 - artificial_score_raw)
+
+        artificial_score: float = artificial_score_raw or 0.0
+        real_score: float = real_score_raw or 0.0
 
         logger.info(
             "HF DECISION: artificial=%.3f real=%.3f",
@@ -238,13 +260,23 @@ def _hardcoded_detect(image_bytes: bytes, max_dim: int = 1024) -> dict[str, Any]
     # Weighted sum
     ai_score = float(sum(_WEIGHTS[k] * raw[k] for k in _WEIGHTS))
     ai_score = max(0.0, min(1.0, ai_score))
-
     # Decision: reject if clearly AI, approve if clearly real
-    # If in middle zone (0.30-0.50), still flag for review rather than blindly approve
     is_ai = ai_score >= _AI_THRESHOLD
-    
-    # Confidence = distance from 0.5 midpoint
-    confidence = round(min(1.0, abs(ai_score - 0.5) * 2.0), 4)
+
+    # Confidence = distance from the ACTUAL decision threshold, not a fixed
+    # 0.5 midpoint. The old formula disagreed with _AI_THRESHOLD (0.25),
+    # so an ai_score of ~0.5 — well past the AI threshold — was showing as
+    # 0% confidence while still being flagged as AI. This scales confidence
+    # relative to how far ai_score sits from the threshold on whichever
+    # side it falls.
+    if is_ai:
+        # How far above the AI threshold, scaled 0.0 (at threshold) to 1.0 (max score)
+        span = max(1.0 - _AI_THRESHOLD, 1e-6)
+        confidence = round(min(1.0, (ai_score - _AI_THRESHOLD) / span), 4)
+    else:
+        # How far below the AI threshold, scaled 0.0 (at threshold) to 1.0 (score of 0)
+        span = max(_AI_THRESHOLD, 1e-6)
+        confidence = round(min(1.0, (_AI_THRESHOLD - ai_score) / span), 4)
 
     logger.info(
         "Hardcoded detector: ai_score=%.3f is_ai=%s signals=%s",

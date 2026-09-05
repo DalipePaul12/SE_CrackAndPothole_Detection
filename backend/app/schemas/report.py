@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import DamageType, ReportStatus, ReportType, SeverityLevel
 from app.schemas.base import AppBaseModel
+from app.schemas.frame_detection import FrameDetectionResponse, FrameSnapshotIn
 from app.schemas.media_attachment import MediaAttachmentResponse
 from app.schemas.user import UserPublic
 
@@ -57,6 +58,13 @@ class ReportCreate(AppBaseModel):
     is_hybrid:        bool                 = False
     secondary_damage: Optional[DamageType] = None
     detection_note:   Optional[str]        = Field(None, max_length=500)
+
+    # ── Video detection filmstrip (already-annotated snapshots from the
+    #    frontend's live analysis) — max ~10 small JPEGs, uploaded to
+    #    storage and persisted as FrameDetection rows on report creation.
+    detection_snapshots: Optional[List[FrameSnapshotIn]] = None
+
+    # ── Philippine coordinate validation ──────────────────────────────────────
 
     # ── Philippine coordinate validation ──────────────────────────────────────
     @field_validator("latitude")
@@ -183,6 +191,7 @@ class ReportResponse(AppBaseModel):
     updated_at: datetime
 
     media_attachments: List[MediaAttachmentResponse] = []
+    frame_detections:  List[FrameDetectionResponse]  = []
 
     # ── SLA (computed server-side, not stored in DB) ──────────────────────────
     # None for terminal statuses (resolved, declined, completed, rejected, cancelled).

@@ -26,9 +26,13 @@ class FrameDetection(Base):
     id          = Column(Integer, primary_key=True, index=True)
     report_id   = Column(Integer, ForeignKey("reports.id", ondelete="CASCADE"), nullable=False, index=True)
     frame_index = Column(Integer, nullable=False)
-    damage_type = Column(String,  nullable=False)   # "crack" | "pothole"
+    damage_type = Column(String,  nullable=False)   # "crack" | "pothole" | "pothole+crack"
     confidence  = Column(Float,   nullable=False)
-    image_path  = Column(String,  nullable=True)    # saved frame crop path
+    image_path  = Column(String,  nullable=True)    # legacy — unused by new snapshot uploads
+    # Public Supabase Storage URL of the annotated (masked/boxed) snapshot JPEG.
+    image_url        = Column(String, nullable=True)
+    # Video timestamp this frame was sampled at, e.g. 4.0 = the ~4-second mark.
+    timestamp_seconds = Column(Float, nullable=True)
     bbox        = Column(JSON,    nullable=True)     # [x1, y1, x2, y2]
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -11,13 +11,12 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-
 import {
   ScanSearch, RefreshCw, Layers, X, Check, AlertTriangle, Wrench, Clock,
   Download, MapPin, User, Calendar, Cpu, Square, ZoomIn, Upload, CircleDot,
-  ChevronRight, Flame, Map, BarChart2, SlidersHorizontal, ChevronDown,
+  ChevronRight, ChevronLeft, Flame, Map, BarChart2, SlidersHorizontal, ChevronDown,
   Search, Navigation, ImageOff, Eye, CheckCircle2, Circle as CircleIcon,
-  Maximize2,
+  Maximize2, Play,
 } from "lucide-react";
 
 function useIsDark() {
@@ -107,8 +106,8 @@ function getSevKey(r) {
   const st = (r.status ?? "").toLowerCase();
   if (st === "resolved") return "resolved";
   const s = (r.ai_severity ?? r.severity ?? "").toLowerCase().replace(/[^a-z_]/g, "");
-  if (["critical", "severe", "high"].includes(s))                        return "critical";
-  if (["non_critical", "noncritical", "non_critical"].includes(s))       return "noncritical";
+  if (["critical", "severe", "high"].includes(s)) return "critical";
+  if (["non_critical", "noncritical"].includes(s)) return "non_critical";
   return "default";
 }
 
@@ -125,6 +124,10 @@ function getImageSrc(r) {
     ?? r?.image_url ?? r?.photo_url ?? r?.image ?? r?.photo ?? r?.attachment_url;
   return resolveMediaUrl(url) ?? null;
 }
+function getMediaType(r) {
+  return r?.media_attachments?.[0]?.media_type ?? "image";
+}
+
 
 const esc = (s) =>
   String(s ?? "—")
@@ -155,7 +158,8 @@ function buildIcon(report) {
 }
 
 function buildPopupHTML(r) {
-  const imgSrc = getImageSrc(r);
+  const imgSrc  = getImageSrc(r);
+  const isVideo = getMediaType(r) === "video";
   const sevCfg = SEVERITY_CONFIG[getSevKey(r)] ?? SEVERITY_CONFIG.default;
   const stCfg  = STATUS_CONFIG[(r.status ?? "pending").toLowerCase()] ?? STATUS_CONFIG.pending;
   return `
@@ -165,10 +169,15 @@ function buildPopupHTML(r) {
         <span class="amv-popup-sev" style="background:${sevCfg.color}">${esc(sevCfg.label)}</span>
       </div>
       ${imgSrc
-        ? `<div class="amv-popup-img-wrap" data-img="${esc(imgSrc)}" style="cursor:zoom-in">
-             <img src="${esc(imgSrc)}" alt="Road damage" class="amv-popup-img" />
-             <span class="amv-popup-img-hint">View Photo</span>
-           </div>`
+        ? isVideo
+          ? `<div class="amv-popup-img-wrap">
+               <video src="${esc(imgSrc)}" class="amv-popup-img" muted playsinline preload="metadata"></video>
+               <span class="amv-popup-play-badge"></span>
+             </div>`
+          : `<div class="amv-popup-img-wrap" data-img="${esc(imgSrc)}" style="cursor:zoom-in">
+               <img src="${esc(imgSrc)}" alt="Road damage" class="amv-popup-img" />
+               <span class="amv-popup-img-hint">View Photo</span>
+             </div>`
         : `<div class="amv-popup-no-img">
              <span>No image available</span>
            </div>`
@@ -271,10 +280,11 @@ function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
   return null;
 }
 
-function PlainMarkers({ reports, onMarkerClick }) {
+function PlainMarkers({ reports, onMarkerClick, onLightbox }) {
   const map = useMap();
   return reports.map((r) => {
-    const imgSrc = getImageSrc(r);
+    const imgSrc  = getImageSrc(r);
+    const isVideo = getMediaType(r) === "video";
     const sevCfg = SEVERITY_CONFIG[getSevKey(r)] ?? SEVERITY_CONFIG.default;
     const stCfg  = STATUS_CONFIG[(r.status ?? "pending").toLowerCase()] ?? STATUS_CONFIG.pending;
     return (
@@ -291,10 +301,17 @@ function PlainMarkers({ reports, onMarkerClick }) {
               <span className="amv-popup-sev" style={{ background: sevCfg.color }}>{sevCfg.label}</span>
             </div>
             {imgSrc ? (
-              <div className="amv-popup-img-wrap">
-                <img src={imgSrc} alt="Road damage" className="amv-popup-img" />
-                <span className="amv-popup-img-hint"><Eye size={12} /> View Photo</span>
-              </div>
+              isVideo ? (
+                <div className="amv-popup-img-wrap">
+                  <video src={imgSrc} className="amv-popup-img" muted playsInline preload="metadata" />
+                  <span className="amv-popup-play-badge" aria-hidden="true" />
+                </div>
+              ) : (
+                <div className="amv-popup-img-wrap" onClick={() => onLightbox(imgSrc)}>
+                  <img src={imgSrc} alt="Road damage" className="amv-popup-img" />
+                  <span className="amv-popup-img-hint"><Eye size={12} /> View Photo</span>
+                </div>
+              )
             ) : (
               <div className="amv-popup-no-img">
                 <ImageOff size={18} /><span>No image available</span>
@@ -425,17 +442,41 @@ function ConfirmStatusDialog({ pending, onConfirm, onCancel, loading }) {
   );
 }
 
-function ImageLightbox({ src, onClose }) {
-  useEffect(() => {
-    const fn = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", fn);
-    return () => document.removeEventListener("keydown", fn);
-  }, [onClose]);
+function Lightbox({ items, index, onClose, onNext, onPrev }) {
+  const current = items[index];
+  if (!current) return null;
   return (
     <div className="amv-lightbox-overlay" onClick={onClose}>
       <button className="amv-lightbox-close" onClick={onClose}><X size={18} strokeWidth={2.5} /></button>
+
+      {items.length > 1 && (
+        <>
+          <button
+            type="button"
+            className="amv-lightbox-nav amv-lightbox-prev"
+            onClick={(e) => { e.stopPropagation(); onPrev(); }}
+            aria-label="Previous"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <button
+            type="button"
+            className="amv-lightbox-nav amv-lightbox-next"
+            onClick={(e) => { e.stopPropagation(); onNext(); }}
+            aria-label="Next"
+          >
+            <ChevronRight size={22} />
+          </button>
+        </>
+      )}
+
       <div className="amv-lightbox-inner" onClick={(e) => e.stopPropagation()}>
-        <img src={src} alt="Road damage" className="amv-lightbox-img" />
+        <img src={current.url} alt={current.label ?? "Road damage"} className="amv-lightbox-img" />
+        {items.length > 1 && (
+          <span className="amv-lightbox-counter">
+            {index + 1} / {items.length}{current.label ? ` — ${current.label}` : ""}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -502,7 +543,8 @@ function ReportStrip({ reports, onSelect }) {
           <div className="amv-strip-empty">No reports match current filters.</div>
         ) : (
           reports.slice(0, 40).map((r) => {
-            const imgSrc = getImageSrc(r);
+            const imgSrc  = getImageSrc(r);
+            const isVideo = getMediaType(r) === "video";
             const sevCfg = SEVERITY_CONFIG[getSevKey(r)] ?? SEVERITY_CONFIG.default;
             return (
               <button
@@ -513,7 +555,14 @@ function ReportStrip({ reports, onSelect }) {
                 aria-label={`Report #${r.id}`}
                 title={`Report #${r.id} — ${r.location_address ?? r.barangay ?? "Unknown"}`}
               >
-                {imgSrc ? (
+                {imgSrc && isVideo ? (
+                  <div className="amv-strip-thumb amv-strip-thumb--video-wrap" aria-hidden="true">
+                    <video src={imgSrc} className="amv-strip-thumb" muted playsInline preload="metadata" />
+                    <span className="amv-strip-play-badge" aria-hidden="true">
+                      <Play size={9} fill="#fff" />
+                    </span>
+                  </div>
+                ) : imgSrc ? (
                   <img src={imgSrc} alt="" className="amv-strip-thumb" aria-hidden="true" />
                 ) : (
                   <div className="amv-strip-thumb amv-strip-thumb--empty" aria-hidden="true">
@@ -580,7 +629,9 @@ function AdminMapView() {
   const [panelOpen,      setPanelOpen      ] = useState(false);
   const [actionLoading,  setActionLoading ] = useState(false);
   const [flyTo,          setFlyTo         ] = useState(null);
-  const [lightboxSrc,    setLightboxSrc   ] = useState(null);
+  const [lightboxItems,  setLightboxItems ] = useState([]); // [{ url, label }]
+  const [lightboxIndex,  setLightboxIndex ] = useState(0);
+  const [mediaIndex,     setMediaIndex    ] = useState(0);
   const [showUpload,     setShowUpload    ] = useState(false);
   const [imgError,       setImgError      ] = useState(false);
 
@@ -648,6 +699,16 @@ function AdminMapView() {
     return () => clearInterval(id);
   }, [loadReports]);
 
+  useEffect(() => {
+    if (lightboxItems.length === 0) return;
+    const fn = (e) => {
+      if (e.key === "Escape")    closeLightbox();
+      if (e.key === "ArrowRight") lightboxNext();
+      if (e.key === "ArrowLeft")  lightboxPrev();
+    };
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
+  }, [lightboxItems.length]);
   // When the map viewport changes, try to load the next page if more exist
   useEffect(() => {
     if (mapBounds) loadMorePages();
@@ -723,6 +784,7 @@ function AdminMapView() {
     setShowBoundsPanel(false);
     setShowUpload(false);
     setImgError(false);
+    setMediaIndex(0);
     setFlyTo([parseFloat(report.latitude), parseFloat(report.longitude)]);
   }, []);
 
@@ -730,6 +792,11 @@ function AdminMapView() {
     setPanelOpen(false);
     setSelectedReport(null);
   }, []);
+
+  const openLightbox  = (items, startIndex = 0) => { setLightboxItems(items); setLightboxIndex(startIndex); };
+  const closeLightbox = () => { setLightboxItems([]); setLightboxIndex(0); };
+  const lightboxNext  = () => setLightboxIndex((i) => (i + 1) % lightboxItems.length);
+  const lightboxPrev  = () => setLightboxIndex((i) => (i - 1 + lightboxItems.length) % lightboxItems.length);
 
   function handleBoundsSelected(bounds) {
     setSelectedBounds(bounds);
@@ -761,8 +828,15 @@ function AdminMapView() {
 
   return (
     <>
-      {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
-
+      {lightboxItems.length > 0 && (
+        <Lightbox
+          items={lightboxItems}
+          index={lightboxIndex}
+          onClose={closeLightbox}
+          onNext={lightboxNext}
+          onPrev={lightboxPrev}
+        />
+      )}
       <div className="amv-shell">
         <div className="amv-root">
 
@@ -926,7 +1000,7 @@ function AdminMapView() {
                   <select className="amv-select" value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
                     <option value="all">All Severity</option>
                     <option value="critical">Critical</option>
-                    <option value="noncritical">Non_Critical</option>
+                    <option value="non_critical">Non_Critical</option>
                   </select>
                 </label>
                 <label className="amv-filter-label">
@@ -980,8 +1054,8 @@ function AdminMapView() {
                   <DrawSelectTool active={drawMode} onBoundsSelected={handleBoundsSelected} />
                   {viewMode === "markers" && (
                     clusterEnabled
-                      ? <ClusterLayer  reports={mapVisibleReports} onMarkerClick={openPanel} />
-                      : <PlainMarkers  reports={mapVisibleReports} onMarkerClick={openPanel} />
+                      ? <ClusterLayer  reports={mapVisibleReports} onMarkerClick={openPanel} onLightbox={(src) => openLightbox([{ url: src }], 0)} />
+                      : <PlainMarkers  reports={mapVisibleReports} onMarkerClick={openPanel} onLightbox={(src) => openLightbox([{ url: src }], 0)} />
                   )}
                 </MapContainer>
               )}
@@ -1020,6 +1094,104 @@ function AdminMapView() {
                 const stCfg  = STATUS_CONFIG[d.status] ?? STATUS_CONFIG.pending;
                 const imgSrc = getImageSrc(selectedReport);
 
+                let mediaContent = null;
+
+                if (imgSrc && !showUpload && !imgError && getMediaType(selectedReport) === "video") {
+                  mediaContent = (
+                    <div className="amv-panel-photo" style={{ cursor: "default" }}>
+                      <video
+                        src={imgSrc}
+                        controls
+                        style={{ width: "100%", height: 178, objectFit: "cover", display: "block" }}
+                      />
+                      <button
+                        className="amv-photo-replace"
+                        onClick={(e) => { e.stopPropagation(); setShowUpload(true); }}
+                        title="Replace media"
+                      >
+                        <Upload size={11} /> Replace
+                      </button>
+                    </div>
+                  );
+                } else {
+                  const attachments = selectedReport.media_attachments ?? [];
+                  const mCount = attachments.length;
+                  const currentAtt = attachments[mediaIndex] ?? attachments[0];
+                  const currentUrl = currentAtt ? resolveMediaUrl(currentAtt.file_url) : imgSrc;
+                  const currentIsVideo = currentAtt?.media_type === "video";
+                  const galleryItems = attachments
+                    .map((att) => ({ url: resolveMediaUrl(att.file_url), type: att.media_type }))
+                    .filter((it) => it.url && it.type !== "video");
+
+                  mediaContent = currentUrl && !showUpload && !imgError ? (
+                    <div style={{ position: "relative" }}>
+                      {currentIsVideo ? (
+                        <div className="amv-panel-photo" style={{ cursor: "default" }}>
+                          <video
+                            key={mediaIndex}
+                            src={currentUrl}
+                            controls
+                            style={{ width: "100%", height: 178, objectFit: "cover", display: "block" }}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          className="amv-panel-photo"
+                          onClick={() => {
+                            const idx = galleryItems.findIndex((it) => it.url === currentUrl);
+                            openLightbox(galleryItems, idx >= 0 ? idx : 0);
+                          }}
+                          aria-label="Expand photo"
+                        >
+                          <img key={mediaIndex} src={currentUrl} alt="Road damage" onError={() => setImgError(true)} />
+                          <span className="amv-panel-photo-overlay">
+                            <Maximize2 size={16} color="#fff" />
+                            <span>Expand</span>
+                          </span>
+                        </button>
+                      )}
+
+                      <button
+                        className="amv-photo-replace"
+                        onClick={(e) => { e.stopPropagation(); setShowUpload(true); }}
+                        title="Replace media"
+                      >
+                        <Upload size={11} /> Replace
+                      </button>
+
+                      {mCount > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            aria-label="Previous media"
+                            onClick={() => setMediaIndex((i) => (i - 1 + mCount) % mCount)}
+                            style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", width: 28, height: 28, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          ><ChevronLeft size={16} /></button>
+                          <button
+                            type="button"
+                            aria-label="Next media"
+                            onClick={() => setMediaIndex((i) => (i + 1) % mCount)}
+                            style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 28, height: 28, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          ><ChevronRight size={16} /></button>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="amv-upload-container">
+                      {showUpload && currentUrl && !imgError && (
+                        <button className="amv-upload-cancel" onClick={() => setShowUpload(false)}>
+                          Keep existing media
+                        </button>
+                      )}
+                      <ImageUploadZone
+                        key={`${selectedReport.id}-${showUpload}`}
+                        reportId={selectedReport.id}
+                        onUploaded={(url) => handleImageChange(selectedReport.id, url)}
+                      />
+                    </div>
+                  );
+                }
+
                 return (
                   <>
                     <div className="amv-panel-head">
@@ -1032,37 +1204,60 @@ function AdminMapView() {
                       </button>
                     </div>
 
-                    {imgSrc && !showUpload && !imgError ? (
-                      <button
-                        className="amv-panel-photo"
-                        onClick={() => setLightboxSrc(imgSrc)}
-                        aria-label="Expand photo"
-                      >
-                        <img src={imgSrc} alt="Road damage" onError={() => setImgError(true)} />
-                        <span className="amv-panel-photo-overlay">
-                          <Maximize2 size={16} color="#fff" />
-                          <span>Expand</span>
-                        </span>
-                        <button
-                          className="amv-photo-replace"
-                          onClick={(e) => { e.stopPropagation(); setShowUpload(true); }}
-                          title="Replace photo"
-                        >
-                          <Upload size={11} /> Replace
-                        </button>
-                      </button>
-                    ) : (
-                      <div className="amv-upload-container">
-                        {showUpload && imgSrc && !imgError && (
-                          <button className="amv-upload-cancel" onClick={() => setShowUpload(false)}>
-                            Keep existing photo
+                    {mediaContent}
+
+                    {(selectedReport.media_attachments?.length ?? 0) > 1 && (
+                      <div style={{ display: "flex", gap: 6, padding: "8px 14px 0", overflowX: "auto" }}>
+                        {selectedReport.media_attachments.map((att, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setMediaIndex(i)}
+                            style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", padding: 0, flexShrink: 0, cursor: "pointer", border: i === mediaIndex ? "2px solid var(--primary)" : "1px solid var(--border)", background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          >
+                            {att.media_type === "video" ? (
+                              <video src={resolveMediaUrl(att.file_url)} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (
+                              <img src={resolveMediaUrl(att.file_url)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            )}
                           </button>
-                        )}
-                        <ImageUploadZone
-                          key={`${selectedReport.id}-${showUpload}`}
-                          reportId={selectedReport.id}
-                          onUploaded={(url) => handleImageChange(selectedReport.id, url)}
-                        />
+                        ))}
+                      </div>
+                    )}
+
+                    {selectedReport.frame_detections?.length > 0 && (
+                      <div style={{ padding: "10px 14px 0" }}>
+                        <p style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 6px" }}>
+                          Detection Frames ({selectedReport.frame_detections.length})
+                        </p>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))", gap: 6 }}>
+                          {(() => {
+                            const frames = selectedReport.frame_detections.filter((f) => f.image_url);
+                            return selectedReport.frame_detections.map((fd) => (
+                              <button
+                                key={fd.id}
+                                type="button"
+                                onClick={() => {
+                                  if (!fd.image_url) return;
+                                  const items = frames.map((f) => ({
+                                    url: resolveMediaUrl(f.image_url),
+                                    label: `${f.damage_type} ${Math.round(f.confidence * 100)}%`,
+                                  }));
+                                  const startIndex = frames.findIndex((f) => f.id === fd.id);
+                                  openLightbox(items, startIndex);
+                                }}
+                                style={{ border: "none", padding: 0, cursor: fd.image_url ? "pointer" : "default", borderRadius: 6, overflow: "hidden", position: "relative" }}
+                              >
+                                {fd.image_url && (
+                                  <img src={resolveMediaUrl(fd.image_url)} alt={fd.damage_type} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+                                )}
+                                <span style={{ position: "absolute", bottom: 1, left: 1, fontSize: "0.52rem", fontWeight: 700, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "0px 3px", borderRadius: 4 }}>
+                                  {fd.damage_type} {Math.round(fd.confidence * 100)}%
+                                </span>
+                              </button>
+                            ));
+                          })()}
+                        </div>
                       </div>
                     )}
 

@@ -542,6 +542,35 @@
   box-shadow: var(--shadow-sm);
 }
 
+.photo-thumb--video-wrap {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  display: block;
+}
+
+.photo-thumb--video-wrap video.photo-thumb {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.photo-thumb-play-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
 .amr-cb {
   width: 16px;
   height: 16px;

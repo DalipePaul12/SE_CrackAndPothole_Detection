@@ -9,7 +9,7 @@ import {
   Check, X, Mail, Camera, Video, MapPin, CheckCircle, XCircle,
   User, AlertTriangle, Calendar, Clock, ChevronDown, Navigation,
   FileText, Image, MessageSquare, Activity, Shield, Send, Download,
-  Loader2,
+  Loader2, Play,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
@@ -262,7 +262,18 @@ export default function AdminManageRequests() {
                             <img className="report-thumb" src={thumb} alt="report" loading="lazy" />
                           )}
                           {thumb && mediaIsVideo && (
-                            <div className="report-thumb report-thumb--video"><Video size={24} /></div>
+                            <div className="report-thumb report-thumb--video-wrap">
+                              <video
+                                className="report-thumb"
+                                src={thumb}
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                              <span className="report-thumb-play-badge" aria-hidden="true">
+                                <Play size={12} fill="#fff" />
+                              </span>
+                            </div>
                           )}
                           {!thumb && (
                             <div className="report-thumb report-thumb--empty"><Camera size={24} /></div>
@@ -461,15 +472,18 @@ function BulkDeclineDialog({ count, onDecline, onCancel, loading }) {
 
 function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline, onMessage, actionLoading }) {
   const [activeTab, setActiveTab] = useState("details");
+  const [mediaIndex, setMediaIndex] = useState(0);
+
+  useEffect(() => { setMediaIndex(0); }, [r.id]);
 
   const loc     = r.location_address ?? r.barangay ?? "—";
   const dtype   = r.ai_damage_type   ?? r.damage_type ?? "—";
   const sev     = r.ai_severity      ?? r.severity    ?? "—";
   const conf    = aiConfidence(r);
-  const mUrl    = r.media_attachments?.[0]?.file_url;
-  const mType   = r.media_attachments?.[0]?.media_type;
-  const fullUrl = resolveMediaUrl(mUrl);
   const mCount  = mediaCount(r);
+  const currentAtt = r.media_attachments?.[mediaIndex];
+  const mType   = currentAtt?.media_type;
+  const fullUrl = resolveMediaUrl(currentAtt?.file_url);
   const status  = r.status ?? REPORT_STATUS.PENDING;
   const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
 
@@ -611,29 +625,74 @@ function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline
 
           {activeTab === "media" && (
             <div className="amr-media-tab">
-              {fullUrl ? (
-                mType === "video" ? (
-                  <video src={fullUrl} controls className="amr-media-main" />
+              <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center" }}>
+                {fullUrl ? (
+                  mType === "video" ? (
+                    <video key={mediaIndex} src={fullUrl} controls className="amr-media-main" />
+                  ) : (
+                    <img key={mediaIndex} src={fullUrl} alt="Report" className="amr-media-main" />
+                  )
                 ) : (
-                  <img src={fullUrl} alt="Report" className="amr-media-main" />
-                )
-              ) : (
-                <div className="amr-media-empty">
-                  <Camera size={48} />
-                  <p>No media attached</p>
-                </div>
-              )}
+                  <div className="amr-media-empty">
+                    <Camera size={48} />
+                    <p>No media attached</p>
+                  </div>
+                )}
+                {mCount > 1 && (
+                  <>
+                    <button type="button" aria-label="Previous media"
+                      onClick={() => setMediaIndex((i) => (i - 1 + mCount) % mCount)}
+                      style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "1.1rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                    >‹</button>
+                    <button type="button" aria-label="Next media"
+                      onClick={() => setMediaIndex((i) => (i + 1) % mCount)}
+                      style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "1.1rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                    >›</button>
+                  </>
+                )}
+              </div>
               {mCount > 1 && (
-                <div className="amr-media-thumbs">
-                  {r.media_attachments.map((att, i) => (
-                    <div key={i} className="amr-media-thumb">
-                      {att.media_type === "video" ? (
-                        <Video size={20} />
-                      ) : (
-                        <img src={resolveMediaUrl(att.file_url)} alt="" />
-                      )}
-                    </div>
-                  ))}
+                <>
+                  <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "4px 0 0", textAlign: "center" }}>{mediaIndex + 1} / {mCount}</p>
+                  <div className="amr-media-thumbs">
+                    {r.media_attachments.map((att, i) => (
+                      <div
+                        key={i}
+                        className="amr-media-thumb"
+                        onClick={() => setMediaIndex(i)}
+                        style={{ cursor: "pointer", border: i === mediaIndex ? "2px solid var(--primary)" : "2px solid var(--border)" }}
+                      >
+                        {att.media_type === "video" ? (
+                          <Video size={20} />
+                        ) : (
+                          <img src={resolveMediaUrl(att.file_url)} alt="" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {r.frame_detections?.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--subtext)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                    Detection Frames ({r.frame_detections.length})
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
+                    {r.frame_detections.map((fd) => (
+                      <div
+                        key={fd.id}
+                        style={{ borderRadius: 8, overflow: "hidden", position: "relative" }}
+                      >
+                        {fd.image_url && (
+                          <img src={resolveMediaUrl(fd.image_url)} alt={fd.damage_type} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+                        )}
+                        <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: "0.6rem", fontWeight: 700, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "1px 5px", borderRadius: 6 }}>
+                          {fd.damage_type} {Math.round(fd.confidence * 100)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

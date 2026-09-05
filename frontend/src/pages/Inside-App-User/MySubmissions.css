@@ -628,13 +628,45 @@
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
-
-.sub-row-thumb img {
+.sub-row-thumb img,
+.sub-row-thumb video {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
+.sub-thumb-video-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.sub-thumb-video-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sub-thumb-play-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sub-row-thumb .sub-thumb-play-badge {
+  width: 20px;
+  height: 20px;
+}
 .sub-report-id {
   font-size: 0.9rem;
   font-weight: 700;
@@ -701,10 +733,16 @@
   border: 1px solid var(--border);
 }
 
-.sub-card-thumb img {
+.sub-card-thumb img,
+.sub-card-thumb video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.sub-card-thumb .sub-thumb-video-wrap {
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 .sub-card-body {
@@ -1796,12 +1834,69 @@
   position: relative;
   max-width: 92vw;
   max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  touch-action: pan-y;
+}
+
+.sub-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+  z-index: 2;
+}
+.sub-lightbox-nav:hover { background: rgba(255, 255, 255, 0.22); }
+.sub-lightbox-prev { left: 4px; }
+.sub-lightbox-next { right: 4px; }
+
+.sub-lightbox-counter {
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.9;
+  text-align: center;
+  padding: 0 12px;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .sub-lightbox-inner {
+    max-width: 100vw;
+    padding: 0 4px;
+    box-sizing: border-box;
+  }
+  .sub-lightbox-nav {
+    width: 44px;
+    height: 44px;
+  }
+  .sub-lightbox-close {
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    right: 12px;
+    width: 34px;
+    height: 34px;
+  }
+  .sub-lightbox-counter {
+    font-size: 0.74rem;
+  }
 }
 
 .sub-lightbox-close {
-  position: absolute;
-  top: -42px;
-  right: 0;
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  right: 16px;
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
@@ -1813,6 +1908,7 @@
   align-items: center;
   justify-content: center;
   transition: background var(--transition-fast);
+  z-index: 3;
 }
 
 .sub-lightbox-close:hover {
@@ -2674,8 +2770,13 @@ body.report-modal-open .chat-fab {
 body.report-modal-open .chat-fab,
 body.report-modal-open .chat-widget,
 body.report-modal-open .floating-chat,
+body.report-modal-open .support-widget,
 body.report-modal-open [class*="chatbot"],
-body.report-modal-open [id*="chatbot"] {
+body.report-modal-open [class*="ChatWidget"],
+body.report-modal-open [class*="chat-bubble"],
+body.report-modal-open [id*="chatbot"],
+body.report-modal-open [id*="chat"],
+body.report-modal-open iframe[title*="chat" i] {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle, ChevronLeft, ChevronRight, X,
@@ -33,10 +33,7 @@ const fmtDT = (iso) =>
 const STATUS_LABEL = { PENDING: "Pending", IN_PROGRESS: "In Progress", VERIFIED: "Verified", RESOLVED: "Resolved", DECLINED: "Declined" };
 const STATUS_STEPS = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
 
-const getImageUrl = (report) => {
-  const url = report?.media_attachments?.[0]?.file_url;
-  return url ? resolveMediaUrl(url) : null;
-};
+const getMediaAttachment = (report) => report?.media_attachments?.[0] ?? null;
 
 function Pagination({ page, setPage, total, pageSize = 10 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -131,11 +128,29 @@ function ReportTimeline({ report }) {
 }
 
 function ReportModal({ report, onClose }) {
-  const imageUrl = getImageUrl(report);
+  const mediaAtt = getMediaAttachment(report);
+  const imageUrl = mediaAtt ? resolveMediaUrl(mediaAtt.file_url) : null;
+  const isVideo  = mediaAtt?.media_type === "video";
   const [imgError, setImgError] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
-  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [lightboxItems, setLightboxItems] = useState([]); // [{ url, label }]
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const touchStartXRef = useRef(null);
   const status = report.status ?? "";
+
+  const lightboxUrl   = lightboxItems[lightboxIndex]?.url ?? null;
+  const openLightbox  = (items, startIndex = 0) => { setLightboxItems(items); setLightboxIndex(startIndex); };
+  const closeLightbox = () => { setLightboxItems([]); setLightboxIndex(0); };
+  const lightboxNext  = () => setLightboxIndex((i) => (i + 1) % lightboxItems.length);
+  const lightboxPrev  = () => setLightboxIndex((i) => (i - 1 + lightboxItems.length) % lightboxItems.length);
+
+  const handleTouchStart = (e) => { touchStartXRef.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e) => {
+    if (touchStartXRef.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchStartXRef.current;
+    if (Math.abs(dx) > 40) { dx < 0 ? lightboxNext() : lightboxPrev(); }
+    touchStartXRef.current = null;
+  };
   const isResolved = status === "RESOLVED";
 
   // ── Completion data (resolved reports only, citizen-safe subset) ───────
@@ -182,10 +197,21 @@ function ReportModal({ report, onClose }) {
     };
   }, []);
   useEffect(() => {
-    const handler = (e) => { if (e.key === "Escape") onClose(); };
+    const handler = (e) => { if (e.key === "Escape" && lightboxItems.length === 0) onClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, lightboxItems.length]);
+
+  useEffect(() => {
+    if (lightboxItems.length === 0) return;
+    const handler = (e) => {
+      if (e.key === "Escape")    closeLightbox();
+      if (e.key === "ArrowRight") lightboxNext();
+      if (e.key === "ArrowLeft")  lightboxPrev();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [lightboxItems.length]);
 
   const TABS = [
     { id: "details",  label: "Details",  Icon: FileText },
@@ -327,31 +353,75 @@ function ReportModal({ report, onClose }) {
           {activeTab === "timeline" && <ReportTimeline report={report} />}
 
           {activeTab === "media" && (
-            <div className="arm-modal-media">
-              {imageUrl && !imgError ? (
-                <button
-                  type="button"
-                  className="arm-media-zoom-btn"
-                  onClick={() => setLightboxUrl(imageUrl)}
-                  aria-label="Expand image"
-                >
-                  <img
-                    src={imageUrl}
-                    alt={`Report #${report.id} media`}
-                    onError={() => setImgError(true)}
-                    loading="lazy"
-                  />
-                  <span className="arm-media-zoom-hint"><ZoomIn size={14} /> Tap to expand</span>
-                </button>
-              ) : (
-                <div className="no-image">
-                  <ImageOff size={32} />
-                  <span>No image available</span>
+            <div className="arm-media-tab-wrap">
+              <div className="arm-media-block">
+                <p className="arm-media-block-label">
+                  <ImageIcon size={13} aria-hidden="true" /> DAMAGE EVIDENCE
+                </p>
+                <div className="arm-modal-media">
+                  {imageUrl && isVideo ? (
+                    <video src={imageUrl} controls style={{ width: "100%", borderRadius: 10 }} />
+                  ) : imageUrl && !imgError ? (
+                    <button
+                      type="button"
+                      className="arm-media-zoom-btn"
+                      onClick={() => openLightbox([{ url: imageUrl, label: `Report #${report.id} media` }], 0)}
+                      aria-label="Expand image"
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={`Report #${report.id} media`}
+                        onError={() => setImgError(true)}
+                        loading="lazy"
+                      />
+                      <span className="arm-media-zoom-hint"><ZoomIn size={14} /> Tap to expand</span>
+                    </button>
+                  ) : (
+                    <div className="no-image">
+                      <ImageOff size={32} />
+                      <span>No image available</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {report.frame_detections?.length > 0 && (
+                <div className="arm-media-block">
+                  <p className="arm-media-block-label">
+                    Detection Frames ({report.frame_detections.length})
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
+                    {(() => {
+                      const framesWithImages = report.frame_detections.filter((f) => f.image_url);
+                      return report.frame_detections.map((fd) => (
+                        <button
+                          key={fd.id}
+                          type="button"
+                          onClick={() => {
+                            if (!fd.image_url) return;
+                            const items = framesWithImages.map((f) => ({
+                              url: resolveMediaUrl(f.image_url),
+                              label: `${f.damage_type} ${Math.round(f.confidence * 100)}%`,
+                            }));
+                            const startIndex = framesWithImages.findIndex((f) => f.id === fd.id);
+                            openLightbox(items, startIndex);
+                          }}
+                          style={{ border: "none", padding: 0, cursor: fd.image_url ? "pointer" : "default", borderRadius: 8, overflow: "hidden", position: "relative" }}
+                        >
+                          {fd.image_url && (
+                            <img src={resolveMediaUrl(fd.image_url)} alt={fd.damage_type} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+                          )}
+                          <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: "0.6rem", fontWeight: 700, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "1px 5px", borderRadius: 6 }}>
+                            {fd.damage_type} {Math.round(fd.confidence * 100)}%
+                          </span>
+                        </button>
+                      ));
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
           )}
-
           {activeTab === "completion" && isResolved && (
             <div className="arm-completion-tab">
               {compLoading ? (
@@ -403,14 +473,20 @@ function ReportModal({ report, onClose }) {
                     <div className="arm-compl-photos">
                       <p className="arm-compl-photos-lbl"><Camera size={13} /> Completion Photos</p>
                       <div className="arm-compl-photos-row">
-                        {completion.completion_photos.map((ph) => {
+                        {completion.completion_photos.map((ph, phIdx) => {
                           const url = resolveMediaUrl(ph.file_url);
                           return (
                             <button
                               key={ph.id}
                               type="button"
                               className="arm-compl-photo-btn"
-                              onClick={() => setLightboxUrl(url)}
+                              onClick={() => openLightbox(
+                                completion.completion_photos.map((p) => ({
+                                  url: resolveMediaUrl(p.file_url),
+                                  label: p.file_name ?? "Completion photo",
+                                })),
+                                phIdx
+                              )}
                               aria-label="Expand completion photo"
                             >
                               <img
@@ -434,24 +510,60 @@ function ReportModal({ report, onClose }) {
       {lightboxUrl && (
         <div
           className="arm-lightbox-overlay"
-          onClick={() => setLightboxUrl(null)}
+          onClick={closeLightbox}
           role="dialog"
           aria-modal="true"
           aria-label="Expanded photo"
         >
           <button
             className="arm-lightbox-close"
-            onClick={() => setLightboxUrl(null)}
+            onClick={closeLightbox}
             aria-label="Close preview"
           >
             <X size={22} />
           </button>
-          <img
-            src={lightboxUrl}
-            alt="Expanded view"
-            className="arm-lightbox-img"
+
+          <div
+            className="arm-lightbox-body"
             onClick={(e) => e.stopPropagation()}
-          />
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {lightboxItems.length > 1 && (
+              <button
+                type="button"
+                className="arm-lightbox-nav arm-lightbox-prev"
+                onClick={lightboxPrev}
+                aria-label="Previous image"
+              >
+                <ChevronLeft size={22} />
+              </button>
+            )}
+
+            <img
+              src={lightboxUrl}
+              alt={lightboxItems[lightboxIndex]?.label ?? "Expanded view"}
+              className="arm-lightbox-img"
+            />
+
+            {lightboxItems.length > 1 && (
+              <button
+                type="button"
+                className="arm-lightbox-nav arm-lightbox-next"
+                onClick={lightboxNext}
+                aria-label="Next image"
+              >
+                <ChevronRight size={22} />
+              </button>
+            )}
+
+            {lightboxItems.length > 1 && (
+              <div className="arm-lightbox-counter">
+                {lightboxIndex + 1} / {lightboxItems.length}
+                {lightboxItems[lightboxIndex]?.label ? ` — ${lightboxItems[lightboxIndex].label}` : ""}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>,

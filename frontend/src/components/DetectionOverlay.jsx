@@ -244,13 +244,16 @@ export default function DetectionOverlay({
     canvas.height = rect.height * window.devicePixelRatio;
     ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-    if (stableDetections.length === 0) {
+    // Skip live mask/box drawing during video playback — too distracting
+    // and costly to redraw every frame. Detection frames (filmstrip) still
+    // get the full mask treatment after the video finishes processing.
+    if (mode === "video" || stableDetections.length === 0) {
       ctx.clearRect(0, 0, rect.width, rect.height);
       return;
     }
 
     drawDetections(ctx, stableDetections, rect.width, rect.height);
-  }, [stableDetections]);
+  }, [stableDetections, mode]);
 
   // ── Derived UI ────────────────────────────────────────────────────────────
   const progressPct = progress 

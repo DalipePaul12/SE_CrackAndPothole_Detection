@@ -172,11 +172,11 @@ async def list_reports(
             selectinload(Report.media_attachments),
             selectinload(Report.ai_detections),
             selectinload(Report.owner),
+            selectinload(Report.frame_detections),
         )
         .limit(page_size)
         .offset((page - 1) * page_size)
     )
-
     result = await db.execute(data_q)
     reports = result.scalars().all()
 

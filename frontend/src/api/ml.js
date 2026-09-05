@@ -43,7 +43,7 @@ function _httpError(status, body) {
   return MAP[status] || serverMsg;
 }
 
-export async function analyzeMedia(file) {
+export async function analyzeMedia(file, { source = "upload" } = {}) {
   if (!file) return _errorResponse("No file provided.");
 
   const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -55,6 +55,7 @@ export async function analyzeMedia(file) {
 
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("source", source);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUTS.image);
@@ -123,7 +124,7 @@ export async function analyzeMedia(file) {
   }
 }
 
-export async function analyzeVideo(file, onProgress = null) {
+export async function analyzeVideo(file, onProgress = null, { source = "upload" } = {}) {
   if (!file) return _errorResponse("No file provided.");
 
   const VIDEO_EXTS = [".mp4", ".mov", ".avi", ".webm"];
@@ -136,6 +137,7 @@ export async function analyzeVideo(file, onProgress = null) {
 
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("source", source);
 
   const controller = new AbortController();
   const timer      = setTimeout(() => controller.abort(), TIMEOUTS.video);
@@ -302,6 +304,6 @@ export async function analyzeFile(file, onProgress = null) {
     return analyzeVideo(file, onProgress);
   }
 
-  return analyzeMedia(file);
+  return analyzeMedia(file, { source: "upload" });
 }
 

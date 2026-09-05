@@ -14,7 +14,7 @@ import {
   AlertTriangle, Calendar, FileText, Wrench, Image, Camera, Paperclip,
   Mail, MailOpen, Send, CheckCircle, ClipboardList, ArrowDown, ArrowUp,
   ArrowUpDown, Circle, StickyNote, Ban, RotateCcw, ChevronUp, ChevronDown,
-  FileText as FileIcon, ImageIcon, MessageSquare, Shield, Activity,
+  FileText as FileIcon, ImageIcon, MessageSquare, Shield, Activity, Play,
 } from "lucide-react";
 
 const BASE_URL    = import.meta.env.VITE_API_URL || "";
@@ -779,7 +779,20 @@ export default function AdminAllReports() {
                         </td>
 
                         <td className="td-thumb" onClick={(e) => e.stopPropagation()}>
-                          {thumbUrl ? (
+                          {thumbUrl && thumb?.media_type === "video" ? (
+                            <div className="thumb-video-wrap" onClick={() => setSelectedReport(r)}>
+                              <video
+                                className="thumb-img"
+                                src={thumbUrl}
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                              <span className="thumb-play-badge" aria-hidden="true">
+                                <Play size={10} fill="#fff" />
+                              </span>
+                            </div>
+                          ) : thumbUrl ? (
                             <img
                               className="thumb-img"
                               src={thumbUrl}
@@ -1079,6 +1092,17 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const [declineReason,  setDeclineReason] = useState("");
   const [submitting,     setSubmitting]    = useState(false);
   const [imgErrors,      setImgErrors]     = useState({});
+  const [lightboxItems,  setLightboxItems] = useState([]); // [{ url, label }]
+  const [lightboxIndex,  setLightboxIndex] = useState(0);
+  const [mediaIndex,     setMediaIndex]    = useState(0);
+
+  const lightboxUrl = lightboxItems[lightboxIndex]?.url ?? null;
+  const openLightbox  = (items, startIndex = 0) => { setLightboxItems(items); setLightboxIndex(startIndex); };
+  const closeLightbox = () => { setLightboxItems([]); setLightboxIndex(0); };
+  const lightboxNext  = () => setLightboxIndex((i) => (i + 1) % lightboxItems.length);
+  const lightboxPrev  = () => setLightboxIndex((i) => (i - 1 + lightboxItems.length) % lightboxItems.length);
+
+  useEffect(() => { setMediaIndex(0); }, [r.id]);
   const [noteLoading,    setNoteLoading]   = useState(false);
   const [updates,        setUpdates]       = useState([]);
   const [updatesLoading, setUpdatesLoading]= useState(false);
@@ -1086,7 +1110,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   const [customMsg,      setCustomMsg]     = useState("");
   const [completion,     setCompletion]     = useState(null);
   const [compLoading,    setCompLoading]    = useState(false);
-  const [lightboxUrl,    setLightboxUrl]    = useState(null);
   const [project,        setProject]        = useState(null);
 
   useEffect(() => {
@@ -1120,10 +1143,21 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   }, [r.status, project?.id]);
 
   useEffect(() => {
-    const fn = (e) => { if (e.key === "Escape") onClose(); };
+    const fn = (e) => { if (e.key === "Escape" && lightboxItems.length === 0) onClose(); };
     document.addEventListener("keydown", fn);
     return () => document.removeEventListener("keydown", fn);
-  }, [onClose]);
+  }, [onClose, lightboxItems.length]);
+
+  useEffect(() => {
+    if (lightboxItems.length === 0) return;
+    const fn = (e) => {
+      if (e.key === "Escape")    closeLightbox();
+      if (e.key === "ArrowRight") lightboxNext();
+      if (e.key === "ArrowLeft")  lightboxPrev();
+    };
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
+  }, [lightboxItems.length]);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -1321,17 +1355,100 @@ return (
               {attachments.length === 0 ? (
                 <div className="vmr-media-empty"><Image size={48} /><p>No media attachments for this report</p></div>
               ) : (
-                attachments.map((att, i) => {
-                  const url = imgErrors[i] ? null : mediaUrl(att);
-                  return url ? (
-                    att.media_type === "video"
-                      ? <video key={i} src={url} controls className="vmr-media-main" />
-                      : <img key={i} src={url} alt={`Attachment ${i + 1}`} className="vmr-media-main"
-                          onError={() => setImgErrors((p) => ({ ...p, [i]: true }))} />
-                  ) : (
-                    <div key={i} className="vmr-media-empty"><Image size={32} /><p>Media unavailable</p></div>
-                  );
-                })
+                <>
+                  <div style={{ position: "relative", width: "100%", maxWidth: "100%", display: "flex", justifyContent: "center" }}>
+                    {(() => {
+                      const att = attachments[mediaIndex] ?? attachments[0];
+                      const url = imgErrors[mediaIndex] ? null : mediaUrl(att);
+                      if (!url) return <div className="vmr-media-empty"><Image size={32} /><p>Media unavailable</p></div>;
+                      return att.media_type === "video"
+                        ? <video key={mediaIndex} src={url} controls className="vmr-media-main" />
+                        : <img key={mediaIndex} src={url} alt={`Attachment ${mediaIndex + 1}`} className="vmr-media-main"
+                            onError={() => setImgErrors((p) => ({ ...p, [mediaIndex]: true }))} />;
+                    })()}
+                    {attachments.length > 1 && (
+                      <>
+                        <button type="button" aria-label="Previous media"
+                          onClick={() => setMediaIndex((i) => (i - 1 + attachments.length) % attachments.length)}
+                          style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "1.1rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                        >‹</button>
+                        <button type="button" aria-label="Next media"
+                          onClick={() => setMediaIndex((i) => (i + 1) % attachments.length)}
+                          style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 34, height: 34, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "1.1rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                        >›</button>
+                      </>
+                    )}
+                  </div>
+
+                  {attachments.length > 1 && (
+                    <>
+                      <p style={{ fontSize: "0.78rem", color: "var(--subtext)", margin: "4px 0 0" }}>{mediaIndex + 1} / {attachments.length}</p>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                        {attachments.map((att, i) => (
+                          <button key={i} type="button" onClick={() => setMediaIndex(i)}
+                            style={{ width: 52, height: 52, borderRadius: 8, overflow: "hidden", padding: 0, cursor: "pointer", background: "var(--bg-secondary)", border: i === mediaIndex ? "2px solid var(--primary)" : "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}
+                          >
+                            {att.media_type === "video"
+                              ? (
+                                <>
+                                  <video
+                                    src={mediaUrl(att)}
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  />
+                                  <span
+                                    aria-hidden="true"
+                                    style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 20, height: 20, borderRadius: "50%", background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                  >
+                                    <Play size={10} fill="#fff" />
+                                  </span>
+                                </>
+                              )
+                              : <img src={mediaUrl(att)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {r.frame_detections?.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--subtext)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                    Detection Frames ({r.frame_detections.length})
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
+                    {(() => {
+                      const framesWithImages = r.frame_detections.filter((f) => f.image_url);
+                      return r.frame_detections.map((fd) => (
+                        <button
+                          key={fd.id}
+                          type="button"
+                          onClick={() => {
+                            if (!fd.image_url) return;
+                            const items = framesWithImages.map((f) => ({
+                              url: mediaUrl({ file_url: f.image_url }),
+                              label: `${f.damage_type} ${Math.round(f.confidence * 100)}%`,
+                            }));
+                            const startIndex = framesWithImages.findIndex((f) => f.id === fd.id);
+                            openLightbox(items, startIndex);
+                          }}
+                          style={{ border: "none", padding: 0, cursor: fd.image_url ? "pointer" : "default", borderRadius: 8, overflow: "hidden", position: "relative" }}
+                        >
+                          {fd.image_url && (
+                            <img src={mediaUrl({ file_url: fd.image_url })} alt={fd.damage_type} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+                          )}
+                          <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: "0.6rem", fontWeight: 700, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "1px 5px", borderRadius: 6 }}>
+                            {fd.damage_type} {Math.round(fd.confidence * 100)}%
+                          </span>
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1591,14 +1708,20 @@ return (
                     <div className="vmr-compl-photos">
                       <p className="vmr-compl-photos-lbl"><Camera size={13} /> Completion Photos</p>
                       <div className="vmr-compl-photos-row">
-                        {completion.completion_photos.map((ph) => (
+                        {completion.completion_photos.map((ph, phIdx) => (
                           <img
                             key={ph.id}
                             src={resolveMediaUrl(ph.file_url)}
                             alt={ph.file_name ?? "Completion photo"}
                             className="vmr-compl-photo"
                             style={{ cursor: "pointer" }}
-                            onClick={() => setLightboxUrl(resolveMediaUrl(ph.file_url))}
+                            onClick={() => openLightbox(
+                              completion.completion_photos.map((p) => ({
+                                url: resolveMediaUrl(p.file_url),
+                                label: p.file_name ?? "Completion photo",
+                              })),
+                              phIdx
+                            )}
                           />
                         ))}
                       </div>
@@ -1611,25 +1734,49 @@ return (
 
         </div>
       </div>
-
       {lightboxUrl && (
         <div
           className="vmr-lightbox-overlay"
-          onClick={() => setLightboxUrl(null)}
+          onClick={closeLightbox}
         >
           <button
             className="vmr-lightbox-close"
-            onClick={() => setLightboxUrl(null)}
+            onClick={closeLightbox}
             aria-label="Close preview"
           >
             <X size={22} />
           </button>
-          <img
-            src={lightboxUrl}
-            alt="Completion photo full view"
-            className="vmr-lightbox-img"
-            onClick={(e) => e.stopPropagation()}
-          />
+
+          {lightboxItems.length > 1 && (
+            <>
+              <button
+                type="button"
+                aria-label="Previous image"
+                onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}
+                style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: "1.4rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+              >‹</button>
+              <button
+                type="button"
+                aria-label="Next image"
+                onClick={(e) => { e.stopPropagation(); lightboxNext(); }}
+                style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: "1.4rem", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+              >›</button>
+            </>
+          )}
+
+          <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+            <img
+              src={lightboxUrl}
+              alt={lightboxItems[lightboxIndex]?.label ?? "Preview"}
+              className="vmr-lightbox-img"
+            />
+            {lightboxItems.length > 1 && (
+              <span style={{ color: "#fff", fontSize: "0.82rem", opacity: 0.85 }}>
+                {lightboxIndex + 1} / {lightboxItems.length}
+                {lightboxItems[lightboxIndex]?.label ? ` — ${lightboxItems[lightboxIndex].label}` : ""}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>
