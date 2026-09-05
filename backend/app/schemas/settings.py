@@ -24,6 +24,7 @@ class AdminSettingsResponse(BaseModel):
     default_lat:  float
     default_lng:  float
     default_zoom: int
+    restrict_location: bool
 
     # Notifications (sms_alerts removed — no SMS provider)
     email_alerts:         bool
@@ -70,6 +71,7 @@ class AdminSettingsUpdate(BaseModel):
     default_lat:  Optional[float] = None
     default_lng:  Optional[float] = None
     default_zoom: Optional[int]   = Field(None, ge=1, le=20)
+    restrict_location: Optional[bool] = None
 
     # Notifications
     email_alerts:         Optional[bool] = None

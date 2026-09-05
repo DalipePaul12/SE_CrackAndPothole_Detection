@@ -12,7 +12,6 @@ export const MALABON_BARANGAYS = [
 ];
 
 export const DEFAULT_CITY     = "Malabon";
-export const DEFAULT_BARANGAY = "Panghulo";
 
 /**
  * Approximate bounding boxes for each Malabon barangay.
@@ -47,7 +46,8 @@ const BARANGAY_BOUNDS = [
 
 /**
  * Detect barangay from GPS coordinates using bounding box lookup.
- * Falls back to Nominatim suburb field, then to DEFAULT_BARANGAY.
+ * Falls back to Nominatim suburb fields, then returns an empty value when the
+ * coordinates cannot be matched confidently.
  *
  * @param {number} lat
  * @param {number} lng
@@ -83,8 +83,9 @@ export function detectBarangay(lat, lng, nominatimAddr = null) {
     }
   }
 
-  // 3. Last resort fallback
-  return DEFAULT_BARANGAY;
+  // 3. Do not guess a barangay. The user must select it when coordinates are
+  // outside the maintained boundary data.
+  return "";
 }
 
 export const NOMINATIM_URL = (lat, lng) =>

@@ -1,11 +1,9 @@
 import asyncio
-import cv2
 import logging
 import os
 import tempfile
 import uuid
 from pathlib import Path
-from typing import AsyncIterator
 
 import aiofiles
 from fastapi import (
@@ -15,11 +13,8 @@ from fastapi import (
     HTTPException,
     Request,
     UploadFile,
-    WebSocket,
-    WebSocketDisconnect,
     status,
 )
-from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
 from app.middleware.auth_middleware import get_current_user
@@ -27,12 +22,10 @@ from app.middleware.rate_limiter import limiter
 from app.models.enums import MediaType
 from app.models.user import User
 from app.services.ml_service import (
-    MLRealtimeService,
     process_media_pipeline,
     process_video_pipeline,
     run_realtime_frame,
 )
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ml", tags=["ML / AI Analysis"])
@@ -40,9 +33,9 @@ router = APIRouter(prefix="/ml", tags=["ML / AI Analysis"])
 # ── Allowed MIME types ─────────────────────────────────────────────────────────
 
 _ALLOWED_IMAGE_TYPES: set[str] = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-_ALLOWED_VIDEO_TYPES: set[str] = {"video/mp4", "video/quicktime", "video/x-msvideo"}
-
-ml_realtime = MLRealtimeService()
+_ALLOWED_VIDEO_TYPES: set[str] = {
+    "video/mp4", "video/quicktime", "video/x-msvideo", "video/webm",
+}
 
 
 def _resolve_media_type(content_type: str) -> MediaType:
@@ -134,8 +127,13 @@ async def analyze_media(
                 "is_ai_generated": ai_validation.get("is_ai_generated", False),
                 "confidence":      ai_validation.get("confidence", 0.0),
                 "status":          ai_validation.get("status", "unknown"),
+                "method":           ai_validation.get("method", "heuristic_fallback"),
                 "raw_scores":      ai_validation.get("raw_scores", {}),
             },
+            "stage":      result.get("stage", "passed"),
+            "status":     result.get("status", "pass"),
+            "reason":     result.get("reason"),
+            "confidence": result.get("confidence"),
             "prediction": (
                 {
                     "label":             prediction.get("label", "uncertain"),
@@ -161,6 +159,7 @@ async def analyze_media(
                     "segments_norm":  d.get("segments_norm"),
                     "image_width":    d.get("image_width"),
                     "image_height":   d.get("image_height"),
+                    "has_mask":       d.get("has_mask", False),
                     "x_norm":         d.get("x_norm"),
                     "y_norm":         d.get("y_norm"),
                     "w_norm":         d.get("w_norm"),
@@ -186,8 +185,8 @@ async def analyze_video(
     """
     content_type = (file.content_type or "").lower()
 
-    is_video = content_type in _ALLOWED_VIDEO_TYPES or (
-        file.filename and Path(file.filename).suffix.lower() in {".mp4", ".mov", ".avi"}
+    is_video = content_type in _ALLOWED_VIDEO_TYPES or content_type.startswith("video/webm") or (
+        file.filename and Path(file.filename).suffix.lower() in {".mp4", ".mov", ".avi", ".webm"}
     )
 
     if not is_video:
@@ -248,6 +247,11 @@ async def analyze_video(
         "success": True,
         "data": {
             "detected":  result.get("detected", False),
+            "stage": result.get("stage", "passed"),
+            "status": result.get("status", "pass"),
+            "reason": result.get("reason"),
+            "confidence": result.get("confidence"),
+            "ai_validation": result.get("ai_validation", {}),
             "prediction": (
                 {
                     "label":             prediction.get("label", "uncertain"),
@@ -264,12 +268,22 @@ async def analyze_video(
             ),
             "all_detections": [
                 {
-                    "class": d.get("class", "damage"),
-                    "confidence": d.get("confidence", 0),
-                    "severity": d.get("severity"),
-                    "box": d.get("box"),
-                    "norm_bbox": d.get("norm_bbox"),
-                    "frames_seen": d.get("frames_seen"),
+                    "class":          d.get("class", "damage"),
+                    "label":          d.get("label", d.get("class", "damage")),
+                    "confidence":     d.get("confidence", 0),
+                    "severity":       d.get("severity"),
+                    "box":            d.get("box"),
+                    "norm_bbox":      d.get("norm_bbox"),
+                    "segments":       d.get("segments"),
+                    "segments_norm":  d.get("segments_norm"),
+                    "image_width":    d.get("image_width"),
+                    "image_height":   d.get("image_height"),
+                    "x_norm":         d.get("x_norm"),
+                    "y_norm":         d.get("y_norm"),
+                    "w_norm":         d.get("w_norm"),
+                    "h_norm":         d.get("h_norm"),
+                    "has_mask":       d.get("has_mask", False),
+                    "frames_seen":    d.get("frames_seen"),
                 }
                 for d in all_detections
             ],
@@ -339,108 +353,3 @@ async def analyze_realtime(
             "all_detections": result.get("all_detections", []),
         },
     }
-
-
-# ── WebSocket /ml/ws/realtime-overlay ─────────────────────────────────────────
-
-@router.websocket("/ws/realtime-overlay")
-async def ws_realtime_overlay(websocket: WebSocket):
-    """
-    Receives raw JPEG frames from the client over WebSocket,
-    runs YOLO inference, and streams back annotated JPEG frames.
-    """
-    await websocket.accept()
-    try:
-        async for frame_bytes in _stream_frames(websocket):
-            annotated = await ml_realtime.process_frame_overlay(frame_bytes)
-            ok, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            if ok:
-                await websocket.send_bytes(jpeg_buf.tobytes())
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        logger.exception("ws_realtime_overlay error")
-
-
-_WS_MAX_FPS      = 30
-_WS_FRAME_INTERVAL = 1.0 / _WS_MAX_FPS
-
-
-async def _stream_frames(ws: WebSocket) -> AsyncIterator[bytes]:
-    """
-    Yield raw bytes from the WebSocket until disconnect.
-    Throttles to _WS_MAX_FPS (30) by dropping frames that arrive too fast.
-    """
-    last_yield_time: float = 0.0
-    loop = asyncio.get_event_loop()
-
-    while True:
-        try:
-            data = await ws.receive_bytes()
-            now  = loop.time()
-
-            if now - last_yield_time < _WS_FRAME_INTERVAL:
-                continue
-
-            last_yield_time = now
-            yield data
-
-        except WebSocketDisconnect:
-            break
-
-
-# ── POST /ml/video-overlay-stream (MJPEG streaming response) ──────────────────
-
-@router.post("/video-overlay-stream")
-async def video_overlay_stream(file: UploadFile):
-    """
-    Accepts a video upload and streams back annotated MJPEG frames.
-    Media type: multipart/x-mixed-replace; boundary=frame
-    """
-    tmp_path = await _save_tmp_video(file)
-
-    async def _frame_generator():
-        try:
-            async for jpeg_bytes in ml_realtime.stream_video_overlay(tmp_path):
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n"
-                    + jpeg_bytes
-                    + b"\r\n"
-                )
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    os.unlink(tmp_path)
-                except PermissionError:
-                    import atexit
-                    _path = tmp_path
-                    atexit.register(
-                        lambda p=_path: os.path.exists(p) and os.unlink(p)
-                    )
-                    logger.warning("PermissionError deleting stream temp file (deferred): %s", tmp_path)
-                except OSError:
-                    logger.warning("Could not delete stream temp file: %s", tmp_path)
-
-    return StreamingResponse(
-        _frame_generator(),
-        media_type="multipart/x-mixed-replace; boundary=frame",
-    )
-
-
-async def _save_tmp_video(file: UploadFile) -> str:
-    """
-    Write uploaded video to a uniquely named temp file using async I/O.
-    """
-    suffix = Path(file.filename or "video.mp4").suffix or ".mp4"
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=f"_{uuid.uuid4().hex}{suffix}")
-    os.close(tmp_fd)
-
-    async with aiofiles.open(tmp_path, "wb") as f:
-        while True:
-            chunk = await file.read(256 * 1024)
-            if not chunk:
-                break
-            await f.write(chunk)
-
-    return tmp_path

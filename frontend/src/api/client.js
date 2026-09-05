@@ -113,10 +113,11 @@ console.log(">>> FETCH", `${BASE_URL}${API_PREFIX}${endpoint}`, "token:", token 
     if (!response.ok) {
       // 🔍 DEBUG: always log the full error body so 422 details are visible
 console.error(`[API Error ${response.status}] ${endpoint}:`, JSON.stringify(data, null, 2));
+      const detail = data?.detail;
       return {
         success: false,
         data:    null,
-        error:   data?.error || data?.detail || `Request failed (${response.status})`,
+        error:   data?.error || (typeof detail === "string" ? detail : detail?.message) || `Request failed (${response.status})`,
       };
     }
 

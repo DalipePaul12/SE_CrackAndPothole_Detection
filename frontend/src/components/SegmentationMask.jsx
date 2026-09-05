@@ -35,6 +35,8 @@ function normalizeSeverity(sev) {
 
 // ─── Build SVG polygon "points" string ────────────────────────────────────────
 function buildPolygonPoints(detection, scaleX, scaleY, displayW, displayH) {
+  if (detection.has_mask !== true) return null;
+
   // Use backend image dimensions if available (for resized images)
   const segScaleX = detection.image_width ? (displayW / detection.image_width) : scaleX;
   const segScaleY = detection.image_height ? (displayH / detection.image_height) : scaleY;
@@ -50,7 +52,7 @@ function buildPolygonPoints(detection, scaleX, scaleY, displayW, displayH) {
       .join(" ");
   }
 
-  // 2. Absolute segment coordinates — FALLBACK.
+  // 2. Absolute segment coordinates — fallback for validated real masks.
   //    Two shapes arrive from the backend:
   //      • Real seg-model: [[[x,y],[x,y],…]]  — outer array wraps ONE polygon list
   //      • 4-pt fallback:  [[x,y],[x,y],…]    — flat list of 4 points
@@ -65,11 +67,10 @@ function buildPolygonPoints(detection, scaleX, scaleY, displayW, displayH) {
     }
   }
 
-  // 3. Last resort: draw rectangle from bounding box
-  const box = getBox(detection, scaleX, scaleY, displayW, displayH);
-  if (!box) return null;
-  const [x1, y1, x2, y2] = box;
-  return `${x1},${y1} ${x2},${y1} ${x2},${y2} ${x1},${y2}`;
+  // No real mask data available — do not fabricate one from the box.
+  // The bounding box still renders separately via showBoundingBox
+  // whenever the caller passes showBoundingBox={true}.
+  return null;
 }
 
 // ─── Resolve bounding box to display coordinates ───────────────────────────────
@@ -469,6 +470,7 @@ export function normalizePrediction(raw) {
     norm_bbox,                                          // ← derived if missing
     segments:      raw.segments      ?? null,
     segments_norm: raw.segments_norm ?? null,
+    has_mask:      raw.has_mask === true,
     boxes:         raw.boxes         ?? null,
     image_width:   raw.image_width   ?? null,
     image_height:  raw.image_height  ?? null,

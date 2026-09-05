@@ -43,6 +43,7 @@ class AdminSettings(Base):
     default_lng  = Column(Float,       nullable=False, default=120.9842)
     default_zoom = Column(Integer,     nullable=False, default=13)
     map_provider = Column(String(32),  nullable=False, default="google")
+    restrict_location = Column(Boolean, nullable=False, default=False)
 
     # ── Notifications ─────────────────────────────────────────────────────────
     email_alerts        = Column(Boolean,     nullable=False, default=True)

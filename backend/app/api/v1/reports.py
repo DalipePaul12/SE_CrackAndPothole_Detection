@@ -74,6 +74,7 @@ from app.schemas.report import (
 )
 from app.services import report_service, summary_service
 from app.services.notification_service import notify_background
+from app.services.location_service import is_inside_malabon
 from app.utils.geo import calculate_distance
 
 logger = logging.getLogger(__name__)
@@ -305,6 +306,20 @@ async def create_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    settings_result = await db.execute(select(AdminSettings).where(AdminSettings.id == 1))
+    admin_settings = settings_result.scalar_one_or_none()
+    if admin_settings and admin_settings.restrict_location:
+        if not is_inside_malabon(data.latitude, data.longitude):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "stage": "location",
+                    "status": "fail",
+                    "reason": "out_of_bounds",
+                    "message": "This location is outside the supported service area.",
+                },
+            )
+
     report = await report_service.create_report(db, data, current_user.id)
     report = await _fetch_report_or_404(db, report.id)
     upvote_count = await report_service.get_upvote_count(db, report.id)

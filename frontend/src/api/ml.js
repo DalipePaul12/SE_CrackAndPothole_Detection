@@ -8,7 +8,7 @@ const ENDPOINTS = {
 const TIMEOUTS = {
   image:    90_000,
   video:    300_000,
-  realtime: 900,
+  realtime: 10_000,
 };
 
 function _authHeaders() {
@@ -34,7 +34,7 @@ function _httpError(status, body) {
     401: "Session expired. Please log in again.",
     403: "You do not have permission to perform this action.",
     413: "File is too large. Please upload a smaller file.",
-    415: "Unsupported file format. Use JPEG, PNG, WEBP for images or MP4 for video.",
+    415: "Unsupported file format. Use JPEG, PNG, WEBP for images or MP4, MOV, AVI, or WebM for video.",
     422: serverMsg || "AI classification is currently unavailable.",
     429: "Too many requests. Please wait a moment and try again.",
     500: "Server error during analysis. Please try again.",
@@ -86,9 +86,14 @@ export async function analyzeMedia(file) {
           is_ai_generated: payload.ai_validation?.is_ai_generated ?? false,
           confidence:      payload.ai_validation?.confidence      ?? 0,
           status:          payload.ai_validation?.status          ?? "unknown",
+          method:          payload.ai_validation?.method          ?? "heuristic_fallback",
           model:           payload.ai_validation?.model           ?? null,
           raw_scores:      payload.ai_validation?.raw_scores      ?? {},
         },
+        stage:      payload.stage      ?? "passed",
+        status:     payload.status     ?? "pass",
+        reason:     payload.reason     ?? null,
+        confidence: payload.confidence ?? null,
         prediction: payload.prediction
           ? {
               label:             payload.prediction.label             ?? "uncertain",
@@ -121,10 +126,10 @@ export async function analyzeMedia(file) {
 export async function analyzeVideo(file, onProgress = null) {
   if (!file) return _errorResponse("No file provided.");
 
-  const VIDEO_EXTS = [".mp4", ".mov", ".avi"];
+  const VIDEO_EXTS = [".mp4", ".mov", ".avi", ".webm"];
   const ext        = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");
   if (!VIDEO_EXTS.includes(ext)) {
-    return _errorResponse("Unsupported video format. Use MP4, MOV, or AVI.");
+    return _errorResponse("Unsupported video format. Use MP4, MOV, AVI, or WebM.");
   }
 
   onProgress?.("Uploading video…");
@@ -181,6 +186,11 @@ export async function analyzeVideo(file, onProgress = null) {
       error:   null,
       data: {
         detected: payload.detected ?? false,
+        stage:      payload.stage      ?? "passed",
+        status:     payload.status     ?? "pass",
+        reason:     payload.reason     ?? null,
+        confidence: payload.confidence ?? null,
+        ai_validation: payload.ai_validation ?? null,
         prediction: pred
           ? {
               label:             pred.label             ?? "uncertain",
@@ -269,7 +279,7 @@ export async function analyzeRealtimeFrame(frame) {
 
   } catch (err) {
     if (err.name === "AbortError") {
-      return { success: false, data: null, error: null };
+      return { success: false, data: null, error: "Realtime detection timed out." };
     }
     return _errorResponse("Realtime connection failed.");
   } finally {
@@ -295,48 +305,3 @@ export async function analyzeFile(file, onProgress = null) {
   return analyzeMedia(file);
 }
 
-export class RealtimeDetectionSocket {
-  constructor(onFrame) {
-    this.ws      = null;
-    this.onFrame = onFrame;
-  }
-
-    connect() {
-    const wsProto = window.location.protocol === "https:" ? "wss" : "ws";
-    const wsHost  = BASE_URL.replace(/^https?:\/\//, "");
-    this.ws = new WebSocket(`${wsProto}://${wsHost}/api/v1/ml/ws/realtime-overlay`);
-
-    this.ws.onopen = () => {
-      console.debug("[RealtimeDetectionSocket] connected");
-    };
-
-    this.ws.onmessage = (e) => {
-      const img    = new Image();
-      const objUrl = URL.createObjectURL(new Blob([e.data]));
-      img.onload = () => {
-        this.onFrame(img);
-        URL.revokeObjectURL(objUrl);
-      };
-      img.src = objUrl;
-    };
-
-    this.ws.onerror = (e) => {
-      console.warn("[RealtimeDetectionSocket] error", e);
-    };
-
-    this.ws.onclose = () => {
-      console.debug("[RealtimeDetectionSocket] disconnected");
-    };
-  }
-
-  sendFrame(blob) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(blob);
-    }
-  }
-
-  disconnect() {
-    this.ws?.close();
-    this.ws = null;
-  }
-}

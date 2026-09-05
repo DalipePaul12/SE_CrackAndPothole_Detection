@@ -32,8 +32,7 @@ import {
 } from "react-icons/fa";
 import { MdOutlineLocationOn } from "react-icons/md";
 import { useUser } from "../../hooks/useUser";
-import { tokenStorage } from "../../api/client";
-import { analyzeMedia, analyzeVideo } from "../../api/ml";
+import { analyzeMedia, analyzeRealtimeFrame, analyzeVideo } from "../../api/ml";
 import { createReport, uploadMedia } from "../../api/reports";
 import { useOfflineQueue, enqueueOfflineReport } from "../../hooks/useOfflineQueue";
 import { invalidateReportsCache } from "../../hooks/useReports";
@@ -52,7 +51,6 @@ import {
   NOMINATIM_URL,
   MALABON_BARANGAYS,
   DEFAULT_CITY,
-  DEFAULT_BARANGAY,
 } from "../../utils/geolocationUtils";
 import { readExifGps } from "../../utils/exifUtils";
 
@@ -62,7 +60,6 @@ const SEVERITY_BACKEND = {
   CRITICAL:     "critical",
   NON_CRITICAL: "non_critical",
 }
-const REALTIME_CONF_THRESHOLD = 0.40; // lowered from 0.60: live 320-px frames score ~0.1-0.15 below 640-px stills
 const MAX_REC_SECS            = 10;
 const MAX_ANALYSIS_RETRIES    = 3;
 const ANGLE_MIN               = 45;
@@ -157,7 +154,7 @@ function AngleHUD({ angle, valid }) {
 // ─── FullscreenCamera — dedicated camera-only popup, rendered as its own
 //     portal so it's never constrained by the form's scroll container ──────
 function FullscreenCamera({
-  activeTab, cameraError, videoRef, onVideoPlay, showAngleHUD, phoneAngle,
+  activeTab, cameraError, liveDetectionError, videoRef, onVideoPlay, showAngleHUD, phoneAngle,
   angleValid, liveDetection, isRecording, cameraActive, viewfinderSize,
   viewfinderOverlayDetections, viewfinderMaskDetections, recProgress,
   capturing, onCapturePhoto, onStopCamera, onStartRecording, onStopRecordingEarly,
@@ -181,6 +178,12 @@ function FullscreenCamera({
         <div className={`fs-camera-viewport${isRecording ? " recording" : ""}`}>
           <video ref={videoRef} className="fs-camera-video"
             autoPlay playsInline muted onPlay={onVideoPlay} />
+
+          {liveDetectionError && (
+            <div className="live-detection-warning" role="status" aria-live="polite">
+              {liveDetectionError}
+            </div>
+          )}
 
           <div className="capture-reference-circle" aria-hidden="true" />
           {showAngleHUD && <AngleHUD angle={phoneAngle} valid={angleValid} />}
@@ -597,6 +600,7 @@ function CreateReport({ onClose }) {
 
   const [cameraActive,  setCameraActive]  = useState(false);
   const [cameraError,   setCameraError]   = useState(null);
+  const [liveDetectionError, setLiveDetectionError] = useState(null);
   const [capturing,     setCapturing]     = useState(false);
   const [isRecording,   setIsRecording]   = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -614,6 +618,8 @@ function CreateReport({ onClose }) {
   const [isAnalyzing,      setIsAnalyzing]      = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(null);
   const [analyzeError,     setAnalyzeError]     = useState(null);
+  const [currentStage,     setCurrentStage]     = useState("idle");
+  const [attemptWarning,   setAttemptWarning]   = useState(null);
   const [retryCount,       setRetryCount]       = useState(0);
   const [hfStatus,         setHfStatus]         = useState(null);
   const [hfConfidence,     setHfConfidence]     = useState(null);
@@ -689,6 +695,10 @@ function CreateReport({ onClose }) {
   const previewMediaRef  = useRef(null);
   const angleRef         = useRef(null);
   const submittingRef    = useRef(false);
+  const consecutiveAnalysisFailuresRef = useRef(0);
+  const liveHistoryRef   = useRef([]);
+  const liveConfirmedRef = useRef(null);
+  const liveMissesRef    = useRef(0);
 
   // ── NEW: natural image size via hook (for correct mask scaling) ────────────
   const naturalSize = useNaturalSize(previewMediaRef);
@@ -723,6 +733,7 @@ function CreateReport({ onClose }) {
     setIsAnalyzing(false);
     setAnalysisComplete(false);
     setAnalysisProgress(null);
+    setCurrentStage("idle");
     setPredictionResult(null);
     setAllDetections([]);
     setPreviewSize({ width: 0, height: 0 });
@@ -739,12 +750,16 @@ function CreateReport({ onClose }) {
     const thisId = ++analysisIdRef.current;
     resetAnalysis();
     setIsAnalyzing(true);
+    setCurrentStage("authenticity");
+    setAnalysisProgress(isVideoFile(f) ? "Analyzing video…" : "Checking authenticity…");
 
     try {
       let result;
 
       if (isVideoFile(f)) {
         // ── VIDEO PATH (unchanged logic, added allDetections extract) ──────
+        setCurrentStage("authenticity");
+        setAnalysisProgress("Checking video authenticity…");
         result = await analyzeVideo(f, (msg) => {
           if (analysisIdRef.current === thisId) setAnalysisProgress(msg);
         });
@@ -753,6 +768,21 @@ function CreateReport({ onClose }) {
           setAnalyzeError(result.error || "Video analysis failed.");
           setAnalysisComplete(true); return;
         }
+        const videoAuth = result.data?.ai_validation;
+        if (videoAuth?.status === "flagged_for_review") {
+          setImageType("AI-GENERATED");
+          setHfStatus("rejected");
+          setHfConfidence(videoAuth.confidence ?? null);
+          setRequiresReview(true);
+          setReviewReason("AI-generated or manipulated video detected — full classification retained for admin review");
+        } else {
+          setImageType("REAL");
+          setHfStatus(videoAuth?.status ?? "skipped");
+          setHfConfidence(videoAuth?.confidence ?? null);
+        }
+        setCurrentStage("classification");
+        setAnalysisProgress("Classifying video damage and severity…");
+        setCurrentStage("review");
 
         const vidAIVal = result.data?.ai_validation;
         if (vidAIVal) {
@@ -798,6 +828,8 @@ function CreateReport({ onClose }) {
 
       } else {
         // ── IMAGE PATH ────────────────────────────────────────────────────
+        setCurrentStage("authenticity");
+        setAnalysisProgress("Checking authenticity…");
         result = await analyzeMedia(f);
         if (analysisIdRef.current !== thisId) return;
         if (!result.success) {
@@ -806,6 +838,25 @@ function CreateReport({ onClose }) {
         }
 
         const { ai_validation, prediction } = result.data ?? {};
+        const pipelineStage = result.data?.stage ?? "passed";
+        const pipelineStatus = result.data?.status ?? "pass";
+        const pipelineReason = result.data?.reason ?? null;
+
+        if (pipelineStage === "authenticity" && pipelineStatus === "fail") {
+          consecutiveAnalysisFailuresRef.current += 1;
+          setCurrentStage("review");
+          setImageType("AI-GENERATED");
+          setRequiresReview(false);
+          setReviewReason(null);
+          setAnalyzeError("This upload appears to be AI-generated or manipulated.");
+          if (consecutiveAnalysisFailuresRef.current >= 3) {
+            setAttemptWarning("Three authenticity checks failed. Check the lighting and capture a new, genuine road image.");
+          }
+          return;
+        }
+
+        setCurrentStage("presence");
+        setAnalysisProgress("Checking for road damage…");
 
 if (ai_validation && typeof ai_validation === "object") {
   const hfStat = ai_validation.status;
@@ -876,6 +927,37 @@ if (ai_validation && typeof ai_validation === "object") {
             setAnalyzeError("No damage detected. Please upload a clearer photo of road damage.");
           }
         }
+
+        if (pipelineStage === "presence" && pipelineStatus === "fail") {
+          consecutiveAnalysisFailuresRef.current += 1;
+          setCurrentStage("review");
+          setDamageType(null);
+          setSeverity(null);
+          setAiConfidence(result.data?.confidence ?? null);
+          setAnalyzeError(pipelineReason === "no_damage"
+            ? "No road damage detected. Please try again."
+            : "The damage check could not confirm road damage.");
+          if (consecutiveAnalysisFailuresRef.current >= 3) {
+            setAttemptWarning("Three damage checks failed. Check the lighting, distance, and camera angle before trying again.");
+          }
+          return;
+        }
+
+        if (pipelineStatus === "flagged_for_review") {
+          setRequiresReview(true);
+          setReviewReason("AI-generated or manipulated media detected — full classification retained for admin review");
+          setAnalyzeError(null);
+        }
+
+        setCurrentStage(pipelineStatus === "uncertain" ? "review" : "classification");
+        setAnalysisProgress("Classifying damage and severity…");
+        if (pipelineStatus === "uncertain") {
+          setAnalyzeError("The damage classification is uncertain. Please capture a clearer image.");
+          return;
+        }
+        consecutiveAnalysisFailuresRef.current = 0;
+        setAttemptWarning(null);
+        setCurrentStage("review");
       }
 
     } catch {
@@ -886,6 +968,7 @@ if (ai_validation && typeof ai_validation === "object") {
         setIsAnalyzing(false);
         setAnalysisProgress(null);
         setAnalysisComplete(true);
+        setCurrentStage((stage) => stage === "idle" ? "review" : stage);
       }
     }
   }, [resetAnalysis]);
@@ -911,19 +994,37 @@ if (ai_validation && typeof ai_validation === "object") {
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraActive(false);
     setShowCamera(false);
+    setLiveDetectionError(null);
     setIsRecording(false);
     setRecordingTime(0);
     setLiveDetection({ detected: false, label: null, confidence: 0, bbox: null, distance: null, status: "idle" });
     setViewfinderSize({ width: 0, height: 0 });
+    liveHistoryRef.current = [];
+    liveConfirmedRef.current = null;
+    liveMissesRef.current = 0;
   }, []);
 
   // ── startCamera — CHANGED: paced/downscaled realtime loop + failure logging
   const startCamera = useCallback(async () => {
     setCameraError(null);
+    setLiveDetectionError(null);
     try {
-const stream = await navigator.mediaDevices.getUserMedia({
-  video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-});
+let stream;
+try {
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    audio: false,
+  });
+} catch (firstError) {
+  // Desktop WebViews may reject facingMode even when camera permission is granted.
+  if (!['OverconstrainedError', 'NotFoundError', 'TypeError'].includes(firstError?.name)) {
+    throw firstError;
+  }
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+    audio: false,
+  });
+}
 streamRef.current = stream;
 
 // Wait for <video> to mount — fixes race where getUserMedia resolves
@@ -955,39 +1056,56 @@ setCameraActive(true);
           }
           try {
             const blob  = await snapRealtimeFrameBlob(videoRef.current);
-            const fd    = new FormData();
-            fd.append("file", blob, "frame.jpg");
-            const token = tokenStorage.getAccess();
-            const res   = await fetch("https://snap2fix-backend-155503391300.asia-southeast1.run.app/api/v1/ml/analyze/realtime", {
-              method:      "POST",
-              body:        fd,
-              signal:      AbortSignal.timeout(4000),
-              credentials: "include",
-              headers:     token ? { Authorization: `Bearer ${token}` } : {},
-            });
-            if (res.ok) {
+            const result = await analyzeRealtimeFrame(blob);
+            if (result.success) {
               consecFails = 0;
-              const { data } = await res.json();
+              setLiveDetectionError(null);
+              const data = result.data ?? {};
               const allDets  = data?.all_detections ?? [];
-              const pred     = data?.prediction;
-              if (allDets.length === 0 && (!pred || pred.label === "none")) {
+              const backendDetected = data.detected === true;
+              const currentLabel = allDets[0]?.class ?? allDets[0]?.label ?? data.prediction?.label ?? null;
+
+              liveHistoryRef.current = [
+                ...liveHistoryRef.current,
+                { detected: backendDetected, label: currentLabel },
+              ].slice(-3);
+
+              if (backendDetected) {
+                const matchingFrames = liveHistoryRef.current.filter(
+                  (frame) => frame.detected && frame.label === currentLabel
+                ).length;
+                if (matchingFrames >= 2) {
+                  liveConfirmedRef.current = { allDets, prediction: data.prediction, label: currentLabel };
+                  liveMissesRef.current = 0;
+                } else if (liveConfirmedRef.current?.label !== currentLabel) {
+                  liveMissesRef.current += 1;
+                }
+              } else if (liveConfirmedRef.current) {
+                liveMissesRef.current += 1;
+                if (liveMissesRef.current > 3) {
+                  liveConfirmedRef.current = null;
+                  liveHistoryRef.current = [];
+                }
+              }
+
+              const confirmed = liveConfirmedRef.current;
+              if (!confirmed) {
                 setLiveDetection((p) => ({ ...p, detected: false, status: "scanning", bbox: null, boxes: [] }));
               } else {
-                const best    = allDets[0] ?? pred;
+                const confirmedDets = confirmed.allDets ?? [];
+                const best    = confirmedDets[0] ?? confirmed.prediction;
                 const conf    = best?.confidence ?? 0;
                 const normBox = best?.norm_bbox ?? null;
                 const dist    = distanceFeedback(normBox);
                 setLiveDetection({
-                  detected:   allDets.length > 0 && conf >= REALTIME_CONF_THRESHOLD,
+                  detected:   true,
                   label:      best?.class ?? best?.label ?? null,
                   confidence: conf,
                   severity:   best?.severity,
                   bbox:       normBox,
-                  boxes:      allDets,
+                  boxes:      confirmedDets,
                   distance:   dist,
-                  status:     allDets.length > 0 && conf >= REALTIME_CONF_THRESHOLD
-                    ? (dist.ok ? "detected" : "warning")
-                    : "scanning",
+                  status:     dist.ok ? "detected" : "warning",
                 });
               }
               if (videoRef.current) {
@@ -999,15 +1117,18 @@ setCameraActive(true);
             } else {
               // ── NEW: surface failures instead of swallowing them silently ──
               consecFails++;
-              console.warn(`[realtime-detect] HTTP ${res.status} on frame request (consecutive fails: ${consecFails})`);
+              console.warn(`[realtime-detect] ${result.error || "frame request failed"} (consecutive fails: ${consecFails})`);
               if (consecFails >= REALTIME_MAX_CONSEC_FAILS) {
-                setCameraError((prev) => prev ?? "Live detection is temporarily unavailable — you can still capture normally.");
+                setLiveDetectionError("Live detection is temporarily unavailable. You can still capture normally.");
               }
             }
           } catch (err) {
             // ── NEW: log instead of fully silent catch ──
             consecFails++;
             console.warn(`[realtime-detect] request error: ${err?.name ?? err} (consecutive fails: ${consecFails})`);
+            if (consecFails >= REALTIME_MAX_CONSEC_FAILS) {
+              setLiveDetectionError("Live detection is temporarily unavailable. You can still capture normally.");
+            }
           }
           // Paced gap keeps us safely under the backend rate limit
           await new Promise((r) => setTimeout(r, REALTIME_FRAME_INTERVAL_MS));
@@ -1017,6 +1138,8 @@ setCameraActive(true);
       setCameraError(
         err.name === "NotAllowedError"
           ? "Camera permission denied. Please allow access in your browser settings."
+          : err.name === "NotFoundError"
+          ? "No camera was found. Connect a camera and try again."
           : "Could not access camera. Try uploading a photo instead."
       );
     }
@@ -1055,8 +1178,10 @@ setCameraActive(true);
         clearInterval(recordTimerRef.current);
         setIsRecording(false);
         setRetryCount(0);
-        const blob     = new Blob(chunksRef.current, { type: "video/webm" });
-        const captured = new File([blob], "snap_video.webm", { type: "video/webm" });
+        const recordedType = mr.mimeType || mimeType;
+        const recordedExtension = recordedType.toLowerCase().includes("mp4") ? "mp4" : "webm";
+        const blob     = new Blob(chunksRef.current, { type: recordedType });
+        const captured = new File([blob], `snap_video.${recordedExtension}`, { type: recordedType });
         setFile(captured);
         setPreview(URL.createObjectURL(blob));
         detectionLoopRef.current = false;
@@ -1112,14 +1237,7 @@ setCameraActive(true);
         canvas.height = 4;
         const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.5));
         if (!blob) return;
-        const fd = new FormData();
-        fd.append("file", blob, "warmup.jpg");
-        const warmupToken = tokenStorage.getAccess();
-        await fetch("https://snap2fix-backend-155503391300.asia-southeast1.run.app/api/v1/ml/analyze/realtime", {
-          method: "POST", body: fd, credentials: "include",
-          signal: AbortSignal.timeout(10_000),
-          headers: warmupToken ? { Authorization: `Bearer ${warmupToken}` } : {},
-        });
+        await analyzeRealtimeFrame(blob);
       } catch {
         // best-effort — ignored
       }
@@ -1142,9 +1260,10 @@ setCameraActive(true);
   }, []);
 
   // ── Location (UNCHANGED) ──────────────────────────────────────────────────
-  const fetchLocation = useCallback(async () => {
+  const fetchLocation = useCallback(async (forceFresh = false) => {
     if (!navigator.geolocation) return;
     setLocationLoading(true);
+    setLocationWarning("");
     navigator.geolocation.getCurrentPosition(
       async ({ coords: c }) => {
         const lat = c.latitude, lng = c.longitude;
@@ -1177,7 +1296,7 @@ setCameraActive(true);
         );
         setLocationLoading(false);
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 }
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: forceFresh ? 0 : 60_000 }
     );
   }, []);
 
@@ -1290,6 +1409,10 @@ setCameraActive(true);
         message: err.message || "Submission failed.",
         onRetry: () => performBackgroundSubmit(reportPayload, mediaFile, existingReportId),
       });
+      if (String(err.message).includes("out_of_bounds")) {
+        setFormError("This location is outside the supported service area.");
+        setLocationWarning("This location is outside the supported service area.");
+      }
     }
   }, [pushOfflineToast]);
 
@@ -1360,6 +1483,14 @@ setCameraActive(true);
   ]);
   // ── Derived values ─────────────────────────────────────────────────────────
   const canSubmit      = !isSubmitting && !isAnalyzing;
+  const stageMessage   = {
+    idle: "Preparing analysis…",
+    authenticity: "Checking authenticity…",
+    presence: "Checking for road damage…",
+    classification: "Classifying damage and severity…",
+    review: "Review AI results before submitting.",
+    done: "Analysis complete.",
+  }[currentStage] || "Analyzing…";
   const imageTypeBadge = hfStatus === "error" ? "HF-ERROR" : imageType;
   const recProgress    = (recordingTime / MAX_REC_SECS) * 100;
   const showAngleHUD   = cameraActive && phoneAngle !== null;
@@ -1468,6 +1599,7 @@ const showMask = analysisComplete &&
             <FullscreenCamera
               activeTab={activeTab}
               cameraError={cameraError}
+              liveDetectionError={liveDetectionError}
               videoRef={videoRef}
               onVideoPlay={(e) => setViewfinderSize({
                 width:  e.target.offsetWidth  || 640,
@@ -1639,7 +1771,7 @@ const showMask = analysisComplete &&
               <div className="analyzing-row" role="status" aria-live="polite">
                 <FaSpinner className="spin-icon" aria-hidden="true" />
                 <span className="analyzing-text">
-                  {analysisProgress || (activeTab === "video" ? "Analyzing video…" : "Analyzing image…")}
+                  {analysisProgress || stageMessage || (activeTab === "video" ? "Analyzing video…" : "Analyzing image…")}
                 </span>
               </div>
             ) : (
@@ -1720,6 +1852,12 @@ const showMask = analysisComplete &&
                 ) : null}
               </div>
             )}
+            {attemptWarning && !isAnalyzing && (
+              <p className="retry-exhausted-msg" role="alert">
+                <FaExclamationCircle aria-hidden="true" style={{ marginRight: 4 }} />
+                {attemptWarning}
+              </p>
+            )}
             {aiConfidence !== null && !isAnalyzing && (
               <div className="confidence-bar-wrapper"
                 aria-label={`ML confidence: ${Math.round(aiConfidence * 100)}%`}>
@@ -1777,7 +1915,7 @@ const showMask = analysisComplete &&
           <div className="snap-location-block">
             <div className="snap-location-header">
               <label>LOCATION &amp; BARANGAY</label>
-              <button className="btn-refresh-loc" onClick={fetchLocation}
+              <button className="btn-refresh-loc" onClick={() => fetchLocation(true)}
                 disabled={locationLoading} aria-label="Refresh location">
                 {locationLoading
                   ? <FaSpinner className="spin-icon" aria-hidden="true" />
@@ -1809,7 +1947,7 @@ const showMask = analysisComplete &&
                 <span style={{ flex: 1 }}>Location from photo — please confirm this is where the damage is.</span>
                 <button
                   type="button"
-                  onClick={() => { setLocationSource(null); fetchLocation(); }}
+                  onClick={() => { setLocationSource(null); fetchLocation(true); }}
                   disabled={locationLoading}
                   style={{
                     flexShrink: 0, background: "none", border: "1px solid #3b82f6",

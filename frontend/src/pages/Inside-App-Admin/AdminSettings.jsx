@@ -32,6 +32,7 @@ function fromApi(d) {
     defaultLat:               d.default_lat,
     defaultLng:               d.default_lng,
     defaultZoom:              d.default_zoom,
+    restrictLocation:         d.restrict_location,
     emailAlerts:              d.email_alerts,
     pushAlerts:               d.push_alerts,
     digestFrequency:          d.digest_frequency,
@@ -61,6 +62,7 @@ function toApi(s) {
     default_lat:               s.defaultLat,
     default_lng:               s.defaultLng,
     default_zoom:              s.defaultZoom,
+    restrict_location:         s.restrictLocation,
     email_alerts:              s.emailAlerts,
     push_alerts:               s.pushAlerts,
     digest_frequency:          s.digestFrequency,
@@ -82,6 +84,7 @@ const DEFAULTS = {
   autoAssign: true, responseTimeHours: 24, escalateAfterHours: 72,
   dataRetentionDays: 365,
   defaultLat: 14.5995, defaultLng: 120.9842, defaultZoom: 13,
+  restrictLocation: false,
   emailAlerts: true, pushAlerts: true, digestFrequency: "daily", criticalAlertSound: true,
   require2FA: false, passwordMinLength: 8, sessionTimeout: 60,
   allowPublicRegistration: false,
@@ -294,6 +297,21 @@ const AdminSettings = () => {
                     onChange={(e) => handleChange("orgName", e.target.value)}
                     disabled={loading}
                   />
+                </div>
+                <div className="form-group full-width">
+                  <label className="toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={settings.restrictLocation}
+                      onChange={(e) => handleChange("restrictLocation", e.target.checked)}
+                      disabled={loading}
+                    />
+                    <span className="toggle-slider"></span>
+                    Restrict Reports to Malabon City
+                  </label>
+                  <span className="field-hint">
+                    Reject report submissions whose GPS coordinates fall outside the authoritative Malabon boundary.
+                  </span>
                 </div>
                 <div className="form-group">
                   <label>Municipality / Coverage Area</label>

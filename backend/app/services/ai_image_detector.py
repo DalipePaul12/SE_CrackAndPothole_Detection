@@ -52,7 +52,7 @@ assert abs(sum(_WEIGHTS.values()) - 1.0) < 1e-6, "Weights must sum to 1.0"
 # PUBLIC API
 # ═════════════════════════════════════════════════════════════════════════════
 
-def detect_ai_generated(
+async def detect_ai_generated(
     image_bytes: bytes,
     *,
     max_dimension: int = 1024,
@@ -66,7 +66,7 @@ def detect_ai_generated(
       3. If image cannot be decoded → skipped.
     """
     # Try HF first
-    hf_result = _try_hf(image_bytes)
+    hf_result = await _try_hf(image_bytes)
     if hf_result is not None:
         logger.info("HF verdict: %s", hf_result)
         return hf_result
@@ -80,7 +80,7 @@ def detect_ai_generated(
 # HUGGINGFACE PATH
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _try_hf(image_bytes: bytes) -> dict[str, Any] | None:
+async def _try_hf(image_bytes: bytes) -> dict[str, Any] | None:
     """Return HF result, or None if we should fall back to hardcoded."""
     if not settings.AI_FAKE_DETECTION_ENABLED:
         return None
@@ -100,11 +100,9 @@ def _try_hf(image_bytes: bytes) -> dict[str, Any] | None:
     }
 
     try:
-        return asyncio.get_event_loop().run_until_complete(
-            _hf_post(image_bytes, url, headers)
-        )
+        return await _hf_post(image_bytes, url, headers)
     except Exception as exc:
-        logger.warning("HF sync wrapper failed: %s", exc)
+        logger.warning("HF async request failed: %s", exc)
         return None
 
 
@@ -190,6 +188,7 @@ async def _hf_post(image_bytes: bytes, url: str, headers: dict) -> dict[str, Any
             "is_ai_generated": is_ai,
             "confidence": round(display_confidence, 4),
             "status": "rejected" if is_ai else "approved_for_classification",
+            "method": "model",
             "model": _HF_MODEL,
             "ai_score": round(artificial_score, 4),
             "raw_scores": {
@@ -257,6 +256,7 @@ def _hardcoded_detect(image_bytes: bytes, max_dim: int = 1024) -> dict[str, Any]
         "is_ai_generated": is_ai,
         "confidence": confidence,
         "status": "rejected" if is_ai else "approved_for_classification",
+        "method": "heuristic_fallback",
         "model": "hardcoded_multi_signal_v1",
         "ai_score": round(ai_score, 4),
         "raw_scores": {k: round(v, 4) for k, v in raw.items()},
@@ -282,6 +282,7 @@ def _skipped_result(reason: str) -> dict[str, Any]:
         "is_ai_generated": False,
         "confidence": 0.0,
         "status": "skipped",
+        "method": "heuristic_fallback",
         "model": "hardcoded_multi_signal_v1",
         "ai_score": 0.0,
         "raw_scores": {"skip_reason": reason},

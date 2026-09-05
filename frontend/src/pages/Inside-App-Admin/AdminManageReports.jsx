@@ -1118,6 +1118,12 @@ function AdminManageReports() {
                           style={{ display:"inline-block", marginLeft:4, padding:"1px 6px", borderRadius:10, fontSize:"0.68rem", fontWeight:600, background:"#1565c0", color:"#fff", verticalAlign:"middle", cursor:"help" }}
                         >Review</span>
                       )}
+                      {r.is_flagged_fake && (
+                        <span
+                          title={`AI-generated media flagged${r.fake_confidence != null ? ` (${Math.round(r.fake_confidence * 100)}%)` : ""}`}
+                          style={{ display:"inline-block", marginLeft:4, padding:"2px 7px", borderRadius:10, fontSize:"0.68rem", fontWeight:800, background:"#b91c1c", color:"#fff", verticalAlign:"middle", cursor:"help", border:"1px solid #fecaca" }}
+                        >AI FLAG</span>
+                      )}
                     </td>
 
                     <td className="col-assigned" onClick={e => e.stopPropagation()}>
