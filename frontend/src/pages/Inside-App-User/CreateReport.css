@@ -275,8 +275,8 @@ body.dark {
   position: absolute;
   inset: 0;
   border-radius: calc(var(--cr-radius-upload) - 2px);
-  overflow: visible;        /* ← was hidden — allow trash btn to not clip */
-  isolation: isolate;
+  overflow: visible !important;   /* buttons must never be clipped */
+  isolation: auto;                 /* was isolate — could trap z-index below outer overlays */
 }
 .preview-img {
   width: 100%;
@@ -460,31 +460,65 @@ body.dark {
 }
 .preview-analyzing-overlay .spin-icon { font-size: 20px; }
 
-.trash-btn {
+/* Sibling of .preview-container, direct child of .snap-upload-box, which
+   is position:relative with a fixed aspect-ratio (16/9) + min/max-height.
+   top/right are measured from THAT frame — never from the image inside. */
+.cr-preview-toolbar {
   position: absolute;
-  top: 30%;                 /* ← center vertically */
-  right: 12px;
-  transform: translateY(-50%);  /* ← offset to truly center */
+  top: 10px;
+  right: 10px;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none; /* wrapper itself never blocks other clicks */
+}
+
+.cr-retake-btn,
+.cr-trash-btn {
+  position: relative;
+  pointer-events: auto;
   background: var(--cr-red);
   color: #fff;
   border: none;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 10px rgba(0,0,0,0.40);
-  transition: all 0.18s ease;
+  transition: transform 0.18s ease, background 0.18s ease;
   -webkit-tap-highlight-color: transparent;
-  z-index: 100;
-  pointer-events: auto;
+  touch-action: manipulation;
+  flex-shrink: 0;
 }
-.trash-btn:hover { 
-  background: var(--cr-red-hover); 
-  transform: translateY(-50%) scale(1.12);  /* ← keep center + scale */
+
+.cr-retake-btn {
+  background: var(--cr-primary);
+}
+.cr-retake-btn:hover {
+  background: var(--cr-primary-hover);
+  transform: scale(1.1);
+}
+.cr-retake-btn:active,
+.cr-trash-btn:active {
+  transform: scale(0.94);
+}
+.cr-trash-btn:hover {
+  background: var(--cr-red-hover);
+  transform: scale(1.1);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .cr-retake-btn,
+  .cr-trash-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
 }
 /* ══════════════════════════════════════════════════════════════
    CAMERA VIEWPORT

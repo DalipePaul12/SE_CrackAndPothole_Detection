@@ -816,7 +816,7 @@
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 22px 16px 16px;
+  padding: 12px 12px 12px;
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
@@ -1067,8 +1067,9 @@
   border: 1px solid var(--border);
   width: 100%;
   max-width: 860px;
+  height: min(900px, 92vh);  /* fixed shell — tabs never resize the modal anymore */
   max-height: 92vh;
-  overflow-y: auto;
+  overflow: hidden;           /* only .sub-modal-body scrolls now */
   border-radius: var(--radius-2xl);
   padding: 1.35rem 1.5rem;
   position: relative;
@@ -1078,11 +1079,17 @@
   color: var(--text);
 }
 
-.sub-modal-content::-webkit-scrollbar {
+.sub-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sub-modal-body::-webkit-scrollbar {
   width: 4px;
 }
 
-.sub-modal-content::-webkit-scrollbar-thumb {
+.sub-modal-body::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: var(--radius-pill);
 }

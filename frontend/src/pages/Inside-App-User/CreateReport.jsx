@@ -1386,6 +1386,14 @@ setCameraActive(true);
     stopCamera();
   }, [resetAnalysis, stopCamera]);
 
+  // ── Retake — discards current media/analysis and jumps straight back
+  // into the camera, instead of returning to the empty upload placeholder.
+  const handleRetake = useCallback((e) => {
+    e?.stopPropagation();
+    clearMedia(e);
+    openCamera();
+  }, [clearMedia, openCamera]);
+
   // ── Form validation ────────────────────────────────────────────────────────
   const validateForm = useCallback(() => {
     if (!file)        { setFormError("Evidence required: Please upload or capture a photo/video."); return; }
@@ -1570,7 +1578,8 @@ const effectiveSize = useMemo(() => {
 
 const showMask = analysisComplete &&
   maskDetections.length > 0 &&
-  effectiveSize !== null;
+  effectiveSize !== null &&
+  !(file && isVideoFile(file));
 
   const switchTab = useCallback((id) => {
     stopCamera();
@@ -1684,14 +1693,15 @@ const showMask = analysisComplete &&
               onKeyDown={(e) => e.key === "Enter" && !preview && fileRef.current.click()}
             >
               {preview ? (
-                <div className="preview-container">
-                  {file && isVideoFile(file) ? (
-                    <video ref={previewMediaRef} src={preview}
-                      className="preview-img" muted autoPlay loop playsInline controls
-                      onLoadedMetadata={(e) => setPreviewSize({
-                        width: e.target.offsetWidth, height: e.target.offsetHeight,
-                      })} />
-                  ) : (
+                <>
+                  <div className="preview-container">
+                    {file && isVideoFile(file) ? (
+                      <video ref={previewMediaRef} src={preview}
+                        className="preview-img" muted autoPlay loop playsInline controls
+                        onLoadedMetadata={(e) => setPreviewSize({
+                          width: e.target.offsetWidth, height: e.target.offsetHeight,
+                        })} />
+                    ) : (
 <img
   ref={previewMediaRef}
   src={preview}
@@ -1704,72 +1714,82 @@ const showMask = analysisComplete &&
     });
   }}
 />
-                  )}
+                    )}
 
-                  {isAnalyzing && (
-                    <>
-                      <div className="seg-scan-grid"  aria-hidden="true" />
-                      <div className="seg-scan-line"  aria-hidden="true" />
-                    </>
-                  )}
+                    {isAnalyzing && (
+                      <>
+                        <div className="seg-scan-grid"  aria-hidden="true" />
+                        <div className="seg-scan-line"  aria-hidden="true" />
+                      </>
+                    )}
 
-                  {showMask && (
-                    <SegmentationMask
-                      predictions={maskDetections}
-                      imageSize={effectiveSize}
-                      naturalSize={naturalSize.width > 0 ? naturalSize : effectiveSize}
-                      showBoundingBox={true}
-                      showLabels={true}
-                      smoothPasses={1}
-                    />
-                  )}
+                    {showMask && (
+                      <SegmentationMask
+                        predictions={maskDetections}
+                        imageSize={effectiveSize}
+                        naturalSize={naturalSize.width > 0 ? naturalSize : effectiveSize}
+                        showBoundingBox={true}
+                        showLabels={true}
+                        smoothPasses={1}
+                      />
+                    )}
 
-                  {analysisComplete && maskDetections.length > 0 && (
-                    <>
-                      {maskDetections.length > 1 && (
-                        <div className="preview-det-count" aria-hidden="true">
-                          {maskDetections.length} detections
-                        </div>
-                      )}
-                      <div className="preview-result-badges">
-                        {maskDetections.map((det, i) => {
-                          const sev = (det.severity ?? "non_critical").toLowerCase();
-                          const isCrit = ["critical","high","severe"].includes(sev);
-                          return (
-                            <div key={i}
-                              className={`preview-det-badge ${isCrit ? "det-badge-critical" : "det-badge-non_critical"}`}
-                              style={{ animationDelay: `${i * 60}ms` }}>
-                              <span className="det-badge-type">
-                                {(det.class ?? "DAMAGE").toUpperCase()}
-                              </span>
-                              <span className="det-badge-sev">
-                                {isCrit ? "CRIT" : "LOW"}
-                              </span>
-                              {det.confidence != null && (
-                                <span className="det-badge-conf">
-                                  {Math.round(det.confidence * 100)}%
+                    {analysisComplete && maskDetections.length > 0 && (
+                      <>
+                        {maskDetections.length > 1 && (
+                          <div className="preview-det-count" aria-hidden="true">
+                            {maskDetections.length} detections
+                          </div>
+                        )}
+                        <div className="preview-result-badges">
+                          {maskDetections.map((det, i) => {
+                            const sev = (det.severity ?? "non_critical").toLowerCase();
+                            const isCrit = ["critical","high","severe"].includes(sev);
+                            return (
+                              <div key={i}
+                                className={`preview-det-badge ${isCrit ? "det-badge-critical" : "det-badge-non_critical"}`}
+                                style={{ animationDelay: `${i * 60}ms` }}>
+                                <span className="det-badge-type">
+                                  {(det.class ?? "DAMAGE").toUpperCase()}
                                 </span>
-                              )}
-                            </div>
-                          );
-                        })}
+                                <span className="det-badge-sev">
+                                  {isCrit ? "CRIT" : "LOW"}
+                                </span>
+                                {det.confidence != null && (
+                                  <span className="det-badge-conf">
+                                    {Math.round(det.confidence * 100)}%
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+
+                    {isAnalyzing && (
+                      <div className="preview-analyzing-overlay" aria-live="polite">
+                        <FaSpinner className="spin-icon" aria-hidden="true" />
+                        <span>{analysisProgress || "Analyzing…"}</span>
                       </div>
-                    </>
-                  )}
+                    )}
+                  </div>
 
+                  {/* Sibling of .preview-container, direct child of the
+                      FIXED-SIZE .snap-upload-box — position is anchored to
+                      the frame itself, completely independent of the
+                      photo/video's own dimensions or aspect ratio. */}
                   {!isSubmitting && !isAnalyzing && (
-                    <button className="trash-btn" onClick={clearMedia} aria-label="Remove file">
-                      <FaRegTrashAlt aria-hidden="true" />
-                    </button>
-                  )}
-
-                  {isAnalyzing && (
-                    <div className="preview-analyzing-overlay" aria-live="polite">
-                      <FaSpinner className="spin-icon" aria-hidden="true" />
-                      <span>{analysisProgress || "Analyzing…"}</span>
+                    <div className="cr-preview-toolbar">
+                      <button className="cr-retake-btn" onClick={handleRetake} aria-label="Retake photo or video">
+                        <FaRedo aria-hidden="true" />
+                      </button>
+                      <button className="cr-trash-btn" onClick={clearMedia} aria-label="Remove file">
+                        <FaRegTrashAlt aria-hidden="true" />
+                      </button>
                     </div>
                   )}
-                </div>
+                </>
               ) : (
                 <div className="upload-placeholder">
                   <div className="icon-circle" aria-hidden="true">
