@@ -925,12 +925,29 @@ async def upload_media(
 
         # ── RUN ML CLASSIFICATION INLINE ─────────────────────────────────
     import asyncio
-    from app.services.ml_service import run_yolo
+    from app.services.ml_service import run_yolo, _check_road_pavement
     from app.models.enums import DamageType, SeverityLevel
     from app.models.ai_detection_result import AIDetectionResult
 
     try:
-        prediction = await asyncio.to_thread(run_yolo, str(file_path))
+        # Scene gate FIRST — this is the direct-upload path that previously
+        # bypassed process_media_pipeline entirely and went straight to
+        # run_yolo(), so a non-road image here got silently saved as a
+        # clean report with no damage type instead of being rejected.
+        scene = await _check_road_pavement(contents)
+        if not scene["is_road"]:
+            logger.info(
+                f"Report {report_id}: no road/pavement detected (score={scene['confidence']}) — skipping YOLO"
+            )
+            report.ai_damage_type = None
+            report.ai_severity = None
+            report.ai_confidence = scene["confidence"]
+            attachment.is_processed = True
+            await db.commit()
+            task_id = "inline_no_road_pavement"
+            prediction = None
+        else:
+            prediction = await asyncio.to_thread(run_yolo, str(file_path))
         logger.info(f"YOLO raw prediction for report {report_id}: {prediction}")
 
         if prediction:
@@ -1110,6 +1127,7 @@ async def get_comments(
 async def add_comment(
     report_id: int,
     data: CommentCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1131,6 +1149,53 @@ async def add_comment(
     db.add(comment)
     await db.commit()
     await db.refresh(comment)
+
+    # ── Notify relevant parties ────────────────────────────────────────
+    # This endpoint previously saved the comment and nothing else — no
+    # one was ever told a comment was posted. Routing rules:
+    #   citizen (owner) comments  -> notify all active admins/superadmins
+    #   contractor comments       -> notify owner AND admins
+    #   admin/superadmin comments -> notify owner only
+    preview = content[:80] + ("..." if len(content) > 80 else "")
+    commenter_label = current_user.full_name or current_user.email
+
+    async def _notify_admins() -> None:
+        admin_result = await db.execute(
+            select(User.id, User.email).where(
+                User.role.in_([UserRole.admin, UserRole.superadmin]),
+                User.is_active.is_(True),
+            )
+        )
+        for admin_id, admin_email in admin_result.all():
+            background_tasks.add_task(
+                notify_background,
+                user_id=admin_id,
+                title="New Comment on a Report",
+                message=f'{commenter_label} commented on report #{report_id}: "{preview}"',
+                type=NotificationType.info,
+                report_id=report_id,
+                email=admin_email,
+            )
+
+    def _notify_owner() -> None:
+        if report.owner_id and report.owner_id != current_user.id:
+            background_tasks.add_task(
+                notify_background,
+                user_id=report.owner_id,
+                title="New Comment on Your Report",
+                message=f'{commenter_label} commented on report #{report_id}: "{preview}"',
+                type=NotificationType.info,
+                report_id=report_id,
+            )
+
+    if current_user.role == UserRole.contractor:
+        _notify_owner()
+        await _notify_admins()
+    elif current_user.role in (UserRole.admin, UserRole.superadmin):
+        _notify_owner()
+    else:
+        await _notify_admins()
+
     return comment
 
 

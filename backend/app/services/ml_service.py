@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import json
 import logging
 import math
 import random
@@ -28,6 +29,30 @@ _crack_model = None
 
 _HF_MODEL = "umm-maybe/AI-image-detector"
 _HF_TIMEOUT = 12
+
+_HF_CLIP_MODEL = "openai/clip-vit-base-patch32"
+_HF_ZERO_SHOT_TIMEOUT = 10
+
+# Road/pavement scene gate — runs BEFORE damage detection. Without this,
+# a non-road image (wall, sky, indoor, person, vehicle) with zero YOLO
+# detections was indistinguishable from "road present, no damage" and
+# got silently reported as "no_damage", which is semantically wrong.
+ROAD_LABELS = [
+    "a photo of a road or street pavement",
+    "a photo of a pothole or crack on pavement",
+    "a photo of an asphalt or concrete road surface",
+]
+NON_ROAD_LABELS = [
+    "a photo of a person",
+    "a photo of an indoor room",
+    "a photo of a wall or building",
+    "a photo of the sky",
+    "a photo of grass, plants, or trees",
+    "a photo of a vehicle interior",
+    "a photo of an animal",
+    "a photo unrelated to roads",
+]
+ROAD_PAVEMENT_THRESHOLD = 0.35  # Min combined road-label score to pass the gate.
 
 REALTIME_CONF_THRESHOLD = 0.40  # Live 320px threshold; compare with _BASE_THRESHOLDS for 640px stills.
 DAMAGE_PRESENCE_THRESHOLD = 0.15  # Preserve the existing crack detection floor for image presence.
@@ -999,6 +1024,52 @@ async def authenticity_service(media_bytes: bytes) -> dict[str, Any]:
     }
 
 
+async def _check_road_pavement(image_bytes: bytes) -> dict[str, Any]:
+    """
+    CLIP zero-shot scene gate: does this image actually show a road or
+    pavement surface? Runs before pothole/crack inference so a non-road
+    image gets a distinct "no_road_pavement" result instead of being
+    misreported as "no_damage".
+
+    Fails OPEN (treats the image as road-present) on any API error or
+    timeout — an HF outage should never block legitimate report
+    submissions. Same fail-open pattern already used for the Redis
+    summary quota and the authenticity fallback in this file.
+    """
+    if not settings.HF_API_TOKEN:
+        logger.warning("HF_API_TOKEN not set — skipping road/pavement scene gate")
+        return {"is_road": True, "confidence": 0.0, "method": "skipped_no_token"}
+
+    candidate_labels = ROAD_LABELS + NON_ROAD_LABELS
+    try:
+        async with httpx.AsyncClient(timeout=_HF_ZERO_SHOT_TIMEOUT) as client:
+            resp = await client.post(
+                f"https://api-inference.huggingface.co/models/{_HF_CLIP_MODEL}",
+                headers={"Authorization": f"Bearer {settings.HF_API_TOKEN}"},
+                files={"inputs": image_bytes},
+                data={"parameters": json.dumps({"candidate_labels": candidate_labels})},
+            )
+            resp.raise_for_status()
+            scores = resp.json()
+    except Exception:
+        logger.warning("Road/pavement scene gate: HF API call failed — failing open", exc_info=True)
+        return {"is_road": True, "confidence": 0.0, "method": "failed_open"}
+
+    if not isinstance(scores, list):
+        logger.warning("Road/pavement scene gate: unexpected HF response shape — failing open")
+        return {"is_road": True, "confidence": 0.0, "method": "failed_open"}
+
+    road_score = sum(s.get("score", 0.0) for s in scores if s.get("label") in ROAD_LABELS)
+    is_road = road_score >= ROAD_PAVEMENT_THRESHOLD
+
+    return {
+        "is_road": is_road,
+        "confidence": round(road_score, 4),
+        "method": "clip_zero_shot",
+        "raw_scores": {s["label"]: round(s.get("score", 0.0), 4) for s in scores},
+    }
+
+
 def damage_presence_service(inference_result: dict[str, Any]) -> dict[str, Any]:
     """Determine whether model inference contains meaningful damage."""
     detections = [
@@ -1093,7 +1164,7 @@ def _skipped_authenticity_result() -> dict[str, Any]:
 
 async def process_media_pipeline(image_bytes: bytes, skip_authenticity: bool = False) -> dict[str, Any]:
     """
-    Sequential pipeline: authenticity -> presence -> classification.
+    Sequential pipeline: authenticity -> scene -> presence -> classification.
     skip_authenticity=True is used for live camera captures, where the
     authenticity check is not meaningful (no file to have been faked).
     """
@@ -1102,6 +1173,21 @@ async def process_media_pipeline(image_bytes: bytes, skip_authenticity: bool = F
 
     authenticity = _skipped_authenticity_result() if skip_authenticity else await authenticity_service(image_bytes)
     ai_validation = authenticity["data"]["ai_validation"]
+
+    scene = await _check_road_pavement(image_bytes)
+    if not scene["is_road"]:
+        logger.info("Scene gate rejected image: no road/pavement detected (score=%.4f)", scene["confidence"])
+        return {
+            "stage": "scene",
+            "status": "fail",
+            "reason": "no_road_pavement",
+            "confidence": scene["confidence"],
+            "scene_validation": scene,
+            "ai_validation": ai_validation,
+            "authenticity": authenticity,
+            "prediction": None,
+            "all_detections": [],
+        }
 
     load_models()
     loop = asyncio.get_event_loop()

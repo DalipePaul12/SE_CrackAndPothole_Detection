@@ -1,27 +1,20 @@
-"""
-Legacy projects router — kept for reference only.
-The production projects flow is in app/routers/projects.py.
-This file is NOT registered in main.py.
-"""
+
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
-# FIXED: removed the duplicate import of get_current_user from app.api.v1.auth.
-# That second import was silently overwriting this one, meaning the `is_verified`
-# check in auth_middleware.get_current_user was being bypassed.
-# Only import from auth_middleware — it is the correct, production-grade version.
 from app.middleware.auth_middleware import get_current_user, require_admin
 from app.models.enums import NotificationType, ProjectStatus, PriorityLevel, ReportStatus, UserRole
 from app.models.project import Project
 from app.models.report import Report
 from app.models.user import User
+from app.services.notification_service import notify_background
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -60,6 +53,7 @@ async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_project(
     data: ProjectCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -90,6 +84,34 @@ async def create_project(
     db.add(new_project)
     await db.commit()
     await db.refresh(new_project)
+
+    # Previously: creating a project (even with a contractor pre-assigned)
+    # sent zero notifications. A contractor could be assigned at creation
+    # time and never find out except by refreshing their dashboard.
+    if new_project.contractor_id:
+        contractor_email_result = await db.execute(
+            select(User.email).where(User.id == new_project.contractor_id)
+        )
+        background_tasks.add_task(
+            notify_background,
+            user_id=new_project.contractor_id,
+            title="New Project Assignment",
+            message=f"You have been assigned to project #{new_project.id} for report #{report.id}.",
+            type=NotificationType.info,
+            report_id=report.id,
+            email=contractor_email_result.scalar_one_or_none(),
+        )
+
+    if report.owner_id:
+        background_tasks.add_task(
+            notify_background,
+            user_id=report.owner_id,
+            title="Report Moved to a Project",
+            message=f"Your report #{report.id} now has an active repair project.",
+            type=NotificationType.info,
+            report_id=report.id,
+        )
+
     return await _get_project_or_404(db, new_project.id)
 
 
@@ -112,6 +134,7 @@ async def get_projects(
 async def update_project_status(
     project_id: int,
     data: ProjectUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -120,6 +143,8 @@ async def update_project_status(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     project = await _get_project_or_404(db, project_id)
+    old_status = project.status
+    status_changed = data.status is not None and data.status != old_status
 
     if data.status is not None:
         project.status = data.status
@@ -135,13 +160,38 @@ async def update_project_status(
         project.status = ProjectStatus.COMPLETED
         project.completion_percentage = 100.0
         project.actual_completion_date = datetime.now(timezone.utc)
+        status_changed = status_changed or (old_status != ProjectStatus.COMPLETED)
 
-        result = await db.execute(select(Report).where(Report.id == project.report_id))
-        report = result.scalar_one_or_none()
-        if report:
-            report.status = ReportStatus.RESOLVED
+    result = await db.execute(select(Report).where(Report.id == project.report_id))
+    report = result.scalar_one_or_none()
+    if is_completed and report:
+        report.status = ReportStatus.RESOLVED
 
     await db.commit()
+
+    # Previously: status/progress updates through this endpoint sent zero
+    # notifications — a contractor's own progress update, or an admin
+    # pushing a project forward, never told the report owner anything moved.
+    if status_changed:
+        if project.contractor_id and current_user.id != project.contractor_id:
+            background_tasks.add_task(
+                notify_background,
+                user_id=project.contractor_id,
+                title="Project Status Updated",
+                message=f"Project #{project.id} status changed to {project.status.value}.",
+                type=NotificationType.info,
+                report_id=project.report_id,
+            )
+        if report and report.owner_id:
+            background_tasks.add_task(
+                notify_background,
+                user_id=report.owner_id,
+                title="Report Status Updated",
+                message=f"Your report #{report.id} status is now {report.status.value}.",
+                type=NotificationType.info,
+                report_id=report.id,
+            )
+
     return {"message": "Project updated", "status": project.status.value}
 
 
@@ -215,6 +265,7 @@ async def get_project_details(
 async def update_project(
     project_id: int,
     data: ProjectUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -226,6 +277,9 @@ async def update_project(
 
     if current_user.role == UserRole.contractor and project.contractor_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not assigned to this project")
+
+    old_status = project.status
+    status_changed = data.status is not None and data.status != old_status
 
     if data.status is not None:
         project.status = data.status
@@ -241,13 +295,37 @@ async def update_project(
         project.status = ProjectStatus.COMPLETED
         project.completion_percentage = 100.0
         project.actual_completion_date = datetime.now(timezone.utc)
+        status_changed = status_changed or (old_status != ProjectStatus.COMPLETED)
 
-        result = await db.execute(select(Report).where(Report.id == project.report_id))
-        report = result.scalar_one_or_none()
-        if report:
-            report.status = ReportStatus.RESOLVED
+    result = await db.execute(select(Report).where(Report.id == project.report_id))
+    report = result.scalar_one_or_none()
+    if is_completed and report:
+        report.status = ReportStatus.RESOLVED
 
     await db.commit()
+
+    # Same duplicate-endpoint issue as /status above — this PUT route does
+    # the same job under a slightly different path, so it needs the same fix.
+    if status_changed:
+        if project.contractor_id and current_user.id != project.contractor_id:
+            background_tasks.add_task(
+                notify_background,
+                user_id=project.contractor_id,
+                title="Project Status Updated",
+                message=f"Project #{project.id} status changed to {project.status.value}.",
+                type=NotificationType.info,
+                report_id=project.report_id,
+            )
+        if report and report.owner_id:
+            background_tasks.add_task(
+                notify_background,
+                user_id=report.owner_id,
+                title="Report Status Updated",
+                message=f"Your report #{report.id} status is now {report.status.value}.",
+                type=NotificationType.info,
+                report_id=report.id,
+            )
+
     return await _get_project_or_404(db, project_id)
 
 
@@ -255,6 +333,7 @@ async def update_project(
 async def assign_contractor(
     project_id: int,
     data: ContractorAssign,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -275,6 +354,12 @@ async def assign_contractor(
         raise HTTPException(
             status_code=400, detail="Assigned user must have role=contractor"
         )
+    # Previously not explicitly rejected — an inactive/suspended contractor
+    # could be assigned and would silently never act on it.
+    if not contractor.is_active:
+        raise HTTPException(
+            status_code=400, detail="Cannot assign an inactive contractor."
+        )
 
     old_contractor_id = project.contractor_id
     project.contractor_id = data.contractor_id
@@ -290,7 +375,7 @@ async def assign_contractor(
     db.add(log)
     await db.commit()
 
-    # Notify the contractor
+    # Notify the new contractor
     from app.services.notification_service import notify
     await notify(
         db,
@@ -302,8 +387,37 @@ async def assign_contractor(
         email=contractor.email,
     )
 
-    return await _get_project_or_404(db, project_id)
+    # Previously: reassignment only ever told the new contractor. The old
+    # contractor found out they'd lost a project only by noticing it vanish
+    # from their dashboard, and the report owner never learned who was
+    # actually working on their report.
+    if old_contractor_id and old_contractor_id != data.contractor_id:
+        prev_email_result = await db.execute(
+            select(User.email).where(User.id == old_contractor_id)
+        )
+        background_tasks.add_task(
+            notify_background,
+            user_id=old_contractor_id,
+            title="Removed from Project",
+            message=f"You have been removed from project #{project.id}.",
+            type=NotificationType.warning,
+            report_id=project.report_id,
+            email=prev_email_result.scalar_one_or_none(),
+        )
 
+    report_result = await db.execute(select(Report).where(Report.id == project.report_id))
+    report = report_result.scalar_one_or_none()
+    if report and report.owner_id:
+        background_tasks.add_task(
+            notify_background,
+            user_id=report.owner_id,
+            title="Contractor Assigned",
+            message=f"{contractor.full_name or contractor.email} has been assigned to repair your report #{report.id}.",
+            type=NotificationType.info,
+            report_id=report.id,
+        )
+
+    return await _get_project_or_404(db, project_id)
 
 @router.get("/{project_id}/completion")
 async def get_project_completion(

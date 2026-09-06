@@ -12,6 +12,7 @@ from app.models.enums import NotificationType
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.notification import NotificationResponse
+from app.services.notification_service import notify
 
 logger = logging.getLogger(__name__)
 
@@ -115,17 +116,14 @@ async def send_notification(
     except KeyError:
         notif_type = NotificationType.info
 
-    notif = Notification(
+    notif = await notify(
+        db,
         user_id=data.user_id,
-        report_id=data.report_id,
         title=data.title,
         message=data.message,
         type=notif_type,
-        is_read=False,
+        report_id=data.report_id,
     )
-    db.add(notif)
-    await db.commit()
-    await db.refresh(notif)
     logger.info(
         "Admin %d sent notification to user %d | report_id=%s | title=%r",
         current_user.id, data.user_id, data.report_id, data.title,

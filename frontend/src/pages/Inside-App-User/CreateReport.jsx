@@ -638,9 +638,8 @@ function CreateReport({ onClose }) {
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [predictionResult, setPredictionResult] = useState(null);
 
-  // ── NEW: all detections array for multi-mask overlay ──────────────────────
   const [allDetections, setAllDetections] = useState([]);
-
+  const [definitiveNoDamage, setDefinitiveNoDamage] = useState(false);
   const [requiresReview, setRequiresReview] = useState(false);
   const [reviewReason,   setReviewReason]   = useState(null);
   const [manualReviewOverride, setManualReviewOverride] = useState(false);
@@ -749,6 +748,7 @@ function CreateReport({ onClose }) {
     setDetectionNote(null);
     setRequiresReview(false);
     setReviewReason(null);
+    setDefinitiveNoDamage(false);
   }, []);
 
   // ── runFullAnalysis — CHANGED: extract allDetections from backend ──────────
@@ -836,10 +836,13 @@ function CreateReport({ onClose }) {
           const rawDets = result.data?.all_detections ?? [];
           console.log('[DEBUG] all_detections:', JSON.stringify(rawDets, null, 2));
           setAllDetections(rawDets.map(normalizePrediction).filter(Boolean));
-
-          if (!dt) setAnalyzeError("No damage detected in video. Try a clearer or longer clip.");
+          if (!dt) {
+            setDefinitiveNoDamage(true);
+            setAnalyzeError("No damage detected in video. Try a clearer or longer clip.");
+          }
         } else {
           setDamageType(null);
+          setDefinitiveNoDamage(true);
           setAnalyzeError("No damage detected in video. Try a clearer or longer clip.");
         }
 
@@ -868,6 +871,19 @@ function CreateReport({ onClose }) {
           setAnalyzeError("This upload appears to be AI-generated or manipulated.");
           if (consecutiveAnalysisFailuresRef.current >= 3) {
             setAttemptWarning("Three authenticity checks failed. Check the lighting and capture a new, genuine road image.");
+          }
+          return;
+        }
+
+        if (pipelineStage === "scene" && pipelineStatus === "fail") {
+          consecutiveAnalysisFailuresRef.current += 1;
+          setCurrentStage("review");
+          setDamageType(null);
+          setSeverity(null);
+          setAiConfidence(result.data?.confidence ?? null);
+          setDefinitiveNoDamage(true);
+          setAnalyzeError("This doesn't look like a road or pavement surface. Please retake the photo focusing on the road.");          if (consecutiveAnalysisFailuresRef.current >= 3) {
+            setAttemptWarning("Three attempts didn't show a clear road or pavement surface. Make sure the road fills more of the frame.");
           }
           return;
         }
@@ -951,6 +967,9 @@ if (ai_validation && typeof ai_validation === "object") {
           setDamageType(null);
           setSeverity(null);
           setAiConfidence(result.data?.confidence ?? null);
+          setRequiresReview(false);
+          setReviewReason(null);
+          setDefinitiveNoDamage(true);
           setAnalyzeError(pipelineReason === "no_damage"
             ? "No road damage detected. Please try again."
             : "The damage check could not confirm road damage.");
@@ -959,7 +978,6 @@ if (ai_validation && typeof ai_validation === "object") {
           }
           return;
         }
-
         if (pipelineStatus === "flagged_for_review") {
           setRequiresReview(true);
           setReviewReason("AI-generated or manipulated media detected — full classification retained for admin review");
@@ -1510,7 +1528,10 @@ setCameraActive(true);
     disclaimerAccepted, reporterName, userId, performBackgroundSubmit, pushOfflineToast,
   ]);
   // ── Derived values ─────────────────────────────────────────────────────────
-  const canSubmit      = !isSubmitting && !isAnalyzing;
+  // Blocks submission when analysis finished and found no damage (includes
+  // the new "no_road_pavement" scene-gate rejection, since that also leaves
+  const noDamageBlocked = analysisComplete && !manualReviewOverride && damageType === null;
+  const canSubmit       = !isSubmitting && !isAnalyzing && !noDamageBlocked;
   const stageMessage   = {
     idle: "Preparing analysis…",
     authenticity: "Checking authenticity…",
@@ -1807,7 +1828,7 @@ const showMask = analysisComplete &&
               <span className={`class-btn ${imageTypeBadge === "AI-GENERATED" ? "active-ai" : ""}`}
                 aria-current={imageType === "AI-GENERATED" ? "true" : undefined}>AI-GENERATED</span>
             </div>
-            {imageType === "AI-GENERATED" && (
+            {imageType === "AI-GENERATED" && damageType !== null && (
               <p className="flagged-note" role="alert">
                 Flagged — held for admin review before publishing.
               </p>
@@ -1841,6 +1862,14 @@ const showMask = analysisComplete &&
                       {MAX_ANALYSIS_RETRIES - retryCount} left
                     </span>
                   </button>
+                ) : file && retryCount >= MAX_ANALYSIS_RETRIES && definitiveNoDamage ? (
+                  <div className="retry-exhausted-block">
+                    <p className="retry-exhausted-msg" role="alert">
+                      <FaExclamationCircle aria-hidden="true" style={{ marginRight: 4 }} />
+                      No road damage was found after {MAX_ANALYSIS_RETRIES} attempts. This photo
+                      cannot be submitted — please retake it showing clear road or pavement damage.
+                    </p>
+                  </div>
                 ) : file && retryCount >= MAX_ANALYSIS_RETRIES ? (
                   <div className="retry-exhausted-block">
                     <p className="retry-exhausted-msg" role="alert">
@@ -2063,7 +2092,8 @@ const showMask = analysisComplete &&
               Discard
             </button>
             <button className="btn-submit" onClick={validateForm}
-              disabled={!canSubmit || submitSuccess} aria-busy={isSubmitting}>
+              disabled={!canSubmit || submitSuccess} aria-busy={isSubmitting}
+              title={noDamageBlocked ? "Submission disabled — no road damage detected" : undefined}>
               {isSubmitting ? (
                 <><FaSpinner className="spin-icon" aria-hidden="true" /> Submitting…</>
               ) : submitSuccess ? (

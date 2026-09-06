@@ -141,7 +141,10 @@ async def _notify_admin(
             )
     else:
         result = await db.execute(
-            select(User).where(User.role.in_([UserRole.admin, UserRole.superadmin]))
+            select(User).where(
+                User.role.in_([UserRole.admin, UserRole.superadmin]),
+                User.is_active.is_(True),
+            )
         )
         admins = result.scalars().all()
         for admin in admins:
@@ -359,6 +362,17 @@ async def complete_project(
         )
 
     if project.status != ProjectStatus.IN_PROGRESS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This project cannot be completed in its current status.",
+        )
+
+    from sqlalchemy import select as _select
+    locked_result = await db.execute(
+        _select(Project).where(Project.id == project_id).with_for_update()
+    )
+    project = locked_result.scalar_one_or_none()
+    if project is None or project.status != ProjectStatus.IN_PROGRESS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This project cannot be completed in its current status.",
