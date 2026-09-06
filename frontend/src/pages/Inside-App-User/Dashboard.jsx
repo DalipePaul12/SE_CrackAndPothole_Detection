@@ -21,7 +21,7 @@ import {
 } from "recharts";
 import { useAnalytics, invalidateAnalyticsCache } from "../../hooks/useAnalytics";
 import { useReports } from "../../hooks/useReports";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { useAuthContext } from "../Contexts/AuthContext.jsx";
 
 const PIE_COLORS = ["#155318", "#2ba81d", "#5cd65c", "#98e698"];
@@ -306,6 +306,7 @@ function ColoredBarChart({ data, dataKey = "count", xKey = "status" }) {
 function CitizenDashboard() {
   const { reports, loading, total } = useReports({ mine: true });
   const navigate = useNavigate();
+  const { openReportModal } = useOutletContext();
 
   const pending = reports.filter(r => r.status?.toLowerCase() === "pending").length;
   const verified = reports.filter(r => r.status?.toLowerCase() === "verified").length;
@@ -329,8 +330,8 @@ function CitizenDashboard() {
   ], [pending, verified, inProgress, resolved]);
 
   const handleCreateReport = useCallback(() => {
-    navigate("/create-report");
-  }, [navigate]);
+    openReportModal();
+  }, [openReportModal]);
 
   return (
     <div className="dashboard-container">

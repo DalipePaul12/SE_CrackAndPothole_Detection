@@ -108,8 +108,6 @@ async function snapFrameBlob(videoEl, w, h) {
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
 }
 
-// ── NEW: lightweight, downscaled capture used ONLY by the live detection
-// loop. Photo/video capture still uses snapFrameBlob() at full resolution.
 async function snapRealtimeFrameBlob(videoEl) {
   const vw = videoEl.videoWidth || 640;
   const vh = videoEl.videoHeight || 360;
@@ -121,6 +119,111 @@ async function snapRealtimeFrameBlob(videoEl) {
   canvas.height = h;
   canvas.getContext("2d").drawImage(videoEl, 0, 0, w, h);
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.7));
+}
+
+// ── NEW: bakes the polygon/box mask onto the original photo, mirroring what
+// the video pipeline already returns as detection_snapshots[].image_b64.
+async function renderAnnotatedImageSnapshot(file, detections, maxDim = 900) {
+  if (!file || !detections?.length) return null;
+
+  const img = await new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = URL.createObjectURL(file);
+  });
+
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * scale);
+  const h = Math.round(img.naturalHeight * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, w, h);
+
+  const SEV_COLORS = {
+    critical:     { stroke: "#ef4444", fill: "rgba(239,68,68,0.28)" },
+    non_critical: { stroke: "#f97316", fill: "rgba(249,115,22,0.22)" },
+  };
+
+  detections.forEach((det) => {
+    const sevKey = (det.severity || "non_critical").toLowerCase().includes("crit")
+      ? "critical" : "non_critical";
+    const { stroke, fill } = SEV_COLORS[sevKey];
+
+    let poly = null;
+    if (det.segments_norm?.length >= 3) {
+      poly = det.segments_norm.map(([xn, yn]) => [xn * w, yn * h]);
+    } else if (det.segments && det.image_width && det.image_height) {
+      const raw = det.segments;
+      const pts = (Array.isArray(raw[0]) && Array.isArray(raw[0][0])) ? raw[0] : raw;
+      if (pts.length >= 3) {
+        poly = pts.map(([x, y]) => [(x / det.image_width) * w, (y / det.image_height) * h]);
+      }
+    }
+
+    if (poly) {
+      ctx.beginPath();
+      poly.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    }
+
+    let box = null;
+    if (det.norm_bbox?.length === 4) {
+      const [x1n, y1n, x2n, y2n] = det.norm_bbox;
+      box = [x1n * w, y1n * h, x2n * w, y2n * h];
+    } else if (det.box && det.image_width && det.image_height) {
+      const [x1, y1, x2, y2] = det.box;
+      box = [
+        (x1 / det.image_width) * w, (y1 / det.image_height) * h,
+        (x2 / det.image_width) * w, (y2 / det.image_height) * h,
+      ];
+    }
+    if (box) {
+      ctx.setLineDash(sevKey === "critical" ? [] : [6, 3]);
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+      ctx.setLineDash([]);
+
+      const label = (det.class ?? det.label ?? "damage").toUpperCase();
+      const conf  = det.confidence != null ? ` ${Math.round(det.confidence * 100)}%` : "";
+      const text  = label + conf;
+      ctx.font = "bold 12px monospace";
+      const textW = ctx.measureText(text).width;
+      const lx = box[0], ly = Math.max(14, box[1] - 6);
+      ctx.fillStyle = stroke;
+      ctx.fillRect(lx - 2, ly - 12, textW + 8, 16);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(text, lx + 2, ly);
+    }
+  });
+
+  URL.revokeObjectURL(img.src);
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(",")[1]);
+      reader.readAsDataURL(blob);
+    }, "image/jpeg", 0.85);
+  });
+}
+
+// ── NEW: turn the base64 annotated snapshot back into a File so it can be
+// uploaded as the actual evidence media (not just a detection-frame thumbnail).
+function base64ToFile(b64, filename, mime = "image/jpeg") {
+  const byteChars = atob(b64);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  const byteArray = new Uint8Array(byteNumbers);
+  return new File([byteArray], filename, { type: mime });
 }
 
 function distanceFeedback(bbox) {
@@ -586,6 +689,10 @@ function AIAnalysisSummary({
 // ════════════════════════════════════════════════════════════════════════════════
 
 function CreateReport({ onClose }) {
+  useEffect(() => {
+    console.log("[CreateReport] MOUNTED");
+    return () => console.log("[CreateReport] UNMOUNTED");
+  }, []);
   const { profile } = useUser();
 
   const reporterName = useMemo(() => {
@@ -639,6 +746,7 @@ function CreateReport({ onClose }) {
   const [predictionResult, setPredictionResult] = useState(null);
 
   const [allDetections, setAllDetections] = useState([]);
+  const [imageAnnotatedSnapshot, setImageAnnotatedSnapshot] = useState(null);
   const [definitiveNoDamage, setDefinitiveNoDamage] = useState(false);
   const [requiresReview, setRequiresReview] = useState(false);
   const [reviewReason,   setReviewReason]   = useState(null);
@@ -741,6 +849,7 @@ function CreateReport({ onClose }) {
     setCurrentStage("idle");
     setPredictionResult(null);
     setAllDetections([]);
+    setImageAnnotatedSnapshot(null);
     setPreviewSize({ width: 0, height: 0 });
     setDetectionSnapshots([]);
     setIsHybrid(false);
@@ -952,9 +1061,15 @@ if (ai_validation && typeof ai_validation === "object") {
           setSeverity(sv);
           setAiConfidence(conf);
           setPredictionResult(prediction);
-
           const rawDets = result.data?.all_detections ?? [];
-          setAllDetections(rawDets.map(normalizePrediction).filter(Boolean));
+          const normalizedDets = rawDets.map(normalizePrediction).filter(Boolean);
+          setAllDetections(normalizedDets);
+
+          if (normalizedDets.length > 0) {
+            renderAnnotatedImageSnapshot(f, normalizedDets)
+              .then((b64) => { if (analysisIdRef.current === thisId) setImageAnnotatedSnapshot(b64); })
+              .catch(() => {});
+          }
 
           if (prediction.label === "none" || dt === null) {
             setAnalyzeError("No damage detected. Please upload a clearer photo of road damage.");
@@ -1467,7 +1582,12 @@ setCameraActive(true);
 
     const is_flagged = imageType === "AI-GENERATED";
     const isVideo     = file && isVideoFile(file);
-    const reportPayload = {
+    // Upload the mask-annotated image as the actual evidence media for photo
+    // reports (instead of the plain original), so "Damage Evidence" shows the
+    // marked-up photo directly — mirroring how video's detection frames look.
+    const mediaFileToUpload = (!isVideo && imageAnnotatedSnapshot)
+      ? base64ToFile(imageAnnotatedSnapshot, "annotated_evidence.jpg")
+      : file;    const reportPayload = {
       user_id: userId, reporter_name: reporterName,
       latitude: coords.lat, longitude: coords.lng,
       barangay, street_name: streetName || null,
@@ -1482,7 +1602,10 @@ setCameraActive(true);
       secondary_damage: secondaryDamage ?? null,
       detection_note:   detectionNote   ?? null,
       // Only videos produce filmstrip snapshots today — omit entirely for
-      // images so the payload stays small when there's nothing to send.
+      // Images now upload the mask-annotated photo as the primary evidence
+      // media itself (see mediaFileToUpload above), so no separate
+      // detection_snapshots entry is needed for images — that section is
+      // video-only ("Detection Frames" in the Media tab).
       detection_snapshots: isVideo && detectionSnapshots.length > 0
         ? detectionSnapshots.map((s) => ({
             frame: s.frame,
@@ -1509,7 +1632,7 @@ setCameraActive(true);
     setSubmitSuccess(true);
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      enqueueOfflineReport(reportPayload, file)
+      enqueueOfflineReport(reportPayload, mediaFileToUpload)
         .then(() => {
           pushOfflineToast({
             type: "info",
@@ -1524,7 +1647,7 @@ setCameraActive(true);
       return;
     }
 
-    performBackgroundSubmit(reportPayload, file).finally(() => {
+    performBackgroundSubmit(reportPayload, mediaFileToUpload).finally(() => {
       submittingRef.current = false;
     });
     setTimeout(() => onClose(), 600);
@@ -1534,6 +1657,7 @@ setCameraActive(true);
     requiresReview, reviewReason, isHybrid, secondaryDamage, detectionNote,
     file, onClose, phoneAngle, angleValid, predictionResult,
     disclaimerAccepted, reporterName, userId, performBackgroundSubmit, pushOfflineToast,
+    imageAnnotatedSnapshot,
   ]);
   // ── Derived values ─────────────────────────────────────────────────────────
   // Blocks submission when analysis finished and found no damage (includes

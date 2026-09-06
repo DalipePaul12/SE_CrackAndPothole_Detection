@@ -147,6 +147,13 @@
   color: #ffffff;
 }
 
+/* Login — outlined style, matches nav-signup's transparent look */
+.nav-login {
+  background-color: transparent;
+  border-color: #000000d1;
+  box-shadow: var(--snap-hover-shadow);
+}
+
 /* Sign Up — outlined style (slightly smaller font per original) */
 .nav-signup {
   background-color: transparent;
