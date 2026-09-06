@@ -3,6 +3,18 @@
  * Uses coordinate bounding boxes to correctly identify barangays in Malabon City.
  * Nominatim often returns incorrect suburb/neighbourhood names for Malabon barangays,
  * so we cross-reference GPS coordinates against known barangay bounding boxes instead.
+ *
+ * FIX: the boxes below are approximate rectangles for irregularly-shaped barangays,
+ * so they legitimately OVERLAP at their edges. The previous version returned the
+ * first array entry whose box contained the point ("first match wins"), which meant
+ * every coordinate that fell inside an overlap zone was silently assigned to
+ * whichever barangay happened to be listed first (Panghulo) — regardless of which
+ * box's center it was actually closest to. That's why barangay basically never
+ * changed no matter where the user actually was.
+ *
+ * Now: we collect ALL boxes that contain the point, then pick the one whose
+ * center is geometrically nearest to the actual GPS coordinate. Order in the
+ * array no longer matters.
  */
 
 export const MALABON_BARANGAYS = [
@@ -11,15 +23,16 @@ export const MALABON_BARANGAYS = [
   "Panghulo","Potrero","San Agustin","Santolan","Tanong","Tinajeros","Tonsuya",
 ];
 
-export const DEFAULT_CITY     = "Malabon";
+export const DEFAULT_CITY = "Malabon";
 
 /**
  * Approximate bounding boxes for each Malabon barangay.
  * Format: { name, latMin, latMax, lngMin, lngMax }
- * 
+ *
  * Coordinates derived from OpenStreetMap barangay boundary data for Malabon City.
- * Each box is slightly generous to avoid gaps at borders — the first match wins,
- * so order matters: more specific/smaller barangays are listed first.
+ * Each box is slightly generous to avoid gaps at borders, so adjacent boxes
+ * overlap — resolution between overlapping matches is done by nearest-centroid
+ * (see detectBarangay), NOT by array order.
  */
 const BARANGAY_BOUNDS = [
   { name: "Panghulo",     latMin: 14.6830, latMax: 14.6920, lngMin: 120.9520, lngMax: 120.9610 },
@@ -46,46 +59,78 @@ const BARANGAY_BOUNDS = [
 
 /**
  * Detect barangay from GPS coordinates using bounding box lookup.
- * Falls back to Nominatim suburb fields, then returns an empty value when the
- * coordinates cannot be matched confidently.
+ * Among every box that contains the point, picks the one whose CENTER is
+ * closest to the actual coordinate (fixes the old first-match-wins bug).
+ *
+ * Returns an OBJECT now (not a bare string), so callers can tell a confident
+ * Malabon match apart from a best-effort guess for anywhere else:
+ *   { name: "Panghulo", verified: true }   → matched a Malabon box/list, trustworthy
+ *   { name: "Kaunlaran", verified: false } → raw Nominatim guess, outside Malabon,
+ *                                            not cross-checked against real boundary
+ *                                            data — show it but let the user confirm/edit
+ *   { name: "", verified: false }          → nothing usable came back at all
  *
  * @param {number} lat
  * @param {number} lng
  * @param {object} [nominatimAddr] - address object from Nominatim reverse geocode (optional)
- * @returns {string} barangay name
+ * @returns {{name: string, verified: boolean}}
  */
 export function detectBarangay(lat, lng, nominatimAddr = null) {
-  // 1. Try coordinate bounding box lookup first (most reliable for Malabon)
+  // 1. Coordinate bounding box lookup — collect ALL matches, then rank by
+  //    distance from each box's center to the actual point. Closest wins.
+  let best = null;
+  let bestDist = Infinity;
+
   for (const b of BARANGAY_BOUNDS) {
-    if (lat >= b.latMin && lat <= b.latMax && lng >= b.lngMin && lng <= b.lngMax) {
-      return b.name;
+    const inBox = lat >= b.latMin && lat <= b.latMax && lng >= b.lngMin && lng <= b.lngMax;
+    if (!inBox) continue;
+
+    const centerLat = (b.latMin + b.latMax) / 2;
+    const centerLng = (b.lngMin + b.lngMax) / 2;
+    const dLat = lat - centerLat;
+    const dLng = lng - centerLng;
+    const dist = dLat * dLat + dLng * dLng; // squared distance is enough for comparison
+
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = b.name;
     }
   }
 
-  // 2. If outside all boxes (edge case), try matching Nominatim against known list
-  if (nominatimAddr) {
-    const candidates = [
-      nominatimAddr.suburb,
-      nominatimAddr.neighbourhood,
-      nominatimAddr.village,
-      nominatimAddr.quarter,
-      nominatimAddr.city_district,
-    ].filter(Boolean);
+  if (best) return { name: best, verified: true };
 
-    for (const candidate of candidates) {
-      const normalized = candidate.toLowerCase().trim();
-      const match = MALABON_BARANGAYS.find(
-        (b) => b.toLowerCase() === normalized ||
-               normalized.includes(b.toLowerCase()) ||
-               b.toLowerCase().includes(normalized)
-      );
-      if (match) return match;
-    }
+  // 2. Outside all Malabon boxes. Try matching Nominatim's fields against the
+  //    known Malabon list first (handles edge-of-map points near city limits).
+  const candidates = nominatimAddr
+    ? [
+        nominatimAddr.suburb,
+        nominatimAddr.neighbourhood,
+        nominatimAddr.village,
+        nominatimAddr.quarter,
+        nominatimAddr.city_district,
+      ].filter(Boolean)
+    : [];
+
+  for (const candidate of candidates) {
+    const normalized = candidate.toLowerCase().trim();
+    const match = MALABON_BARANGAYS.find(
+      (b) => b.toLowerCase() === normalized ||
+             normalized.includes(b.toLowerCase()) ||
+             b.toLowerCase().includes(normalized)
+    );
+    if (match) return { name: match, verified: true };
   }
 
-  // 3. Do not guess a barangay. The user must select it when coordinates are
-  // outside the maintained boundary data.
-  return "";
+  // 3. Genuinely outside Malabon (or Malabon list had no match). Instead of
+  // giving up, use whatever Nominatim returned as a best-effort guess — it's
+  // real OSM address data, just not cross-checked against our own boundary
+  // boxes the way Malabon barangays are. Mark it unverified so the UI can
+  // ask the user to confirm/edit it rather than trusting it blindly.
+  if (candidates.length > 0) {
+    return { name: candidates[0], verified: false };
+  }
+
+  return { name: "", verified: false };
 }
 
 export const NOMINATIM_URL = (lat, lng) =>

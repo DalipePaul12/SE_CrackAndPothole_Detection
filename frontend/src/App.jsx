@@ -2,7 +2,7 @@
  * App.jsx  —  FIXED WITH SIDEBAR LAYOUTS
  */
 
-import { Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useParams, Outlet } from "react-router-dom";
 import { useState } from "react";
 import "./index.css";
 
@@ -50,8 +50,16 @@ import AdminUserManagement from "./pages/Inside-App-Admin/AdminUserManagement.js
 import AdminAuditLogs      from "./pages/Inside-App-Admin/AdminAuditLogs.jsx";
 
 // Errors
+// Errors
 import NotFound from "./pages/NotFound.jsx";
 
+// Legacy share-link support: old copied links used /reports/:id, which was
+// never a real route. This redirects them to the correct deep link so links
+// shared before the handleShare fix still work.
+function ReportRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/dashboard/submissions?report_id=${id}&tab=details`} replace />;
+}
 // ─── Route guards ─────────────────────────────────────────────────────────────
 
 function PrivateRoute({ children }) {
@@ -143,6 +151,7 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
           {/* ── Landing (no sidebar) ───────────────────────────────────── */}
           <Route path="/"      element={<HomePage onGetStarted={() => setShowSignUp(true)} />} />
           <Route path="/about" element={<AboutPage />} />
+          <Route path="/reports/:id" element={<ReportRedirect />} />
 
           {/* ── User dashboard WITH sidebar layout ─────────────────────── */}
           <Route element={<UserLayoutGuard />}>

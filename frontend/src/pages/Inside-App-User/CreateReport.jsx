@@ -758,7 +758,8 @@ function CreateReport({ onClose }) {
   const [coords,          setCoords]          = useState(null);
   const [locationSource,  setLocationSource]  = useState(null); // 'exif' | null
   const [city,            setCity]            = useState(DEFAULT_CITY);
-  const [barangay,        setBarangay]        = useState("");
+ const [barangay,         setBarangay]        = useState("");
+const [barangayVerified, setBarangayVerified] = useState(true);
   const [streetName,      setStreetName]      = useState("");
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationWarning, setLocationWarning] = useState("");
@@ -1423,23 +1424,28 @@ setCameraActive(true);
           const res  = await fetch(NOMINATIM_URL(lat, lng));
           const data = await res.json();
           const addr = data.address || {};
-          setCity(addr.city || addr.town || addr.municipality || DEFAULT_CITY);
-          setBarangay(detectBarangay(lat, lng, addr));
-          setStreetName(
-            [addr.road || addr.street || addr.pedestrian || "", addr.house_number]
-              .filter(Boolean).join(" ").trim() ||
-            `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-          );
-        } catch {
-          setCity(DEFAULT_CITY);
-          setBarangay(detectBarangay(lat, lng));
-          setStreetName(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-        }
+        setCity(addr.city || addr.town || addr.municipality || DEFAULT_CITY);
+        const detected = detectBarangay(lat, lng, addr);
+        setBarangay(detected.name);
+        setBarangayVerified(detected.verified);
+        setStreetName(
+          [addr.road || addr.street || addr.pedestrian || "", addr.house_number]
+            .filter(Boolean).join(" ").trim() ||
+          `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+        );
+      } catch {
+        setCity(DEFAULT_CITY);
+        const detected = detectBarangay(lat, lng);
+        setBarangay(detected.name);
+        setBarangayVerified(detected.verified);
+        setStreetName(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+      }
         setLocationLoading(false);
       },
       () => {
         setCity(DEFAULT_CITY);
         setBarangay("");
+        setBarangayVerified(true);
         setLocationWarning(
           "Location access was denied or unavailable — your barangay could not be detected automatically. " +
           "Please select your barangay manually before submitting."
@@ -1471,7 +1477,9 @@ setCameraActive(true);
           const data = await res.json();
           const addr = data.address || {};
           setCity(addr.city || addr.town || addr.municipality || DEFAULT_CITY);
-          setBarangay(detectBarangay(gps.lat, gps.lng, addr));
+          const detected = detectBarangay(gps.lat, gps.lng, addr);
+          setBarangay(detected.name);
+          setBarangayVerified(detected.verified);
           setStreetName(
             [addr.road || addr.street || addr.pedestrian || "", addr.house_number]
               .filter(Boolean).join(" ").trim() ||
@@ -1479,7 +1487,9 @@ setCameraActive(true);
           );
         } catch {
           setCity(DEFAULT_CITY);
-          setBarangay(detectBarangay(gps.lat, gps.lng));
+          const detected = detectBarangay(gps.lat, gps.lng);
+          setBarangay(detected.name);
+          setBarangayVerified(detected.verified);
           setStreetName(`${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}`);
         }
       }
@@ -2187,18 +2197,47 @@ const showMask = analysisComplete &&
               <input id="reporter-name" type="hidden" value={reporterName} />
             </div>
             <div className="snap-form-group half">
-              <label htmlFor="barangay-select">
+              <label htmlFor="barangay-field">
                 BARANGAY <span style={{ color: "red" }} aria-hidden="true">*</span>
               </label>
-              <select id="barangay-select" value={barangay}
-                onChange={(e) => { setBarangay(e.target.value); setLocationWarning(""); }}
-                className={!barangay ? "placeholder" : ""}
-                disabled={isSubmitting} required>
-                <option value="" disabled>Select Barangay</option>
-                {MALABON_BARANGAYS?.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
+
+              {city && city.trim().toLowerCase() === "malabon" ? (
+                <select id="barangay-field" value={barangay}
+                  onChange={(e) => { setBarangay(e.target.value); setBarangayVerified(true); setLocationWarning(""); }}
+                  className={!barangay ? "placeholder" : ""}
+                  disabled={isSubmitting} required>
+                  <option value="" disabled>Select Barangay</option>
+                  {MALABON_BARANGAYS?.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id="barangay-field"
+                  type="text"
+                  value={barangay}
+                  placeholder="Enter barangay"
+                  onChange={(e) => { setBarangay(e.target.value); setBarangayVerified(true); setLocationWarning(""); }}
+                  disabled={isSubmitting}
+                  required
+                />
+              )}
+
+              {!barangayVerified && barangay && (
+                <div className="location-warning-banner" role="status" style={{
+                  display: "flex", alignItems: "flex-start", gap: "8px",
+                  marginTop: "8px", padding: "10px 12px",
+                  background: "rgba(59,130,246,0.10)", border: "1px solid rgba(59,130,246,0.35)",
+                  borderRadius: "8px", color: "#1d4ed8", fontSize: "0.8rem", lineHeight: 1.4,
+                }}>
+                  <FaExclamationCircle style={{ flexShrink: 0, marginTop: 2, color: "#2563eb" }} aria-hidden="true" />
+                  <span>
+                    This is outside Malabon's maintained barangay list — we auto-filled our best
+                    guess from GPS, but please double-check or correct it.
+                  </span>
+                </div>
+              )}
+
               {locationWarning && (
                 <div className="location-warning-banner" role="alert" style={{
                   display: "flex", alignItems: "flex-start", gap: "8px",

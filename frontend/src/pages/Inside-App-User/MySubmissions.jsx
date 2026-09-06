@@ -505,7 +505,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
   useEffect(() => { loadComments(); }, [loadComments]);
 
   const handleShare = () => {
-    const url = `${window.location.origin}/reports/${liveReport.id}`;
+    const url = `${window.location.origin}/dashboard/submissions?report_id=${liveReport.id}&tab=details`;
     navigator.clipboard.writeText(url).then(() => {
       setShareMsg("Link copied!");
       setTimeout(() => setShareMsg(""), 2500);
