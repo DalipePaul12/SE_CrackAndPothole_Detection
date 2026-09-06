@@ -36,7 +36,6 @@ input[type="password"]::-webkit-textfield-decoration-container {
   z-index: 1000;
   padding: clamp(0.75rem, 3vw, 2rem);
   animation: fadeIn 0.4s ease forwards;
-  overflow-y: auto;
 }
 
 @keyframes fadeIn {
@@ -54,26 +53,25 @@ input[type="password"]::-webkit-textfield-decoration-container {
   border-radius: var(--su-radius);
   width: 100%;
   max-width: clamp(18rem, 92vw, 26rem);
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   overflow: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid #2d552dd6;
   box-shadow: 0 1.25rem 3rem rgba(1, 48, 32, 0.25);
-  animation: slideUp 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-  transform: translateY(1rem);
+  animation: fadeInCard 0.4s ease forwards;
   opacity: 0;
   position: relative;
 }
 
-@keyframes slideUp {
+@keyframes fadeInCard {
   to {
-    transform: translateY(0);
     opacity: 1;
   }
 }
 
 .sign-up-content.signup-small {
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
 }
 
 /* ============================================
@@ -157,7 +155,6 @@ input[type="password"]::-webkit-textfield-decoration-container {
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow-y: auto;
 }
 
 .sign-up-right h2 {
@@ -720,7 +717,6 @@ button:disabled {
   .sign-up-right {
     flex: 1;
     padding: clamp(1.5rem, 3vw, 2rem) clamp(1.5rem, 3vw, 2.5rem);
-    overflow-y: auto;
   }
 
   .sign-up-label-form-province-city {

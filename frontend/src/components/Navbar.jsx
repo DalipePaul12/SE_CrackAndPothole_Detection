@@ -58,8 +58,8 @@ function Navbar({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
         <div className="navbar-right">
           <Link to="/" className="nav-home">Home</Link>
           <Link to="/about" className="nav-about">About</Link>
-          <Link className="nav-login" onClick={() => setShowLogin(true)}>Login</Link>
-          <Link className="nav-signup" onClick={() => setShowSignUp(true)}>Sign Up</Link>
+          <button type="button" className="nav-login" onClick={() => setShowLogin(true)}>Login</button>
+          <button type="button" className="nav-signup" onClick={() => setShowSignUp(true)}>Sign Up</button>
         </div>
       </nav>
 

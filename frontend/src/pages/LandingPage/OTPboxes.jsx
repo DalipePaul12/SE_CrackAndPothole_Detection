@@ -120,6 +120,7 @@ function OTPboxes({
             ref={(el) => (inputRefs.current[i] = el)}
             type="text"
             inputMode="numeric"
+            pattern="[0-9]*"
             maxLength="1"
             className="otp-box"
             value={val}
@@ -127,7 +128,7 @@ function OTPboxes({
             onKeyDown={(e) => handleKeyDown(e, i)}
             onPaste={handlePaste}
             disabled={disabled}
-            autoComplete="one-time-code"
+            autoComplete={i === 0 ? "one-time-code" : "off"}
           />
         ))}
       </div>

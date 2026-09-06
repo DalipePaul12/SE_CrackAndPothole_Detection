@@ -27,7 +27,6 @@
   z-index: 1000;
   padding: clamp(0.75rem, 3vw, 2rem);
   animation: fadeIn 0.35s ease forwards;
-  overflow-y: auto;
 }
 
 @keyframes fadeIn {
@@ -43,19 +42,18 @@
   border-radius: var(--login-radius);
   width: 100%;
   max-width: clamp(18rem, 90vw, 26rem);
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   overflow: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid #2d552dd6;
   box-shadow: 0 1.25rem 3rem rgba(1, 48, 32, 0.25);
-  animation: slideUp 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-  transform: translateY(1rem);
+  animation: fadeInCard 0.35s ease forwards;
   opacity: 0;
 }
 
-@keyframes slideUp {
+@keyframes fadeInCard {
   to {
-    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -163,7 +161,6 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow-y: auto;
 }
 
 .login-right h2 {
@@ -461,7 +458,6 @@
   .login-right {
     flex: 1;
     padding: clamp(2rem, 4vw, 3.5rem);
-    overflow-y: auto;
   }
 }
 
