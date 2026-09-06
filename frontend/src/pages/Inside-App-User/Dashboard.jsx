@@ -21,7 +21,7 @@ import {
 } from "recharts";
 import { useAnalytics, invalidateAnalyticsCache } from "../../hooks/useAnalytics";
 import { useReports } from "../../hooks/useReports";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuthContext } from "../Contexts/AuthContext.jsx";
 
 const PIE_COLORS = ["#155318", "#2ba81d", "#5cd65c", "#98e698"];
@@ -220,9 +220,9 @@ function ContributionPanel({ total, resolved, loading }) {
 
   const badge =
     score >= 80 ? " Top Reporter"
-    : score >= 50 ? " Active Reporter"
-    : score >= 20 ? " Rising Reporter"
-    : " New Reporter";
+      : score >= 50 ? " Active Reporter"
+        : score >= 20 ? " Rising Reporter"
+          : " New Reporter";
 
   if (loading) {
     return (
@@ -306,7 +306,6 @@ function ColoredBarChart({ data, dataKey = "count", xKey = "status" }) {
 function CitizenDashboard() {
   const { reports, loading, total } = useReports({ mine: true });
   const navigate = useNavigate();
-  const { openReportModal } = useOutletContext();
 
   const pending = reports.filter(r => r.status?.toLowerCase() === "pending").length;
   const verified = reports.filter(r => r.status?.toLowerCase() === "verified").length;
@@ -329,10 +328,6 @@ function CitizenDashboard() {
     { status: "Resolved", count: resolved },
   ], [pending, verified, inProgress, resolved]);
 
-  const handleCreateReport = useCallback(() => {
-    openReportModal();
-  }, [openReportModal]);
-
   return (
     <div className="dashboard-container">
       <PredictiveAlert data={total} prevData={Math.max(0, total - 2)} />
@@ -350,7 +345,6 @@ function CitizenDashboard() {
           {loading ? <SkeletonPanel /> : total === 0 ? (
             <div className="empty-state-wrap">
               <p className="empty-state">No report data available.</p>
-              <button className="create-report-btn" onClick={handleCreateReport}>+ Submit Your First Report</button>
             </div>
           ) : (
             <ColoredBarChart data={statusBarData} />
@@ -396,7 +390,7 @@ function CitizenDashboard() {
           )}
         </div>
 
-        
+
         <div className="dashboard-panel-damagecategories">
           <h3>My Damage Types <FaChartPie className="icon" aria-hidden="true" /></h3>
           {loading ? <SkeletonPanel /> : damageStats.length === 0 ? (
