@@ -21,6 +21,7 @@ class ReportCreate(AppBaseModel):
     latitude:    float = Field(..., ge=-90.0,   le=90.0)
     longitude:   float = Field(..., ge=-180.0,  le=180.0)
     barangay:    Optional[str] = Field(None, max_length=100)
+    city:        Optional[str] = Field(None, max_length=100)
     street_name: Optional[str] = Field(None, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
 
@@ -106,6 +107,7 @@ class ReportUpdate(AppBaseModel):
     decline_reason:   Optional[str]          = Field(None, max_length=500)
     rejection_reason: Optional[str]          = Field(None, max_length=500)
     barangay:         Optional[str]          = Field(None, max_length=100)
+    city:             Optional[str]          = Field(None, max_length=100)
     street_name:      Optional[str]          = Field(None, max_length=200)
     description:      Optional[str]          = Field(None, max_length=1000)
     assigned_to:      Optional[str]          = Field(None, max_length=200)
@@ -141,10 +143,11 @@ class ReportResponse(AppBaseModel):
     latitude:    float
     longitude:   float
     barangay:    Optional[str] = None
+    city:        Optional[str] = None
     street_name: Optional[str] = None
     description: Optional[str] = None
 
-    # FIX: image_url is now backed by a @hybrid_property on Report so
+    # FIX: image_url is now backed by a @hybrid_property on the ORM model so that
     #      model_validate no longer throws AttributeError.
     image_url: Optional[str] = None
 

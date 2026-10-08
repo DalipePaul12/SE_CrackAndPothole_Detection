@@ -70,32 +70,191 @@ const sevWeight = (r) => {
   return map[severity(r).toLowerCase()] ?? 99;
 };
 
-function exportCSV(rows, label = "page") {
-  const headers = ["ID", "Type", "Severity", "AI Conf", "Status", "Location", "Street", "Barangay", "Reporter", "Date"];
-  const escape  = (v) => `"${String(v ?? "-").replace(/"/g, '""')}"`;
-  const lines   = [
-    headers.map(escape).join(","),
-    ...rows.map((r) => [
+async function exportExcel(rows, label = "page") {
+  // Loaded only when the user clicks export (keeps the main bundle small)
+  const ExcelJS = (await import("exceljs")).default;
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Snap2Fix";
+  wb.created = new Date();
+
+  const GREEN_DARK = "FF14532D";
+  const GREEN      = "FF16A34A";
+  const WHITE      = "FFFFFFFF";
+  const GRAY_LINE  = "FFD1D5DB";
+  const solid = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+  const thin  = { style: "thin", color: { argb: GRAY_LINE } };
+
+  const SEV_STYLE = {
+    critical:     { bg: "FFFEE2E2", fg: "FFB91C1C" },
+    non_critical: { bg: "FFFEF3C7", fg: "FFB45309" },
+  };
+  const STATUS_STYLE = {
+    pending:     { bg: "FFFEF3C7", fg: "FFB45309" },
+    verified:    { bg: "FFDBEAFE", fg: "FF1D4ED8" },
+    in_progress: { bg: "FFE0E7FF", fg: "FF4338CA" },
+    resolved:    { bg: "FFDCFCE7", fg: "FF15803D" },
+    declined:    { bg: "FFFEE2E2", fg: "FFB91C1C" },
+  };
+
+  /* ───────── Sheet 1: Reports ───────── */
+  const ws = wb.addWorksheet("Reports", {
+    views: [{ state: "frozen", xSplit: 0, ySplit: 3, topLeftCell: "A4", activeCell: "A4" }],
+    pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+  });
+
+  const cols = [
+    { h: "ID",       w: 13 },
+    { h: "Type",     w: 11 },
+    { h: "Severity", w: 15 },
+    { h: "AI Conf",  w: 13 },
+    { h: "Status",   w: 14 },
+    { h: "Location", w: 18 },
+    { h: "Street",   w: 32 },
+    { h: "Barangay", w: 16 },
+    { h: "City",     w: 16 },
+    { h: "Reporter", w: 22 },
+    { h: "Date",     w: 14 },
+  ];
+  cols.forEach((c, i) => { ws.getColumn(i + 1).width = c.w; });
+
+  // Row 1: title
+  ws.mergeCells("A1:K1");
+  const title = ws.getCell("A1");
+  title.value     = "Snap2Fix – Road Damage Reports";
+  title.font      = { size: 16, bold: true, color: { argb: WHITE } };
+  title.fill      = solid(GREEN_DARK);
+  title.alignment = { horizontal: "center", vertical: "middle" };
+  ws.getRow(1).height = 32;
+
+  // Row 2: subtitle
+    ws.mergeCells("A2:K2");
+  const sub = ws.getCell("A2");
+  sub.value = `Generated: ${new Date().toLocaleString("en-PH")}   |   Total reports: ${rows.length}   |   Scope: ${label === "all" ? "All filtered pages" : "Current page"}`;
+  sub.font      = { italic: true, size: 10, color: { argb: "FF374151" } };
+  sub.alignment = { horizontal: "center", vertical: "middle" };
+  ws.getRow(2).height = 20;
+
+  // Row 3: column headers
+  const headerRow = ws.getRow(3);
+  headerRow.values = cols.map((c) => c.h);
+  headerRow.height = 24;
+  headerRow.eachCell((cell) => {
+    cell.font      = { bold: true, color: { argb: WHITE } };
+    cell.fill      = solid(GREEN);
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border    = { bottom: { style: "medium", color: { argb: GREEN_DARK } } };
+  });
+
+  // Data rows
+  rows.forEach((r, i) => {
+    const conf = confVal(r);
+    const row = ws.addRow([
       padId(r.id),
       damageType(r),
       severity(r),
-      confVal(r) != null ? `${confVal(r)}%` : "-",
-      r.status ?? "-",
+      conf != null ? conf / 100 : null,
+      STATUS_LABELS[r.status] ?? r.status ?? "-",
       location(r),
       r.street_name ?? "-",
       r.barangay ?? "-",
+      r.city ?? "-",
       r.owner?.full_name ?? "Anonymous",
-      r.created_at ? new Date(r.created_at).toLocaleDateString() : "-",
-    ].map(escape).join(",")),
-  ];
-  // UTF-8 BOM ("\uFEFF") is required or Excel misreads non-ASCII chars
-  // (like the em dash "—") as ANSI, producing garbled "â€"" symbols.
-  const csvContent = "\uFEFF" + lines.join("\n");
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
+      r.created_at ? new Date(r.created_at) : null,
+    ]);
+
+    row.height = 20;
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.border    = { top: thin, bottom: thin, left: thin, right: thin };
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: [1, 2, 3, 4, 5, 11].includes(colNumber) ? "center" : "left",
+        wrapText: colNumber === 7,
+      };
+      if (i % 2 === 1) cell.fill = solid("FFF0FDF4"); // zebra striping
+    });
+
+    row.getCell(4).numFmt = "0%";
+    row.getCell(11).numFmt = "dd/mm/yyyy";
+    row.getCell(1).font = { bold: true, color: { argb: GREEN_DARK } };
+
+    // Severity color
+    const sevStyle = SEV_STYLE[String(severity(r)).toLowerCase()];
+    if (sevStyle) {
+      const c = row.getCell(3);
+      c.fill = solid(sevStyle.bg);
+      c.font = { bold: true, color: { argb: sevStyle.fg } };
+    }
+
+    // Status color
+    const stStyle = STATUS_STYLE[r.status];
+    if (stStyle) {
+      const c = row.getCell(5);
+      c.fill = solid(stStyle.bg);
+      c.font = { bold: true, color: { argb: stStyle.fg } };
+    }
+
+    // AI confidence color (red <50, orange 50-79, green 80+)
+    if (conf != null) {
+      row.getCell(4).font = {
+        bold: true,
+        color: { argb: conf < 50 ? "FFE53935" : conf < 80 ? "FFF57C00" : "FF2E7D32" },
+      };
+    }
+  });
+
+  if (rows.length > 0) ws.autoFilter = { from: "A3", to: `K${3 + rows.length}` };
+
+  /* ───────── Sheet 2: Summary ───────── */
+  const sm = wb.addWorksheet("Summary");
+  sm.getColumn(1).width = 26;
+  sm.getColumn(2).width = 12;
+
+  sm.mergeCells("A1:B1");
+  const smTitle = sm.getCell("A1");
+  smTitle.value     = "Summary";
+  smTitle.font      = { size: 14, bold: true, color: { argb: WHITE } };
+  smTitle.fill      = solid(GREEN_DARK);
+  smTitle.alignment = { horizontal: "center", vertical: "middle" };
+  sm.getRow(1).height = 28;
+
+  const countBy = (fn) => {
+    const m = {};
+    rows.forEach((r) => { const k = fn(r); m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m);
+  };
+
+  const addSection = (heading, entries) => {
+    const h = sm.addRow([heading, "Count"]);
+    h.eachCell((c) => {
+      c.font = { bold: true, color: { argb: WHITE } };
+      c.fill = solid(GREEN);
+      c.alignment = { horizontal: "center" };
+    });
+    entries.forEach(([k, v]) => {
+      const rw = sm.addRow([k, v]);
+      rw.eachCell((c) => { c.border = { top: thin, bottom: thin, left: thin, right: thin }; });
+      rw.getCell(2).alignment = { horizontal: "center" };
+    });
+    sm.addRow([]);
+  };
+
+  addSection("Total Reports", [["All exported reports", rows.length]]);
+  addSection("By Damage Type", countBy((r) => damageType(r)));
+  addSection("By Severity",    countBy((r) => severity(r)));
+  addSection("By Status",      countBy((r) => STATUS_LABELS[r.status] ?? r.status ?? "-"));
+  addSection("By Barangay",    countBy((r) => r.barangay ?? "-"));
+  addSection("By City",        countBy((r) => r.city ?? "-"));
+
+  /* ───────── Download ───────── */
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement("a");
   a.href = url;
-  a.download = `reports_${label}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `reports_${label}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -322,7 +481,7 @@ export default function AdminAllReports() {
         );
       }
 
-      exportCSV(filtered, "all");
+      await exportExcel(filtered, "all");
       showToast(`Exported ${filtered.length} report${filtered.length !== 1 ? "s" : ""}`);
     } catch {
       showToast("Export failed.", "error");
@@ -510,7 +669,7 @@ export default function AdminAllReports() {
             <button className="btn-filter-toggle" onClick={() => setShowFilters((p) => !p)}>
               <Settings size={16} /> Filters {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
-            <button className="btn-export" onClick={() => exportCSV(reports, "page")} title={`Exports only the ${reports.length} rows currently shown on this page`}>
+              <button className="btn-export" onClick={() => exportExcel(reports, "page")} title={`Exports only the ${reports.length} rows currently shown on this page`}>
               <Download size={16} /> Export Page ({reports.length})
             </button>
             <button

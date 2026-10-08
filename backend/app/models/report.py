@@ -40,6 +40,7 @@ class Report(Base):
         # ── Indexes for performance ───────────────────────────────────────────
         Index("idx_report_status",              "status"),
         Index("idx_report_barangay",            "barangay"),
+        Index("idx_report_city",                "city"),
         Index("idx_report_ai_damage_type",      "ai_damage_type"),
         Index("idx_report_type",                "report_type"),
         Index("idx_report_is_hybrid",           "is_hybrid"),
@@ -61,6 +62,7 @@ class Report(Base):
     latitude    = Column(Float,  nullable=False)
     longitude   = Column(Float,  nullable=False)
     barangay    = Column(String, nullable=True)
+    city        = Column(String, nullable=True)
     street_name = Column(String, nullable=True)
 
     description = Column(String, nullable=True)

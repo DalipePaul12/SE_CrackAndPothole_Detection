@@ -1601,6 +1601,7 @@ setCameraActive(true);
       user_id: userId, reporter_name: reporterName,
       latitude: coords.lat, longitude: coords.lng,
       barangay, street_name: streetName || null,
+      city: city?.trim() || null,
       description: additionalInfo?.trim() || null,
       ai_damage_type:   DAMAGE_TYPE_BACKEND[damageType]  ?? null,
       ai_severity:      SEVERITY_BACKEND[severity]       ?? null,
@@ -1662,7 +1663,7 @@ setCameraActive(true);
     });
     setTimeout(() => onClose(), 600);
   }, [
-    imageType, coords, barangay, streetName, additionalInfo,
+    imageType, coords, barangay, city, streetName, additionalInfo,
     damageType, severity, aiConfidence, hfConfidence, hfStatus, hfModel,
     requiresReview, reviewReason, isHybrid, secondaryDamage, detectionNote,
     file, onClose, phoneAngle, angleValid, predictionResult,
