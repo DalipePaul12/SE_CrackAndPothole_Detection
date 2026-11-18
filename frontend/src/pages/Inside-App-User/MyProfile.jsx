@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
 import React, { useState, useEffect, useRef } from "react";
 import "./MyProfile.css";
 import { createPortal } from "react-dom";
@@ -134,7 +135,7 @@ function StatusTimeline({ report }) {
 const VIDEO_EXT_RE = /\.(mp4|webm|ogg|mov)(\?|$)/i;
 
 function getReportMedia(report) {
-  const url = report?.media_attachments?.[0]?.file_url;
+  const url = submissionMedia(report)[0]?.file_url;
   if (!url) return { url: null, type: null };
   return {
     url: resolveMediaUrl(url),
@@ -185,7 +186,7 @@ function ReportMedia({ media, reportId }) {
 function ReportDetailModal({ report, onClose, BASE_URL }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("details");
-  const attachments = report?.media_attachments ?? [];
+  const attachments = submissionMedia(report);
 const imageUrl = attachments[0]?.file_url
   ? resolveMediaUrl(attachments[0].file_url)
   : null;
@@ -344,7 +345,9 @@ const imageUrl = attachments[0]?.file_url
 
           {activeTab === "media" && (
             <div className="mp-modal-media-tab">
-              {imageUrl ? (
+              {hasSubmissionEvidence(report) ? <ReportEvidence report={report} /> : imageUrl && getReportMedia(report).type === "video" ? (
+                <video src={imageUrl} controls className="mp-modal-media-main" />
+              ) : imageUrl ? (
                 <img
                   src={imageUrl}
                   alt={`Report #${report.id}`}
@@ -836,7 +839,7 @@ function MyProfile() {
                         </div>
 
                         <div className="report-main">
-                          <ReportMedia media={media} reportId={report.id} />
+                          {hasSubmissionEvidence(report) ? <div className="report-media-wrap"><ReportEvidence report={report} compact /></div> : <ReportMedia media={media} reportId={report.id} />}
                           <div className="ai-result">
                             <h4>AI Classification</h4>
                             <h5>Result</h5>

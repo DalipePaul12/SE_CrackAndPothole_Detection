@@ -3,7 +3,7 @@
  *
  * CHANGES FROM PREVIOUS VERSION:
  *   1. Replaced old SegmentationMask (rect-only) with new polygon-based renderer
- *   2. Added useNaturalSize hook so masks scale correctly with the actual image
+ *   2. Photo previews and overlays share the same image bounds
  *   3. normalizePrediction() maps backend payload → standard shape for overlay
  *   4. predictionResult.all_detections (multi-mask) supported
  *   5. Added scanning animation grid + scan-line during analysis
@@ -32,18 +32,17 @@ import {
 } from "react-icons/fa";
 import { MdOutlineLocationOn } from "react-icons/md";
 import { useUser } from "../../hooks/useUser";
-import { analyzeMedia, analyzeRealtimeFrame, analyzeVideo } from "../../api/ml";
-import { createReport, uploadMedia } from "../../api/reports";
+import { analyzeRealtimeFrame, analyzeVideo } from "../../api/ml";
+import { EvidencePhotoPreview, EvidencePhotoViewer } from "./EvidencePhoto";
+import { analyzeReportPhoto } from "./photoAnalysis";
+import { reconcileReport, reconcileMedia } from "../../api/reports";
 import { useOfflineQueue, enqueueOfflineReport } from "../../hooks/useOfflineQueue";
 import { invalidateReportsCache } from "../../hooks/useReports";
 import PhotoCaptureGuide from "../../components/PhotoCaptureGuide";
 import DetectionOverlay from "../../components/DetectionOverlay";
 
 // ─── NEW: Import the refactored segmentation overlay ──────────────────────────
-import SegmentationMask, {
-  useNaturalSize,
-  normalizePrediction,
-} from "../../components/SegmentationMask";
+import SegmentationMask from "../../components/SegmentationMask";
 import "../../components/SegmentationMask.css";
 
 import {
@@ -119,111 +118,6 @@ async function snapRealtimeFrameBlob(videoEl) {
   canvas.height = h;
   canvas.getContext("2d").drawImage(videoEl, 0, 0, w, h);
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.7));
-}
-
-// ── NEW: bakes the polygon/box mask onto the original photo, mirroring what
-// the video pipeline already returns as detection_snapshots[].image_b64.
-async function renderAnnotatedImageSnapshot(file, detections, maxDim = 900) {
-  if (!file || !detections?.length) return null;
-
-  const img = await new Promise((resolve, reject) => {
-    const el = new Image();
-    el.onload = () => resolve(el);
-    el.onerror = reject;
-    el.src = URL.createObjectURL(file);
-  });
-
-  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-  const w = Math.round(img.naturalWidth * scale);
-  const h = Math.round(img.naturalHeight * scale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, w, h);
-
-  const SEV_COLORS = {
-    critical:     { stroke: "#ef4444", fill: "rgba(239,68,68,0.28)" },
-    non_critical: { stroke: "#f97316", fill: "rgba(249,115,22,0.22)" },
-  };
-
-  detections.forEach((det) => {
-    const sevKey = (det.severity || "non_critical").toLowerCase().includes("crit")
-      ? "critical" : "non_critical";
-    const { stroke, fill } = SEV_COLORS[sevKey];
-
-    let poly = null;
-    if (det.segments_norm?.length >= 3) {
-      poly = det.segments_norm.map(([xn, yn]) => [xn * w, yn * h]);
-    } else if (det.segments && det.image_width && det.image_height) {
-      const raw = det.segments;
-      const pts = (Array.isArray(raw[0]) && Array.isArray(raw[0][0])) ? raw[0] : raw;
-      if (pts.length >= 3) {
-        poly = pts.map(([x, y]) => [(x / det.image_width) * w, (y / det.image_height) * h]);
-      }
-    }
-
-    if (poly) {
-      ctx.beginPath();
-      poly.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
-      ctx.closePath();
-      ctx.fillStyle = fill;
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = stroke;
-      ctx.stroke();
-    }
-
-    let box = null;
-    if (det.norm_bbox?.length === 4) {
-      const [x1n, y1n, x2n, y2n] = det.norm_bbox;
-      box = [x1n * w, y1n * h, x2n * w, y2n * h];
-    } else if (det.box && det.image_width && det.image_height) {
-      const [x1, y1, x2, y2] = det.box;
-      box = [
-        (x1 / det.image_width) * w, (y1 / det.image_height) * h,
-        (x2 / det.image_width) * w, (y2 / det.image_height) * h,
-      ];
-    }
-    if (box) {
-      ctx.setLineDash(sevKey === "critical" ? [] : [6, 3]);
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
-      ctx.setLineDash([]);
-
-      const label = (det.class ?? det.label ?? "damage").toUpperCase();
-      const conf  = det.confidence != null ? ` ${Math.round(det.confidence * 100)}%` : "";
-      const text  = label + conf;
-      ctx.font = "bold 12px monospace";
-      const textW = ctx.measureText(text).width;
-      const lx = box[0], ly = Math.max(14, box[1] - 6);
-      ctx.fillStyle = stroke;
-      ctx.fillRect(lx - 2, ly - 12, textW + 8, 16);
-      ctx.fillStyle = "#fff";
-      ctx.fillText(text, lx + 2, ly);
-    }
-  });
-
-  URL.revokeObjectURL(img.src);
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result.split(",")[1]);
-      reader.readAsDataURL(blob);
-    }, "image/jpeg", 0.85);
-  });
-}
-
-// ── NEW: turn the base64 annotated snapshot back into a File so it can be
-// uploaded as the actual evidence media (not just a detection-frame thumbnail).
-function base64ToFile(b64, filename, mime = "image/jpeg") {
-  const byteChars = atob(b64);
-  const byteNumbers = new Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-  const byteArray = new Uint8Array(byteNumbers);
-  return new File([byteArray], filename, { type: mime });
 }
 
 function distanceFeedback(bbox) {
@@ -704,12 +598,19 @@ function CreateReport({ onClose }) {
     return profile?.id || profile?.user_id || profile?.uid || null;
   }, [profile]);
 
-  // ── State (UNCHANGED except allDetections) ─────────────────────────────────
   const [showGuide,    setShowGuide]    = useState(true);
   const [activeTab,    setActiveTab]    = useState("photo");
   const [showCamera,   setShowCamera]   = useState(false);
-  const [file,         setFile]         = useState(null);
-  const [preview,      setPreview]      = useState(null);
+  const [videoFile, setFile] = useState(null);
+  const [videoPreview, setPreview] = useState(null);
+  const [photos, setPhotos] = useState([]);
+  const [selectedPhotoId, setSelectedPhotoId] = useState(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const photoIndex = photos.findIndex(({ id }) => id === selectedPhotoId);
+  const selectedPhoto = photos[photoIndex];
+  const isPhoto = activeTab === "photo";
+  const file = isPhoto ? selectedPhoto?.file : videoFile;
+  const preview = isPhoto ? selectedPhoto?.preview : videoPreview;
 
   const [cameraActive,  setCameraActive]  = useState(false);
   const [cameraError,   setCameraError]   = useState(null);
@@ -724,36 +625,57 @@ function CreateReport({ onClose }) {
 
   const [phoneAngle, setPhoneAngle] = useState(null);
   const [angleValid, setAngleValid] = useState(false);
-  const [previewSize,    setPreviewSize]    = useState({ width: 0, height: 0 });
   const [viewfinderSize, setViewfinderSize] = useState({ width: 0, height: 0 });
   const [detectionSnapshots, setDetectionSnapshots] = useState([]);
 
-  const [isAnalyzing,      setIsAnalyzing]      = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState(null);
-  const [analyzeError,     setAnalyzeError]     = useState(null);
-  const [currentStage,     setCurrentStage]     = useState("idle");
-  const [attemptWarning,   setAttemptWarning]   = useState(null);
-  const [retryCount,       setRetryCount]       = useState(0);
-  const [hfStatus,         setHfStatus]         = useState(null);
-  const [hfConfidence,     setHfConfidence]     = useState(null);
-  const [hfModel,          setHfModel]          = useState(null);
-  const [hfRawScores,      setHfRawScores]      = useState(null);
-  const [imageType,        setImageType]        = useState(null);
-  const [damageType,       setDamageType]       = useState(null);
-  const [severity,         setSeverity]         = useState(null);
-  const [aiConfidence,     setAiConfidence]     = useState(null);
-  const [analysisComplete, setAnalysisComplete] = useState(false);
-  const [predictionResult, setPredictionResult] = useState(null);
+  const [videoIsAnalyzing,      setIsAnalyzing]      = useState(false);
+  const [videoAnalysisProgress, setAnalysisProgress] = useState(null);
+  const [videoAnalyzeError,     setAnalyzeError]     = useState(null);
+  const [videoCurrentStage,     setCurrentStage]     = useState("idle");
+  const [videoRetryCount,       setRetryCount]       = useState(0);
+  const [videoHfStatus,         setHfStatus]         = useState(null);
+  const [videoHfConfidence,     setHfConfidence]     = useState(null);
+  const [videoHfModel,          setHfModel]          = useState(null);
+  const [videoHfRawScores,      setHfRawScores]      = useState(null);
+  const [videoImageType,        setImageType]        = useState(null);
+  const [videoDamageType,       setDamageType]       = useState(null);
+  const [videoSeverity,         setSeverity]         = useState(null);
+  const [videoAiConfidence,     setAiConfidence]     = useState(null);
+  const [videoAnalysisComplete, setAnalysisComplete] = useState(false);
+  const [videoPredictionResult, setPredictionResult] = useState(null);
 
-  const [allDetections, setAllDetections] = useState([]);
-  const [imageAnnotatedSnapshot, setImageAnnotatedSnapshot] = useState(null);
-  const [definitiveNoDamage, setDefinitiveNoDamage] = useState(false);
-  const [requiresReview, setRequiresReview] = useState(false);
-  const [reviewReason,   setReviewReason]   = useState(null);
-  const [manualReviewOverride, setManualReviewOverride] = useState(false);
+  const [videoDefinitiveNoDamage, setDefinitiveNoDamage] = useState(false);
+  const [videoRequiresReview, setRequiresReview] = useState(false);
+  const [videoReviewReason,   setReviewReason]   = useState(null);
+  const [videoManualReviewOverride, setManualReviewOverride] = useState(false);
   const [isHybrid,        setIsHybrid]        = useState(false);
   const [secondaryDamage, setSecondaryDamage] = useState(null);
   const [detectionNote,   setDetectionNote]   = useState(null);
+
+  const photoAnalysis = selectedPhoto?.analysis ?? {};
+  const isAnalyzing = isPhoto ? !!selectedPhoto?.pending : videoIsAnalyzing;
+  const analysisProgress = isPhoto ? null : videoAnalysisProgress;
+  const analyzeError = isPhoto ? photoAnalysis.analyzeError : videoAnalyzeError;
+  const currentStage = isPhoto ? photoAnalysis.currentStage ?? "authenticity" : videoCurrentStage;
+  const retryCount = isPhoto ? selectedPhoto?.retries ?? 0 : videoRetryCount;
+  const hfStatus = isPhoto ? photoAnalysis.hfStatus : videoHfStatus;
+  const hfConfidence = isPhoto ? photoAnalysis.hfConfidence ?? null : videoHfConfidence;
+  const hfRawScores = isPhoto ? photoAnalysis.hfRawScores : videoHfRawScores;
+  const imageType = isPhoto ? photoAnalysis.imageType ?? null : videoImageType;
+  const predictionResult = isPhoto ? photoAnalysis.predictionResult : videoPredictionResult;
+  const damageType = isPhoto ? normalizeDamageType(predictionResult?.label) : videoDamageType;
+  const severity = isPhoto ? normalizeSeverity(predictionResult?.severity) : videoSeverity;
+  const aiConfidence = isPhoto ? predictionResult?.confidence ?? photoAnalysis.aiConfidence ?? null : videoAiConfidence;
+  const analysisComplete = isPhoto ? !!photoAnalysis.analysisComplete : videoAnalysisComplete;
+  const definitiveNoDamage = isPhoto ? photoAnalysis.definitiveNoDamage : videoDefinitiveNoDamage;
+  const reviewReason = isPhoto ? photoAnalysis.reviewReason : videoReviewReason;
+  const manualReviewOverride = isPhoto ? photoAnalysis.manualReviewOverride : videoManualReviewOverride;
+  const maskDetections = photoAnalysis.allDetections ?? [];
+  const qualifyingPhotos = photos.filter(({ pending, analysis }) => !pending && !analysis.definitiveNoDamage
+    && !["error", "failed", "unavailable", "pending", "processing"].includes(analysis.hfStatus)
+    && analysis.allDetections?.some((detection) => normalizeDamageType(detection.class)));
+  const requiresReview = isPhoto ? qualifyingPhotos.some(({ analysis }) => analysis.requiresReview) : videoRequiresReview;
+  const noPhotoDamage = isPhoto && analysisComplete && (definitiveNoDamage || (!analyzeError && !maskDetections.length));
 
   const [coords,          setCoords]          = useState(null);
   const [locationSource,  setLocationSource]  = useState(null); // 'exif' | null
@@ -769,6 +691,7 @@ const [barangayVerified, setBarangayVerified] = useState(true);
   const [formError,         setFormError]         = useState("");
   const [isSubmitting,      setIsSubmitting]      = useState(false);
   const [submitSuccess,     setSubmitSuccess]     = useState(false);
+  const [pendingUploads, setPendingUploads] = useState(null);
   const [showDiscardModal,  setShowDiscardModal]  = useState(false);
   const [showSubmitModal,   setShowSubmitModal]   = useState(false);
 
@@ -806,32 +729,58 @@ const [barangayVerified, setBarangayVerified] = useState(true);
   const mediaRecorderRef = useRef(null);
   const chunksRef        = useRef([]);
   const recordTimerRef   = useRef(null);
-  const previewMediaRef  = useRef(null);
+  const photoUrls = useRef(new Map());
+  const photoAnalysisQueue = useRef(Promise.resolve());
+  const nextPhotoId = useRef(0);
+  const retakePhotoId = useRef(null);
   const angleRef         = useRef(null);
   const submittingRef    = useRef(false);
-  const consecutiveAnalysisFailuresRef = useRef(0);
   const liveHistoryRef   = useRef([]);
   const liveConfirmedRef = useRef(null);
   const liveMissesRef    = useRef(0);
 
-  // ── NEW: natural image size via hook (for correct mask scaling) ────────────
-  const naturalSize = useNaturalSize(previewMediaRef);
-
-  // ── FIX: ResizeObserver for reliable previewSize regardless of load timing ─
   useEffect(() => {
-    const el = previewMediaRef.current;
-    if (!el || !preview) return;
+    const urls = photoUrls.current;
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, []);
 
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        setPreviewSize({ width, height });
+  const queuePhotoAnalysis = useCallback((photo) => {
+    photoAnalysisQueue.current = photoAnalysisQueue.current.then(async () => {
+      if (!photoUrls.current.has(photo.id)) return;
+      let analysis;
+      try {
+        analysis = await analyzeReportPhoto(photo.file, photo.source);
+      } catch {
+        analysis = { analysisComplete: true, currentStage: "review", analyzeError: "Analysis error — please try re-uploading." };
       }
+      if (!photoUrls.current.has(photo.id)) return;
+      setPhotos((current) => current.map((entry) => entry.id === photo.id
+        ? { ...entry, pending: false, analysis } : entry));
     });
+  }, []);
 
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [preview]);
+  const addPhotos = useCallback((files, source, replaceId = null) => {
+    const added = files.map((file) => {
+      const id = ++nextPhotoId.current;
+      const preview = URL.createObjectURL(file);
+      photoUrls.current.set(id, preview);
+      return { id, file, preview, source, pending: true, retries: 0, analysis: {} };
+    });
+    if (!added.length) return;
+    if (replaceId !== null) {
+      URL.revokeObjectURL(photoUrls.current.get(replaceId));
+      photoUrls.current.delete(replaceId);
+    }
+    setPhotos((current) => replaceId === null
+      ? [...current, ...added]
+      : current.map((photo) => photo.id === replaceId ? added[0] : photo));
+    setSelectedPhotoId((current) => replaceId !== null || current === null ? added[0].id : current);
+    setFormError("");
+    added.forEach(queuePhotoAnalysis);
+  }, [queuePhotoAnalysis]);
 
   // ── Analysis reset ─────────────────────────────────────────────────────────
   const resetAnalysis = useCallback(() => {
@@ -849,9 +798,6 @@ const [barangayVerified, setBarangayVerified] = useState(true);
     setAnalysisProgress(null);
     setCurrentStage("idle");
     setPredictionResult(null);
-    setAllDetections([]);
-    setImageAnnotatedSnapshot(null);
-    setPreviewSize({ width: 0, height: 0 });
     setDetectionSnapshots([]);
     setIsHybrid(false);
     setSecondaryDamage(null);
@@ -861,254 +807,93 @@ const [barangayVerified, setBarangayVerified] = useState(true);
     setDefinitiveNoDamage(false);
   }, []);
 
-  // ── runFullAnalysis — CHANGED: extract allDetections from backend ──────────
   const runFullAnalysis = useCallback(async (f, { source = "upload" } = {}) => {
     const thisId = ++analysisIdRef.current;
     resetAnalysis();
     setIsAnalyzing(true);
     setCurrentStage("authenticity");
-    setAnalysisProgress(isVideoFile(f) ? "Analyzing video…" : "Checking authenticity…");
+    setAnalysisProgress("Analyzing video…");
 
     try {
       let result;
 
-      if (isVideoFile(f)) {
-        // ── VIDEO PATH (unchanged logic, added allDetections extract) ──────
-        setCurrentStage("authenticity");
-        setAnalysisProgress("Checking video authenticity…");
-        result = await analyzeVideo(f, (msg) => {
-          if (analysisIdRef.current === thisId) setAnalysisProgress(msg);
-        }, { source });
-        if (analysisIdRef.current !== thisId) return;
-        if (!result.success) {
-          setAnalyzeError(result.error || "Video analysis failed.");
-          setAnalysisComplete(true); return;
-        }
-        const videoAuth = result.data?.ai_validation;
-        if (videoAuth?.status === "flagged_for_review") {
-          setImageType("AI-GENERATED");
-          setHfStatus("rejected");
-          setHfConfidence(videoAuth.confidence ?? null);
-          setRequiresReview(true);
-          setReviewReason("AI-generated or manipulated video detected — full classification retained for admin review");
-        } else {
+      setCurrentStage("authenticity");
+      setAnalysisProgress("Checking video authenticity…");
+      result = await analyzeVideo(f, (msg) => {
+        if (analysisIdRef.current === thisId) setAnalysisProgress(msg);
+      }, { source });
+      if (analysisIdRef.current !== thisId) return;
+      if (!result.success) {
+        setAnalyzeError(result.error || "Video analysis failed.");
+        setAnalysisComplete(true); return;
+      }
+      const videoAuth = result.data?.ai_validation;
+      if (videoAuth?.status === "flagged_for_review") {
+        setImageType("AI-GENERATED");
+        setHfStatus("rejected");
+        setHfConfidence(videoAuth.confidence ?? null);
+        setRequiresReview(true);
+        setReviewReason("AI-generated or manipulated video detected — full classification retained for admin review");
+      } else {
+        setImageType("REAL");
+        setHfStatus(videoAuth?.status ?? "skipped");
+        setHfConfidence(videoAuth?.confidence ?? null);
+      }
+      setCurrentStage("classification");
+      setAnalysisProgress("Classifying video damage and severity…");
+      setCurrentStage("review");
+
+      const vidAIVal = result.data?.ai_validation;
+      if (vidAIVal) {
+        const s = vidAIVal.status ?? "skipped";
+        setHfStatus(s);
+        setHfConfidence(vidAIVal.confidence ?? null);
+        setHfModel(vidAIVal.model ?? null);
+        // Video authenticity is an aggregate across sampled frames, so there's
+        // no single _artificial_score/_real_score pair the way a single image
+        // has. Synthesize one from the aggregate confidence + status so the
+        // Authenticity Confidence bar reflects the real number instead of
+        // defaulting to 0% (it reads from raw_scores, not hfConfidence directly).
+        const aggConf = vidAIVal.confidence ?? 0;
+        const isFlagged = s === "rejected" || s === "flagged_for_review";
+        setHfRawScores({
+          _artificial_score: isFlagged ? aggConf : 1 - aggConf,
+          _real_score: isFlagged ? 1 - aggConf : aggConf,
+        });
+        if (s === "approved_for_classification" || s === "skipped") {
           setImageType("REAL");
-          setHfStatus(videoAuth?.status ?? "skipped");
-          setHfConfidence(videoAuth?.confidence ?? null);
+        } else if (s === "rejected" || s === "flagged_for_review") {
+          setImageType("AI-GENERATED");
+          setRequiresReview(true);
+          setReviewReason("AI-generated video detected across sampled frames");
         }
-        setCurrentStage("classification");
-        setAnalysisProgress("Classifying video damage and severity…");
-        setCurrentStage("review");
+      } else {
+        setHfStatus("skipped"); setImageType("REAL"); setHfRawScores(null);
+      }
 
-        const vidAIVal = result.data?.ai_validation;
-        if (vidAIVal) {
-          const s = vidAIVal.status ?? "skipped";
-          setHfStatus(s);
-          setHfConfidence(vidAIVal.confidence ?? null);
-          setHfModel(vidAIVal.model ?? null);
-          // Video authenticity is an aggregate across sampled frames, so there's
-          // no single _artificial_score/_real_score pair the way a single image
-          // has. Synthesize one from the aggregate confidence + status so the
-          // Authenticity Confidence bar reflects the real number instead of
-          // defaulting to 0% (it reads from raw_scores, not hfConfidence directly).
-          const aggConf = vidAIVal.confidence ?? 0;
-          const isFlagged = s === "rejected" || s === "flagged_for_review";
-          setHfRawScores({
-            _artificial_score: isFlagged ? aggConf : 1 - aggConf,
-            _real_score: isFlagged ? 1 - aggConf : aggConf,
-          });
-          if (s === "approved_for_classification" || s === "skipped") {
-            setImageType("REAL");
-          } else if (s === "rejected" || s === "flagged_for_review") {
-            setImageType("AI-GENERATED");
-            setRequiresReview(true);
-            setReviewReason("AI-generated video detected across sampled frames");
-          }
-        } else {
-          setHfStatus("skipped"); setImageType("REAL"); setHfRawScores(null);
-        }
+      setDetectionSnapshots(result.data?.analytics?.detection_snapshots ?? []);
+      setIsHybrid(result.data?.is_hybrid ?? false);
+      setSecondaryDamage(result.data?.secondary_damage ?? null);
+      setDetectionNote(result.data?.detection_note ?? null);
 
-        setDetectionSnapshots(result.data?.analytics?.detection_snapshots ?? []);
-        setIsHybrid(result.data?.is_hybrid ?? false);
-        setSecondaryDamage(result.data?.secondary_damage ?? null);
-        setDetectionNote(result.data?.detection_note ?? null);
+      const prediction = result.data?.prediction;
+      if (result.data?.detected && prediction) {
+        const dt   = normalizeDamageType(prediction.label);
+        const sv   = normalizeSeverity(prediction.severity);
+        const conf = prediction.confidence ?? null;
+        setDamageType(dt);
+        setSeverity(sv);
+        setAiConfidence(conf);
+        setPredictionResult(prediction);
 
-        const prediction = result.data?.prediction;
-        if (result.data?.detected && prediction) {
-          const dt   = normalizeDamageType(prediction.label);
-          const sv   = normalizeSeverity(prediction.severity);
-          const conf = prediction.confidence ?? null;
-          setDamageType(dt);
-          setSeverity(sv);
-          setAiConfidence(conf);
-          setPredictionResult(prediction);
-
-          const rawDets = result.data?.all_detections ?? [];
-          console.log('[DEBUG] all_detections:', JSON.stringify(rawDets, null, 2));
-          setAllDetections(rawDets.map(normalizePrediction).filter(Boolean));
-          if (!dt) {
-            setDefinitiveNoDamage(true);
-            setAnalyzeError("No damage detected in video. Try a clearer or longer clip.");
-          }
-        } else {
-          setDamageType(null);
+        if (!dt) {
           setDefinitiveNoDamage(true);
           setAnalyzeError("No damage detected in video. Try a clearer or longer clip.");
         }
-
       } else {
-        // ── IMAGE PATH ────────────────────────────────────────────────────
-        setCurrentStage("authenticity");
-        setAnalysisProgress(source === "capture" ? "Verifying capture…" : "Checking authenticity…");
-        result = await analyzeMedia(f, { source });
-        if (analysisIdRef.current !== thisId) return;
-        if (!result.success) {
-          setAnalyzeError(result.error || "Analysis failed.");
-          setAnalysisComplete(true); return;
-        }
-
-        const { ai_validation, prediction } = result.data ?? {};
-        const pipelineStage = result.data?.stage ?? "passed";
-        const pipelineStatus = result.data?.status ?? "pass";
-        const pipelineReason = result.data?.reason ?? null;
-
-        if (pipelineStage === "authenticity" && pipelineStatus === "fail") {
-          consecutiveAnalysisFailuresRef.current += 1;
-          setCurrentStage("review");
-          setImageType("AI-GENERATED");
-          setRequiresReview(false);
-          setReviewReason(null);
-          setAnalyzeError("This upload appears to be AI-generated or manipulated.");
-          if (consecutiveAnalysisFailuresRef.current >= 3) {
-            setAttemptWarning("Three authenticity checks failed. Check the lighting and capture a new, genuine road image.");
-          }
-          return;
-        }
-
-        if (pipelineStage === "scene" && pipelineStatus === "fail") {
-          consecutiveAnalysisFailuresRef.current += 1;
-          setCurrentStage("review");
-          setDamageType(null);
-          setSeverity(null);
-          setAiConfidence(result.data?.confidence ?? null);
-          setDefinitiveNoDamage(true);
-          setAnalyzeError("This doesn't look like a road or pavement surface. Please retake the photo focusing on the road.");          if (consecutiveAnalysisFailuresRef.current >= 3) {
-            setAttemptWarning("Three attempts didn't show a clear road or pavement surface. Make sure the road fills more of the frame.");
-          }
-          return;
-        }
-
-        setCurrentStage("presence");
-        setAnalysisProgress("Checking for road damage…");
-
-if (ai_validation && typeof ai_validation === "object") {
-  const hfStat = ai_validation.status;
-
-  setHfStatus(hfStat ?? null);
-  setHfConfidence(ai_validation.confidence ?? null);
-  setHfModel(ai_validation.model ?? null);
-  setHfRawScores(ai_validation.raw_scores ?? null);
-  setRequiresReview(false);
-  setReviewReason(null);
-
-  switch (hfStat) {
-    case "approved_for_classification":
-      setImageType("REAL");
-      break;
-
-    case "skipped":
-      setImageType("REAL");
-      break;
-
-    case "rejected":
-      setImageType("AI-GENERATED");
-      setRequiresReview(true);
-      setReviewReason("AI-generated image detected");
-      break;
-
-    case "pending":
-    case "processing":
-      setImageType(null);
-      setAnalyzeError("AI check is still processing. Please wait and re-upload.");
-      break;
-
-    case "error":
-    case "failed":
-    case "unavailable":
-      setImageType("REAL");
-      setRequiresReview(true);
-      setReviewReason("AI authenticity check unavailable — flagged for manual review");
-      break;
-
-    default:
-      console.warn("[HF] Unexpected ai_validation.status:", hfStat, ai_validation);
-      setImageType("REAL");
-      break;
-  }
-} else {
-  setHfStatus(null);
-  setHfConfidence(null);
-  setHfModel(null);
-  setImageType("REAL");
-  setRequiresReview(false);
-  setReviewReason(null);
-}
-
-        if (prediction) {
-          const dt   = normalizeDamageType(prediction.label);
-          const sv   = normalizeSeverity(prediction.severity);
-          const conf = prediction.confidence ?? null;
-          setDamageType(dt);
-          setSeverity(sv);
-          setAiConfidence(conf);
-          setPredictionResult(prediction);
-          const rawDets = result.data?.all_detections ?? [];
-          const normalizedDets = rawDets.map(normalizePrediction).filter(Boolean);
-          setAllDetections(normalizedDets);
-
-          if (normalizedDets.length > 0) {
-            renderAnnotatedImageSnapshot(f, normalizedDets)
-              .then((b64) => { if (analysisIdRef.current === thisId) setImageAnnotatedSnapshot(b64); })
-              .catch(() => {});
-          }
-
-          if (prediction.label === "none" || dt === null) {
-            setAnalyzeError("No damage detected. Please upload a clearer photo of road damage.");
-          }
-        }
-
-        if (pipelineStage === "presence" && pipelineStatus === "fail") {
-          consecutiveAnalysisFailuresRef.current += 1;
-          setCurrentStage("review");
-          setDamageType(null);
-          setSeverity(null);
-          setAiConfidence(result.data?.confidence ?? null);
-          setRequiresReview(false);
-          setReviewReason(null);
-          setDefinitiveNoDamage(true);
-          setAnalyzeError(pipelineReason === "no_damage"
-            ? "No road damage detected. Please try again."
-            : "The damage check could not confirm road damage.");
-          if (consecutiveAnalysisFailuresRef.current >= 3) {
-            setAttemptWarning("Three damage checks failed. Check the lighting, distance, and camera angle before trying again.");
-          }
-          return;
-        }
-        if (pipelineStatus === "flagged_for_review") {
-          setRequiresReview(true);
-          setReviewReason("AI-generated or manipulated media detected — full classification retained for admin review");
-          setAnalyzeError(null);
-        }
-
-        setCurrentStage(pipelineStatus === "uncertain" ? "review" : "classification");
-        setAnalysisProgress("Classifying damage and severity…");
-        if (pipelineStatus === "uncertain") {
-          setAnalyzeError("The damage classification is uncertain. Please capture a clearer image.");
-          return;
-        }
-        consecutiveAnalysisFailuresRef.current = 0;
-        setAttemptWarning(null);
-        setCurrentStage("review");
+        setDamageType(null);
+        setDefinitiveNoDamage(true);
+        setAnalyzeError("No damage detected in video. Try a clearer or longer clip.");
       }
 
     } catch {
@@ -1127,9 +912,15 @@ if (ai_validation && typeof ai_validation === "object") {
   // ── Retry handler — re-runs analysis on the same file, tracks attempt count ─
   const handleRetryAnalysis = useCallback(() => {
     if (!file || isAnalyzing) return;
+    if (selectedPhoto && isPhoto) {
+      setPhotos((current) => current.map((photo) => photo.id === selectedPhoto.id
+        ? { ...photo, pending: true, retries: photo.retries + 1, analysis: {} } : photo));
+      queuePhotoAnalysis(selectedPhoto);
+      return;
+    }
     setRetryCount((c) => c + 1);
     runFullAnalysis(file);
-  }, [file, isAnalyzing, runFullAnalysis]);
+  }, [file, isAnalyzing, isPhoto, selectedPhoto, queuePhotoAnalysis, runFullAnalysis]);
 
   // ── Camera helpers (UNCHANGED) ─────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -1196,11 +987,11 @@ if (videoRef.current) {
 setCameraActive(true);
       // Self-pacing detection loop: the next frame is only sent after current
       // inference completes, so slow backend responses never cause overlapping
-      // requests or queued-up fetches. detectionLoopRef acts as a stop flag.
-      detectionLoopRef.current = true;
+      // requests or queued-up fetches. A new camera session supersedes the previous loop.
+      detectionLoopRef.current = stream;
       (async () => {
         let consecFails = 0;
-        while (detectionLoopRef.current) {
+        while (detectionLoopRef.current === stream) {
           if (!videoRef.current || videoRef.current.readyState < 2) {
             await new Promise((r) => setTimeout(r, 150));
             continue;
@@ -1208,6 +999,7 @@ setCameraActive(true);
           try {
             const blob  = await snapRealtimeFrameBlob(videoRef.current);
             const result = await analyzeRealtimeFrame(blob);
+            if (detectionLoopRef.current !== stream) break;
             if (result.success) {
               consecFails = 0;
               setLiveDetectionError(null);
@@ -1304,15 +1096,20 @@ setCameraActive(true);
   const capturePhoto = useCallback(async () => {
     if (!videoRef.current || capturing) return;
     setCapturing(true);
-    setRetryCount(0);
-    const blob     = await snapFrameBlob(videoRef.current);
-    const captured = new File([blob], "snap_capture.jpg", { type: "image/jpeg" });
-    setFile(captured);
-    setPreview(URL.createObjectURL(blob));
-    stopCamera();
-    setCapturing(false);
-    await runFullAnalysis(captured, { source: "capture" });
-  }, [capturing, stopCamera, runFullAnalysis]);
+    try {
+      const blob = await snapFrameBlob(videoRef.current);
+      if (!blob) {
+        setCameraError("Could not capture this photo. Please try again.");
+        return;
+      }
+      const captured = new File([blob], "snap_capture.jpg", { type: "image/jpeg" });
+      addPhotos([captured], "capture", retakePhotoId.current);
+      retakePhotoId.current = null;
+      stopCamera();
+    } finally {
+      setCapturing(false);
+    }
+  }, [capturing, stopCamera, addPhotos]);
 
   const startRecording = useCallback(() => {
     if (!streamRef.current) return;
@@ -1459,13 +1256,22 @@ setCameraActive(true);
   useEffect(() => { fetchLocation(); }, [fetchLocation]);
 
   const handleFileChange = useCallback(async (e) => {
-    const f = e.target.files?.[0];
+    const chosen = Array.from(e.target.files);
+    e.target.value = "";
+    if (!chosen.length) return;
+    const files = chosen.filter((file) => isPhoto ? !isVideoFile(file) : isVideoFile(file));
+    if (files.length !== chosen.length) setFormError(isPhoto ? "Choose photos on the Photo tab." : "Choose a video on the Video tab.");
+    const f = files[0];
     if (!f) return;
-    setRetryCount(0);
-    setManualReviewOverride(false);
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
-    setFormError("");
+    if (isPhoto) addPhotos(files, "upload");
+    else {
+      setRetryCount(0);
+      setManualReviewOverride(false);
+      setFile(f);
+      setPreview(URL.createObjectURL(f));
+      setFormError("");
+      runFullAnalysis(f, { source: "upload" });
+    }
 
     if (!coords) {
       const gps = await readExifGps(f);
@@ -1495,8 +1301,7 @@ setCameraActive(true);
       }
     }
 
-    await runFullAnalysis(f, { source: "upload" });
-  }, [coords, runFullAnalysis]);
+  }, [coords, isPhoto, addPhotos, runFullAnalysis]);
 
   const clearMedia = useCallback((e) => {
     e?.stopPropagation();
@@ -1513,17 +1318,52 @@ setCameraActive(true);
 
   // ── Retake — discards current media/analysis and jumps straight back
   // into the camera, instead of returning to the empty upload placeholder.
-  const handleRetake = useCallback((e) => {
-    e?.stopPropagation();
-    clearMedia(e);
+  const removeSelectedPhoto = () => {
+    if (!selectedPhoto) return;
+    URL.revokeObjectURL(selectedPhoto.preview);
+    photoUrls.current.delete(selectedPhoto.id);
+    setPhotos(photos.filter(({ id }) => id !== selectedPhoto.id));
+    setSelectedPhotoId(photos[photoIndex + 1]?.id ?? photos[photoIndex - 1]?.id ?? null);
+    if (photos.length === 1) setDisclaimerAccepted(false);
+    setFormError("");
+  };
+
+  const handleRetake = (e) => {
+    e.stopPropagation();
+    if (isPhoto) retakePhotoId.current = selectedPhoto.id;
+    else clearMedia(e);
     openCamera();
-  }, [clearMedia, openCamera]);
+  };
+
+  const openAdditionalPhoto = () => {
+    retakePhotoId.current = null;
+    openCamera();
+  };
+
+  const requestManualReview = () => {
+    const reason = reviewReason || "AI analysis unavailable after repeated retries — submitted for manual review";
+    if (isPhoto) {
+      setPhotos((current) => current.map((photo) => photo.id === selectedPhotoId ? {
+        ...photo,
+        analysis: { ...photo.analysis, manualReviewOverride: true, requiresReview: true, reviewReason: reason },
+      } : photo));
+    } else {
+      setManualReviewOverride(true);
+      setRequiresReview(true);
+      setReviewReason(reason);
+    }
+    setFormError("");
+  };
 
   // ── Form validation ────────────────────────────────────────────────────────
-  const validateForm = useCallback(() => {
+  const validateForm = () => {
     if (!file)        { setFormError("Evidence required: Please upload or capture a photo/video."); return; }
-    if (isAnalyzing)  { setFormError("Please wait for AI analysis to complete."); return; }
-    if (!manualReviewOverride) {
+    if ((!isPhoto && isAnalyzing) || (isPhoto && photos.some(({ pending }) => pending))) {
+      setFormError("Please wait for AI analysis to complete."); return;
+    }
+    if (isPhoto) {
+      if (!qualifyingPhotos.length) { setFormError("Add a photo with a crack or pothole detection."); return; }
+    } else if (!manualReviewOverride) {
       if (analysisComplete && (hfStatus === "error" || imageType === null))
         { setFormError("AI authenticity check failed or is inconclusive. Please re-upload."); return; }
       if (analysisComplete && damageType === null)
@@ -1534,147 +1374,121 @@ setCameraActive(true);
     if (!disclaimerAccepted) { setFormError("Please accept the legal disclaimer to proceed."); return; }
     setFormError("");
     setShowSubmitModal(true);
-  }, [file, isAnalyzing, analysisComplete, hfStatus, imageType, damageType, barangay, coords, disclaimerAccepted, manualReviewOverride]);
+  };
 
-  // ── Submit (UNCHANGED) ────────────────────────────────────────────────────
-  const performBackgroundSubmit = useCallback(async (reportPayload, mediaFile, existingReportId = null) => {
+  const submitEvidence = async (payload, files, existingReportId = null) => {
+    let reportId = existingReportId;
+    let remaining = files;
     try {
-      let reportId = existingReportId;
-      if (!reportId) {
-        const reportRes = await createReport(reportPayload);
-        if (!reportRes.success) throw new Error(reportRes.error || "Report submission failed.");
-        reportId = reportRes.data?.id ?? reportRes.data?.report_id;
-        if (!reportId) throw new Error("Server did not return a report ID.");
-      }
-
-      const uploadRes = await uploadMedia(reportId, mediaFile);
-      if (!uploadRes.success) {
-        pushOfflineToast({
-          type: "warning",
-          message: `Report #${reportId} was saved, but the photo/video upload failed.`,
-          onRetry: () => performBackgroundSubmit(reportPayload, mediaFile, reportId),
-        });
-        return;
-      }
-
-      invalidateReportsCache?.();
-      pushOfflineToast({ type: "success", message: `Report #${reportId} submitted successfully.` });
-    } catch (err) {
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        try {
-          await enqueueOfflineReport(reportPayload, mediaFile);
-          pushOfflineToast({
-            type: "info",
-            message: "Connection lost — report saved and will submit automatically once you're back online.",
-          });
-          return;
-        } catch {
-          // fall through to generic error handling below
+      if (navigator.onLine) {
+        if (!reportId) {
+          const result = await reconcileReport(payload);
+          if (!result.success) {
+            const error = new Error(result.error || "Report submission failed.");
+            error.status = result.status;
+            throw error;
+          }
+          reportId = result.data?.id ?? result.data?.report_id;
+          if (!reportId) throw new Error("Server did not return a report ID.");
         }
+        while (remaining.length) {
+          const result = await reconcileMedia(reportId, remaining[0].file, remaining[0].uploadId);
+          if (!result.success) throw new Error(result.error || "Evidence upload failed.");
+          remaining = remaining.slice(1);
+        }
+      } else {
+        await enqueueOfflineReport(payload, remaining, reportId);
       }
-      pushOfflineToast({
-        type: "error",
-        message: err.message || "Submission failed.",
-        onRetry: () => performBackgroundSubmit(reportPayload, mediaFile, existingReportId),
-      });
-      if (String(err.message).includes("out_of_bounds")) {
-        setFormError("This location is outside the supported service area.");
-        setLocationWarning("This location is outside the supported service area.");
+    } catch (err) {
+      if (reportId || !(err.status >= 400 && err.status < 500 && err.status !== 408)) {
+        setPendingUploads({ payload, files: remaining, reportId });
+      }
+      if (!navigator.onLine) {
+        await enqueueOfflineReport(payload, remaining, reportId);
+      } else {
+        throw new Error(reportId ? `Report #${reportId} was saved. ${err.message}` : err.message);
       }
     }
-  }, [pushOfflineToast]);
+    invalidateReportsCache();
+  };
 
-  const handleSubmitConfirm = useCallback(() => {
+  const handleSubmitConfirm = async () => {
     if (submittingRef.current) return;
     submittingRef.current = true;
+    setIsSubmitting(true);
     setShowSubmitModal(false);
     setFormError("");
 
-    const is_flagged = imageType === "AI-GENERATED";
-    const isVideo     = file && isVideoFile(file);
-    // Upload the mask-annotated image as the actual evidence media for photo
-    // reports (instead of the plain original), so "Damage Evidence" shows the
-    // marked-up photo directly — mirroring how video's detection frames look.
-    const mediaFileToUpload = (!isVideo && imageAnnotatedSnapshot)
-      ? base64ToFile(imageAnnotatedSnapshot, "annotated_evidence.jpg")
-      : file;    const reportPayload = {
-      user_id: userId, reporter_name: reporterName,
-      latitude: coords.lat, longitude: coords.lng,
-      barangay, street_name: streetName || null,
-      city: city?.trim() || null,
-      description: additionalInfo?.trim() || null,
-      ai_damage_type:   DAMAGE_TYPE_BACKEND[damageType]  ?? null,
-      ai_severity:      SEVERITY_BACKEND[severity]       ?? null,
-      ai_confidence:    aiConfidence                     ?? 0.0,
-      is_flagged_fake:  is_flagged,
-      fake_confidence:  hfConfidence                     ?? 0.0,
-      report_type:      isVideo ? "video" : "image",
-      is_hybrid:        isHybrid,
-      secondary_damage: secondaryDamage ?? null,
-      detection_note:   detectionNote   ?? null,
-      // Only videos produce filmstrip snapshots today — omit entirely for
-      // Images now upload the mask-annotated photo as the primary evidence
-      // media itself (see mediaFileToUpload above), so no separate
-      // detection_snapshots entry is needed for images — that section is
-      // video-only ("Detection Frames" in the Media tab).
-      detection_snapshots: isVideo && detectionSnapshots.length > 0
-        ? detectionSnapshots.map((s) => ({
-            frame: s.frame,
-            timestamp_seconds: s.timestamp_seconds ?? null,
-            label: s.label,
-            confidence: s.confidence,
-            image_b64: s.image_b64,
-          }))
-        : null,
-      ai_validation_status:     hfStatus     ?? null,
-      ai_validation_confidence: hfConfidence ?? null,
-      ai_validation_model:      hfModel      ?? null,
-      requires_admin_review: requiresReview,
-      review_reason:         reviewReason ?? null,
-      disclaimer_accepted:   disclaimerAccepted,
-      capture_metadata: {
-        angle_degrees:           phoneAngle !== null ? Math.round(phoneAngle) : null,
-        angle_valid:             angleValid,
-        estimated_distance_text: predictionResult?.distance?.text ?? null,
-        distance_method:         "bbox_area_estimation",
-      },
-    };
+    try {
+      if (pendingUploads) {
+        const { payload, files, reportId } = pendingUploads;
+        await submitEvidence(payload, files, reportId);
+      } else {
+        const analyses = qualifyingPhotos.map(({ analysis }) => analysis);
+        const ranked = analyses.filter(({ predictionResult }) => normalizeDamageType(predictionResult?.label))
+          .sort((a, b) => b.predictionResult.confidence - a.predictionResult.confidence
+            || a.predictionResult.label.localeCompare(b.predictionResult.label));
+        const primary = ranked[0] ?? analyses[0];
+        const authenticity = analyses.find(({ imageType }) => imageType === "AI-GENERATED") ?? primary;
+        const reportSeverity = ranked.some(({ predictionResult }) => normalizeSeverity(predictionResult.severity) === "CRITICAL")
+          ? "CRITICAL" : normalizeSeverity(primary?.predictionResult?.severity);
+        const reportPayload = {
+          user_id: userId, reporter_name: reporterName,
+          latitude: coords.lat, longitude: coords.lng,
+          barangay, street_name: streetName || null,
+          city: city?.trim() || null,
+          description: additionalInfo?.trim() || null,
+          ai_damage_type: DAMAGE_TYPE_BACKEND[isPhoto ? normalizeDamageType(primary?.predictionResult?.label) : damageType] ?? null,
+          ai_severity: SEVERITY_BACKEND[isPhoto ? reportSeverity : severity] ?? null,
+          ai_confidence: (isPhoto ? primary?.predictionResult?.confidence : aiConfidence) ?? 0,
+          is_flagged_fake: (isPhoto ? authenticity?.imageType : imageType) === "AI-GENERATED",
+          fake_confidence: (isPhoto ? authenticity?.hfConfidence : hfConfidence) ?? 0,
+          report_type: isPhoto ? "image" : "video",
+          is_hybrid: isHybrid,
+          secondary_damage: secondaryDamage ?? null,
+          detection_note: detectionNote ?? null,
+          detection_snapshots: !isPhoto && detectionSnapshots.length ? detectionSnapshots.map((s) => ({
+            frame: s.frame, timestamp_seconds: s.timestamp_seconds ?? null,
+            label: s.label, confidence: s.confidence, image_b64: s.image_b64,
+          })) : null,
+          ai_validation_status: (isPhoto ? authenticity?.hfStatus : hfStatus) ?? null,
+          ai_validation_confidence: (isPhoto ? authenticity?.hfConfidence : hfConfidence) ?? null,
+          ai_validation_model: (isPhoto ? authenticity?.hfModel : videoHfModel) ?? null,
+          requires_admin_review: requiresReview,
+          review_reason: (isPhoto ? analyses.find(({ requiresReview }) => requiresReview)?.reviewReason : reviewReason) ?? null,
+          disclaimer_accepted: disclaimerAccepted,
+          capture_metadata: {
+            submission_id: crypto.randomUUID(),
+            angle_degrees: phoneAngle !== null ? Math.round(phoneAngle) : null,
+            angle_valid: angleValid,
+            estimated_distance_text: (isPhoto ? primary?.predictionResult : predictionResult)?.distance?.text ?? null,
+            distance_method: "bbox_area_estimation",
+          },
+        };
 
-    setSubmitSuccess(true);
-
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      enqueueOfflineReport(reportPayload, mediaFileToUpload)
-        .then(() => {
-          pushOfflineToast({
-            type: "info",
-            message: "You're offline — report saved and will submit automatically once you're back online.",
-          });
-        })
-        .catch((err) => {
-          pushOfflineToast({ type: "error", message: err.message || "Could not save report for offline submission." });
-        })
-        .finally(() => { submittingRef.current = false; });
-      setTimeout(() => onClose(), 600);
-      return;
-    }
-
-    performBackgroundSubmit(reportPayload, mediaFileToUpload).finally(() => {
+        const files = (isPhoto ? qualifyingPhotos.map(({ file }) => file) : [file])
+          .map((file) => ({ file, uploadId: crypto.randomUUID() }));
+        await submitEvidence(reportPayload, files);
+      }
+      setPendingUploads(null);
+      setSubmitSuccess(true);
+      setTimeout(onClose, 600);
+    } catch (err) {
+      setFormError(err.message || "Submission failed.");
+      if (String(err.message).includes("out_of_bounds")) {
+        setFormError("This location is outside the supported service area.");
+      }
+    } finally {
+      setIsSubmitting(false);
       submittingRef.current = false;
-    });
-    setTimeout(() => onClose(), 600);
-  }, [
-    imageType, coords, barangay, city, streetName, additionalInfo,
-    damageType, severity, aiConfidence, hfConfidence, hfStatus, hfModel,
-    requiresReview, reviewReason, isHybrid, secondaryDamage, detectionNote,
-    file, onClose, phoneAngle, angleValid, predictionResult,
-    disclaimerAccepted, reporterName, userId, performBackgroundSubmit, pushOfflineToast,
-    imageAnnotatedSnapshot,
-  ]);
+    }
+  };
+
   // ── Derived values ─────────────────────────────────────────────────────────
   // Blocks submission when analysis finished and found no damage (includes
   // the new "no_road_pavement" scene-gate rejection, since that also leaves
-  const noDamageBlocked = analysisComplete && !manualReviewOverride && damageType === null;
-  const canSubmit       = !isSubmitting && !isAnalyzing && !noDamageBlocked;
+  const noDamageBlocked = !isPhoto && analysisComplete && !manualReviewOverride && damageType === null;
+  const canSubmit = !isSubmitting && !isAnalyzing && !noDamageBlocked && !photos.some(({ pending }) => pending) && (!isPhoto || qualifyingPhotos.length > 0);
   const stageMessage   = {
     idle: "Preparing analysis…",
     authenticity: "Checking authenticity…",
@@ -1703,24 +1517,16 @@ setCameraActive(true);
     ? liveDetection.boxes
     : [];
 
-  const maskDetections = useMemo(() => allDetections, [allDetections]);
-
-const effectiveSize = useMemo(() => {
-  if (previewSize.width > 0 && previewSize.height > 0) return previewSize;
-  if (naturalSize.width > 0 && naturalSize.height > 0) return naturalSize;
-  return null;
-}, [previewSize, naturalSize]);
-
-const showMask = analysisComplete &&
-  maskDetections.length > 0 &&
-  effectiveSize !== null &&
-  !(file && isVideoFile(file));
-
-  const switchTab = useCallback((id) => {
-    stopCamera();
+  const switchTab = (id) => {
+    if (id === activeTab) return;
+    photoUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    photoUrls.current.clear();
+    setPhotos([]);
+    setSelectedPhotoId(null);
+    retakePhotoId.current = null;
     clearMedia();
     setActiveTab(id);
-  }, [clearMedia, stopCamera]);
+  };
 
   if (showGuide) {
     return <PhotoCaptureGuide onContinue={() => setShowGuide(false)} onClose={onClose} />;
@@ -1729,6 +1535,7 @@ const showMask = analysisComplete &&
   // ── RENDER ─────────────────────────────────────────────────────────────────
   return ReactDOM.createPortal(
     <div className="snap-overlay">
+      {viewerOpen && selectedPhoto && <EvidencePhotoViewer photo={selectedPhoto} onClose={() => setViewerOpen(false)} />}
       <div className="snap-modal">
 
         <button className="snap-close-icon"
@@ -1775,13 +1582,13 @@ const showMask = analysisComplete &&
           {/* Tabs */}
           <div className="snap-tabs" role="tablist">
             {[
-              { id: "photo", label: "Photo", Icon: FaCamera },
-              { id: "video", label: "Video", Icon: FaVideo  },
-            ].map(({ id, label, Icon }) => (
+              { id: "photo", label: "Photo", icon: <FaCamera className="tab-icon" aria-hidden="true" /> },
+              { id: "video", label: "Video", icon: <FaVideo className="tab-icon" aria-hidden="true" /> },
+            ].map(({ id, label, icon }) => (
               <button key={id} role="tab" aria-selected={activeTab === id}
                 className={`snap-tab ${activeTab === id ? "active" : ""}`}
                 onClick={() => switchTab(id)} disabled={isSubmitting}>
-                <Icon className="tab-icon" aria-hidden="true" /> {label}
+                {icon} {label}
               </button>
             ))}
           </div>
@@ -1809,7 +1616,7 @@ const showMask = analysisComplete &&
               recProgress={recProgress}
               capturing={capturing}
               onCapturePhoto={capturePhoto}
-              onStopCamera={stopCamera}
+              onStopCamera={() => { retakePhotoId.current = null; stopCamera(); }}
               onStartRecording={startRecording}
               onStopRecordingEarly={stopRecordingEarly}
               recordingTime={recordingTime}
@@ -1823,32 +1630,23 @@ const showMask = analysisComplete &&
             <div
               className={`snap-upload-box ${isAnalyzing ? "analyzing" : ""}`}
               onClick={() => !preview && !isSubmitting && !isAnalyzing && fileRef.current.click()}
-              role="button" aria-label="Upload evidence file"
-              tabIndex={preview ? -1 : 0}
-              onKeyDown={(e) => e.key === "Enter" && !preview && fileRef.current.click()}
+              role={preview ? undefined : "button"} aria-label={preview ? undefined : "Upload evidence file"}
+              tabIndex={preview ? undefined : 0}
+              onKeyDown={(e) => {
+                if (!preview && !isSubmitting && !isAnalyzing && ["Enter", " "].includes(e.key)) {
+                  e.preventDefault();
+                  fileRef.current.click();
+                }
+              }}
             >
               {preview ? (
                 <>
                   <div className="preview-container">
-                    {file && isVideoFile(file) ? (
-                      <video ref={previewMediaRef} src={preview}
-                        className="preview-img" muted autoPlay loop playsInline controls
-                        onLoadedMetadata={(e) => setPreviewSize({
-                          width: e.target.offsetWidth, height: e.target.offsetHeight,
-                        })} />
+                    {isPhoto ? (
+                      <EvidencePhotoPreview key={selectedPhotoId} photo={selectedPhoto}
+                        onExpand={() => setViewerOpen(true)} />
                     ) : (
-<img
-  ref={previewMediaRef}
-  src={preview}
-  alt="Uploaded evidence"
-  className="preview-img"
-  onLoad={(e) => {
-    setPreviewSize({
-      width: e.target.offsetWidth,
-      height: e.target.offsetHeight,
-    });
-  }}
-/>
+                      <video src={preview} className="preview-img" muted autoPlay loop playsInline controls />
                     )}
 
                     {isAnalyzing && (
@@ -1858,24 +1656,11 @@ const showMask = analysisComplete &&
                       </>
                     )}
 
-                    {showMask && (
-                      <SegmentationMask
-                        predictions={maskDetections}
-                        imageSize={effectiveSize}
-                        naturalSize={naturalSize.width > 0 ? naturalSize : effectiveSize}
-                        showBoundingBox={true}
-                        showLabels={true}
-                        smoothPasses={1}
-                      />
-                    )}
-
-                    {analysisComplete && maskDetections.length > 0 && (
+                    {isPhoto && analysisComplete && (
                       <>
-                        {maskDetections.length > 1 && (
-                          <div className="preview-det-count" aria-hidden="true">
-                            {maskDetections.length} detections
-                          </div>
-                        )}
+                        <div className="preview-det-count" role="status">
+                          {maskDetections.length} {maskDetections.length === 1 ? "detection" : "detections"}
+                        </div>
                         <div className="preview-result-badges">
                           {maskDetections.map((det, i) => {
                             const sev = (det.severity ?? "non_critical").toLowerCase();
@@ -1919,7 +1704,7 @@ const showMask = analysisComplete &&
                       <button className="cr-retake-btn" onClick={handleRetake} aria-label="Retake photo or video">
                         <FaRedo aria-hidden="true" />
                       </button>
-                      <button className="cr-trash-btn" onClick={clearMedia} aria-label="Remove file">
+                      <button className="cr-trash-btn" onClick={isPhoto ? removeSelectedPhoto : clearMedia} aria-label={isPhoto ? "Remove selected photo" : "Remove file"}>
                         <FaRegTrashAlt aria-hidden="true" />
                       </button>
                     </div>
@@ -1934,7 +1719,7 @@ const showMask = analysisComplete &&
                   <p>
                     {activeTab === "video"
                       ? "MP4, MOV, or AVI · up to 10s recommended"
-                      : "Tap to select a file"}
+                      : "Tap to select photos"}
                   </p>
                 </div>
               )}
@@ -1942,11 +1727,38 @@ const showMask = analysisComplete &&
           )}
 
           {/* Open camera buttons */}
-          {!showCamera && !preview && activeTab === "photo" && (
-            <button className="btn-use-camera" onClick={openCamera}
-              disabled={isSubmitting || isAnalyzing}>
-              <FaCamera aria-hidden="true" /> Use Camera
-            </button>
+          {!showCamera && isPhoto && photos.length > 1 && (
+            <div className="evidence-carousel" role="group" aria-label="Evidence photos">
+              <div className="evidence-carousel-nav">
+                <button type="button" aria-label="Previous photo" disabled={photoIndex <= 0}
+                  onClick={() => setSelectedPhotoId(photos[photoIndex - 1].id)}>‹</button>
+                <span role="status">Photo {photoIndex + 1} of {photos.length}</span>
+                <button type="button" aria-label="Next photo" disabled={photoIndex >= photos.length - 1}
+                  onClick={() => setSelectedPhotoId(photos[photoIndex + 1].id)}>›</button>
+              </div>
+              <div className="evidence-thumbnails">
+                {photos.map((photo, index) => (
+                  <button type="button" key={photo.id} aria-pressed={photo.id === selectedPhotoId}
+                    aria-label={`Show photo ${index + 1}: ${photo.file.name}`}
+                    onClick={() => setSelectedPhotoId(photo.id)}>
+                    <img src={photo.preview} alt="" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!showCamera && isPhoto && (
+            <div className="evidence-add-actions">
+              <button type="button" className="btn-use-camera" onClick={openAdditionalPhoto}
+                disabled={isSubmitting}>
+                <FaCamera aria-hidden="true" /> {photos.length ? "Take another photo" : "Use Camera"}
+              </button>
+              {!!photos.length && (
+                <button type="button" className="btn-use-camera" disabled={isSubmitting}
+                  onClick={() => fileRef.current.click()}>Add photos</button>
+              )}
+            </div>
           )}
           {!showCamera && !preview && activeTab === "video" && (
             <button className="btn-use-camera" onClick={openCamera}
@@ -1955,7 +1767,7 @@ const showMask = analysisComplete &&
             </button>
           )}
 
-          <input ref={fileRef} type="file" hidden
+          <input ref={fileRef} type="file" hidden multiple={isPhoto}
             accept={
               activeTab === "photo"
                 ? "image/jpeg,image/jpg,image/png,image/webp"
@@ -1995,7 +1807,8 @@ const showMask = analysisComplete &&
                 rawScores={hfRawScores || {}}
               />
             )}
-            {analyzeError && !isAnalyzing && (
+            {noPhotoDamage && <p className="flagged-note" role="status">No damage detected · Won’t be included</p>}
+            {analyzeError && !isAnalyzing && !noPhotoDamage && (
               <div className="analyze-error-block">
                 <p className={
                   damageType === null && analysisComplete && imageType !== "AI-GENERATED"
@@ -2036,15 +1849,7 @@ const showMask = analysisComplete &&
                       <button
                         className="btn-manual-review"
                         type="button"
-                        onClick={() => {
-                          setManualReviewOverride(true);
-                          setRequiresReview(true);
-                          setReviewReason(
-                            reviewReason ||
-                              "AI analysis unavailable after repeated retries — submitted for manual review"
-                          );
-                          setFormError("");
-                        }}
+                        onClick={requestManualReview}
                       >
                         Submit for Manual Review Instead
                       </button>
@@ -2057,12 +1862,6 @@ const showMask = analysisComplete &&
                   </div>
                 ) : null}
               </div>
-            )}
-            {attemptWarning && !isAnalyzing && (
-              <p className="retry-exhausted-msg" role="alert">
-                <FaExclamationCircle aria-hidden="true" style={{ marginRight: 4 }} />
-                {attemptWarning}
-              </p>
             )}
             {aiConfidence !== null && !isAnalyzing && (
               <div className="confidence-bar-wrapper"
@@ -2083,6 +1882,11 @@ const showMask = analysisComplete &&
             <DetectionFilmstrip snapshots={detectionSnapshots} />
           )}
 
+          {isPhoto && photos.length > 0 && (
+            <p className="evidence-submit-count" role="status">
+              {qualifyingPhotos.length} of {photos.length} {photos.length === 1 ? "photo" : "photos"} will be submitted
+            </p>
+          )}
           <LiabilityDisclaimer accepted={disclaimerAccepted} onToggle={setDisclaimerAccepted} />
           {formError && (
             <div className="error-message-left" role="alert">
@@ -2275,8 +2079,8 @@ const showMask = analysisComplete &&
               disabled={isSubmitting} type="button">
               Discard
             </button>
-            <button className="btn-submit" onClick={validateForm}
-              disabled={!canSubmit || submitSuccess} aria-busy={isSubmitting}
+            <button className="btn-submit" onClick={pendingUploads ? handleSubmitConfirm : validateForm}
+              disabled={(pendingUploads ? isSubmitting : !canSubmit) || submitSuccess} aria-busy={isSubmitting}
               title={noDamageBlocked ? "Submission disabled — no road damage detected" : undefined}>
               {isSubmitting ? (
                 <><FaSpinner className="spin-icon" aria-hidden="true" /> Submitting…</>

@@ -271,7 +271,7 @@ body.dark {
 .upload-placeholder p  { margin: 0; font-size: 11px; color: var(--cr-text-muted); }
 
 /* ── Preview ───────────────────────────────────────────────── */
-.preview-container {
+.snap-upload-box > .preview-container {
   position: absolute;
   inset: 0;
   border-radius: calc(var(--cr-radius-upload) - 2px);
@@ -287,6 +287,108 @@ body.dark {
   z-index: 1;
   border-radius: calc(var(--cr-radius-upload) - 2px);  /* ← match container rounding */
 }
+
+.evidence-photo-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.evidence-photo-preview:focus-visible { outline: 2px solid var(--cr-primary); outline-offset: -3px; }
+.evidence-photo-layer { position: relative; display: block; }
+.evidence-photo-layer .preview-img { object-fit: fill; border-radius: 0; }
+:is(.evidence-photo-preview, .evidence-photo-cover) .evidence-photo-layer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  min-width: 100%;
+  min-height: 100%;
+  transform: translate(-50%, -50%);
+}
+.evidence-photo-expand {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 11;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .65);
+  color: white;
+  pointer-events: none;
+}
+.evidence-carousel { min-width: 0; margin-bottom: 8px; }
+.evidence-carousel-nav, .evidence-add-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.evidence-carousel-nav { color: var(--cr-text-primary, #202820); font-size: .8rem; font-weight: 700; }
+.evidence-carousel button, .evidence-photo-viewer button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--cr-upload-border, #c4cdc3);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.evidence-carousel button:disabled, .evidence-viewer-toolbar button:disabled { opacity: .45; cursor: default; }
+.evidence-carousel-nav button { font-size: 1.4rem; }
+.evidence-thumbnails { display: flex; gap: 8px; overflow-x: auto; padding: 6px 3px; }
+.evidence-thumbnails button { flex: 0 0 58px; height: 48px; padding: 2px; }
+.evidence-thumbnails button[aria-pressed="true"] { outline: 2px solid var(--cr-primary); }
+.evidence-thumbnails img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
+.evidence-add-actions .btn-use-camera { flex: 1; }
+
+.evidence-photo-viewer {
+  --viewer-margin: clamp(12px, 3vw, 32px);
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  box-sizing: border-box;
+  max-width: none;
+  max-height: none;
+  width: min(960px, calc(100vw - 2 * var(--viewer-margin)));
+  height: min(700px, calc(100dvh - 2 * var(--viewer-margin)));
+  padding: 0;
+  border: 1px solid #505650;
+  border-radius: 14px;
+  background: #151815;
+  color: white;
+  overflow: hidden;
+}
+.evidence-photo-viewer[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.evidence-photo-viewer::backdrop { background: rgba(0, 0, 0, .85); }
+.evidence-viewer-toolbar { position: relative; z-index: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 8px; }
+.evidence-viewer-actions { display: flex; align-items: center; gap: 8px; }
+.evidence-viewer-counter { align-self: center; margin-inline-end: auto; }
+.evidence-viewer-media {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+  padding: 0 8px 8px;
+}
+.evidence-viewer-media[data-navigation="true"] { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+.evidence-viewer-media > button { align-self: center; display: grid; place-items: center; }
+.evidence-photo-viewer button:focus-visible, .evidence-photo-viewport:focus-visible {
+  outline: 2px solid var(--primary, #84cc91);
+  outline-offset: -3px;
+}
+.evidence-photo-viewport { min-width: 0; min-height: 0; overflow: hidden; overscroll-behavior: contain; isolation: isolate; }
+.evidence-photo-viewport[data-zoomed="true"] { overflow: auto; cursor: grab; }
+.evidence-photo-viewport[data-zoomed="true"]:active { cursor: grabbing; }
+.evidence-photo-stage { display: grid; place-items: center; width: max-content; height: max-content; min-width: 100%; min-height: 100%; }
+.evidence-photo-stage .evidence-photo-layer { overflow: hidden; }
+.evidence-photo-stage .evidence-photo-layer > img { width: 100%; height: 100%; max-width: none; max-height: none; }
 /* ── Segmentation Mask SVG ─────────────────────────────────── */
 .seg-mask-svg {
   position: absolute;

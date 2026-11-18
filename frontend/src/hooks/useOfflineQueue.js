@@ -3,7 +3,7 @@
  *
  * Basic offline support for report submission.
  *  - Detects navigator.onLine plus 'online' / 'offline' events.
- *  - Lets callers persist a pending report (payload + media file, as base64)
+ *  - Lets callers persist a pending report (payload + media files, as base64)
  *    to localStorage instead of failing when there is no connection.
  *  - Automatically retries queued submissions, in order, once the
  *    connection is restored, using the existing createReport/uploadMedia
@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createReport, uploadMedia } from "../api/reports";
+import { reconcileReport, reconcileMedia } from "../api/reports";
 
 const QUEUE_KEY = "snap2fix_offline_report_queue";
 
@@ -32,12 +32,7 @@ function readQueue() {
 }
 
 function writeQueue(queue) {
-  try {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-  } catch (err) {
-    // Storage full/unavailable — nothing more we can do here safely.
-    console.warn("Could not persist offline report queue:", err);
-  }
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
 }
 
 function makeQueueId() {
@@ -67,28 +62,22 @@ function base64ToFile(dataUrl, name, type) {
 // ── Public queue helpers (usable outside React, e.g. from other hooks) ──────
 
 /**
- * Persist a report (and optional media file) to the offline queue so it can
+ * Persist a report (and optional media files) to the offline queue so it can
  * be retried automatically once the connection comes back.
  */
-export async function enqueueOfflineReport(payload, file = null) {
+export async function enqueueOfflineReport(payload, media = [], reportId = null) {
+  const files = Array.isArray(media) ? media : media ? [media] : [];
   const entry = {
     queueId: makeQueueId(),
     createdAt: new Date().toISOString(),
     payload,
-    file: null,
+    reportId,
+    files: await Promise.all(files.map(async (entry) => {
+      const file = entry.file ?? entry;
+      return { name: file.name, type: file.type, dataUrl: await fileToBase64(file), uploadId: entry.uploadId };
+    })),
   };
-
-  if (file) {
-    entry.file = {
-      name: file.name,
-      type: file.type,
-      dataUrl: await fileToBase64(file),
-    };
-  }
-
-  const queue = readQueue();
-  queue.push(entry);
-  writeQueue(queue);
+  writeQueue([...readQueue(), entry]);
   return entry.queueId;
 }
 
@@ -145,91 +134,45 @@ export function useOfflineQueue({ onResult } = {}) {
       while (index < queue.length) {
         const item = queue[index];
 
-        // If the report was already created on a previous attempt (partial
-        // failure — report succeeded, media upload didn't), don't re-create
-        // it. Only retry the media upload against the stored report ID.
-        if (item.reportId) {
-          if (!item.file) {
-            // No media to retry (shouldn't normally happen) — nothing left
-            // to do for this item, so drop it.
-            removeFromOfflineQueue(item.queueId);
-            onResultRef.current?.({ id: item.queueId, success: true, reportId: item.reportId });
-            queue = readQueue();
-            continue;
-          }
+        let reportId = item.reportId;
+        const files = item.files ?? (item.file ? [item.file] : []);
 
-          try {
-            const file = base64ToFile(item.file.dataUrl, item.file.name, item.file.type);
-            const uploadRes = await uploadMedia(item.reportId, file);
-            if (!uploadRes.success) {
-              throw new Error(uploadRes.error || "Media upload failed");
-            }
-
-            removeFromOfflineQueue(item.queueId);
-            onResultRef.current?.({ id: item.queueId, success: true, reportId: item.reportId });
-            queue = readQueue();
-            continue;
-          } catch (err) {
-            // Report already exists — keep the item queued (status stays
-            // "media_failed") and move on to the next item instead of
-            // blocking the whole queue on a media-only failure.
-            updateQueueItem(item.queueId, { status: "media_failed" });
-            onResultRef.current?.({
-              id: item.queueId,
-              success: false,
-              partial: true,
-              reportId: item.reportId,
-              error: err.message || "Media upload failed",
-            });
-            index += 1;
-            continue;
-          }
+        if ((!reportId && !item.payload?.capture_metadata?.submission_id) || files.some((file) => !file.uploadId)) {
+          onResultRef.current?.({
+            id: item.queueId, success: false, reportId,
+            error: "This older queued submission has no receipt. Check My Submissions before trying again.",
+          });
+          index += 1;
+          continue;
         }
 
         try {
-          const reportRes = await createReport(item.payload);
-          if (!reportRes.success) {
-            throw new Error(reportRes.error || "Failed to submit queued report");
+          if (!reportId) {
+            const result = await reconcileReport(item.payload);
+            if (!result.success) throw new Error(result.error || "Failed to submit queued report");
+            reportId = result.data?.id ?? result.data?.report_id;
+            if (!reportId) throw new Error("Server did not return a report ID.");
+            updateQueueItem(item.queueId, { reportId });
           }
 
-          const reportId = reportRes.data?.id ?? reportRes.data?.report_id;
-
-          if (item.file && reportId) {
-            const file = base64ToFile(item.file.dataUrl, item.file.name, item.file.type);
-            const uploadRes = await uploadMedia(reportId, file);
-            if (!uploadRes.success) {
-              // Report was created successfully — keep the item queued with
-              // the report ID so the next retry only re-attempts the media
-              // upload, instead of re-creating the report.
-              updateQueueItem(item.queueId, { reportId, status: "media_failed" });
-              onResultRef.current?.({
-                id: item.queueId,
-                success: false,
-                partial: true,
-                reportId,
-                error: uploadRes.error || "Media upload failed",
-              });
-              index += 1;
-              queue = readQueue();
-              continue;
-            }
+          for (const [fileIndex, saved] of files.entries()) {
+            const file = base64ToFile(saved.dataUrl, saved.name, saved.type);
+            const result = await reconcileMedia(reportId, file, saved.uploadId);
+            if (!result.success) throw new Error(result.error || "Media upload failed");
+            updateQueueItem(item.queueId, { files: files.slice(fileIndex + 1), file: null });
           }
 
           removeFromOfflineQueue(item.queueId);
           onResultRef.current?.({ id: item.queueId, success: true, reportId });
+          queue = readQueue();
         } catch (err) {
-          // Report itself couldn't be created (likely still offline / network
-          // hiccup) — stop processing so remaining queued reports keep their
-          // order for the next retry.
           onResultRef.current?.({
-            id: item.queueId,
-            success: false,
-            error: err.message || "Failed to submit queued report. It will retry automatically.",
+            id: item.queueId, success: false, partial: !!reportId, reportId,
+            error: err.message || "Failed to submit queued report.",
           });
-          break;
+          if (!reportId) break;
+          index += 1;
         }
-
-        queue = readQueue();
       }
     } finally {
       processingRef.current = false;

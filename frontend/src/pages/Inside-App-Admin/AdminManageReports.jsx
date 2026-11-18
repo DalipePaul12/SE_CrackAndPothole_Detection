@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -190,7 +191,7 @@ const severity   = (r) => r.ai_severity    ?? r.severity    ?? "—";
 const barangay   = (r) => r.barangay ?? r.location_address?.split(",")[0] ?? "—";
 const street     = (r) => r.exact_address || r.street_name || r.location_address || "";
 const mediaFull = (r, idx = 0) => {
-  const att = r.media_attachments?.[idx];
+  const att = submissionMedia(r)[idx];
   if (!att?.file_url) return null;
   return { url: resolveMediaUrl(att.file_url), type: att.media_type };
 };
@@ -1091,23 +1092,7 @@ function AdminManageReports() {
                     </td>
 
                     <td className="col-photo" onClick={e => e.stopPropagation()}>
-                      {media?.url && media.type === "video" ? (
-                        <div
-                          className="photo-thumb photo-thumb--video-wrap"
-                          onClick={e => { e.stopPropagation(); setViewReport(r); }}
-                        >
-                          <video
-                            src={media.url}
-                            className="photo-thumb"
-                            muted
-                            playsInline
-                            preload="metadata"
-                          />
-                          <span className="photo-thumb-play-badge" aria-hidden="true">
-                            <IcoPlay size={10} />
-                          </span>
-                        </div>
-                      ) : media?.url ? (
+                      {hasSubmissionEvidence(r) ? <ReportEvidence report={r} compact /> : media?.url ? (
                         <img
                           src={media.url}
                           alt=""
@@ -1469,7 +1454,7 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
   const sev    = severity(r).toLowerCase();
   const pri    = getPriority(r);
   const conf   = r.ai_confidence ?? r.confidence ?? null;
-  const mCount = r.media_attachments?.length ?? 0;
+  const mCount = submissionMedia(r).length;
 
   const isTerminal = [REPORT_STATUS.RESOLVED, REPORT_STATUS.REJECTED, REPORT_STATUS.CANCELLED].includes(st);
 
@@ -1631,11 +1616,11 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
           {/* MEDIA */}
           {activeTab === "media" && (
             <div className="vmr-media-tab">
-              {mCount > 0 ? (
+              {hasSubmissionEvidence(r) ? <ReportEvidence report={r} /> : mCount > 0 ? (
                 <>
                   <div style={{ position: "relative", width: "100%", maxWidth: "100%", display: "flex", justifyContent: "center" }}>
                     {(() => {
-                      const att = r.media_attachments[mediaIndex] ?? r.media_attachments[0];
+                      const att = submissionMedia(r)[mediaIndex] ?? submissionMedia(r)[0];
                       const url = resolveMediaUrl(att.file_url);
                       return att.media_type === "video"
                         ? <video key={mediaIndex} src={url} controls className="vmr-media-main" />
@@ -1659,7 +1644,7 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
                     <>
                       <p style={{ fontSize: "0.78rem", color: "var(--subtext)", margin: "4px 0 0" }}>{mediaIndex + 1} / {mCount}</p>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                        {r.media_attachments.map((att, i) => (
+                        {submissionMedia(r).map((att, i) => (
                           <button key={i} type="button" onClick={() => setMediaIndex(i)}
                             style={{ width: 52, height: 52, borderRadius: 8, overflow: "hidden", padding: 0, cursor: "pointer", background: "var(--bg-secondary)", border: i === mediaIndex ? "2px solid var(--primary)" : "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}
                           >

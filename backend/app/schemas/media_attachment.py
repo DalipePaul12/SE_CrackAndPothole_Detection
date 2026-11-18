@@ -10,6 +10,8 @@ class MediaAttachmentResponse(AppBaseModel):
     file_url: str
     file_name: Optional[str] = None
     file_size_bytes: Optional[int] = None
+    attachment_type: Optional[str] = None
+    detections: list[dict] = []
     media_type: MediaType
     is_ai_generated: Optional[bool] = False
     ai_generated_confidence: Optional[float] = None

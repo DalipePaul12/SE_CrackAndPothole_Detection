@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionPhotos } from "../../components/ReportEvidence";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -749,7 +750,7 @@ export default function ContractorProjectDetail() {
               <Camera size={15} />
               {isDone ? "Submission Photos" : "Report Photos"}
             </div>
-            {submissionPhotos.length === 0 ? (
+            {hasSubmissionPhotos(report) ? <ReportEvidence report={report} /> : submissionPhotos.length === 0 ? (
               <div className="cpd-no-photo">
                 <Camera size={32} />
                 <span>No photos attached</span>

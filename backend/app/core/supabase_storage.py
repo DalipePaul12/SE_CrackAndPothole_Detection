@@ -15,7 +15,7 @@ def get_supabase_client() -> Client:
     return _client
 
 
-def upload_report_file(file_bytes: bytes, storage_path: str, content_type: str) -> str:
+def upload_report_file(file_bytes: bytes, storage_path: str, content_type: str, *, upsert: bool = False) -> str:
     """
     Uploads bytes to the configured Supabase bucket at storage_path
     (e.g. "42/ab12cd34.jpg") and returns the public URL.
@@ -24,6 +24,6 @@ def upload_report_file(file_bytes: bytes, storage_path: str, content_type: str) 
     client.storage.from_(settings.SUPABASE_BUCKET).upload(
         storage_path,
         file_bytes,
-        {"content-type": content_type},
+        {"content-type": content_type, "upsert": "true" if upsert else "false"},
     )
     return client.storage.from_(settings.SUPABASE_BUCKET).get_public_url(storage_path)

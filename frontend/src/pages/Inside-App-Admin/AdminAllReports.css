@@ -2302,3 +2302,7 @@
 }
 .vmr-lightbox-close:hover { background: rgba(255, 255, 255, 0.25); }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.td-thumb > .report-evidence--compact { margin-inline: auto; --evidence-cover-width: 42px; --evidence-cover-height: 42px; --evidence-cover-radius: 50%; --evidence-cover-border: 1.5px solid var(--border); }
+.aar-table-card, .aar-table-scroll { min-width: 0; max-width: 100%; }
+.vmr-media-tab { min-width: 0; --evidence-media-height: 380px; }

@@ -1,3 +1,5 @@
+import ReportEvidence, { hasSubmissionPhotos, submissionMedia } from "../../components/ReportEvidence";
+import { resolveMediaUrl } from "../../utils/mediaUrl";
 
 import React, { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -272,12 +274,9 @@ function ReportDetailModal({ report, loading, onClose }) {
               </div>
             </div>
 
-            {report.media_attachments?.[0]?.file_url && (
+            {hasSubmissionPhotos(report) ? <ReportEvidence report={report} /> : submissionMedia(report)[0]?.file_url && (
               <div className="notif-modal-photo">
-                <img
-                  src={`${import.meta.env.VITE_API_URL || ""}${report.media_attachments[0].file_url}`}
-                  alt="Report"
-                />
+                <video src={resolveMediaUrl(submissionMedia(report)[0].file_url)} controls />
               </div>
             )}
           </>

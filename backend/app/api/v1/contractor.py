@@ -52,6 +52,7 @@ def _serialize_project(project: Project) -> dict:
                 "file_name": att.file_name,
                 "media_type": att.media_type.value if att.media_type else None,
                 "attachment_type": att.attachment_type,
+                "detections": att.detections,
                 "created_at": att.created_at.isoformat() if att.created_at else None,
             })
 

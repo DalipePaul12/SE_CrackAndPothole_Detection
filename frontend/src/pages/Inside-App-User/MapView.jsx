@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionEvidence, hasSubmissionPhotos, submissionMedia } from "../../components/ReportEvidence";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import "./MapView.css";
 import {
@@ -21,9 +22,9 @@ import {
 
 // ─── Image / Video helper ────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || "";
-const getThumb = (r) => resolveMediaUrl(r?.media_attachments?.[0]?.file_url);
+const getThumb = (r) => resolveMediaUrl(submissionMedia(r)[0]?.file_url);
 
-const isVideo = (r) => r?.media_attachments?.[0]?.media_type === "video";
+const isVideo = (r) => submissionMedia(r)[0]?.media_type === "video";
 
 // ─── Fix Leaflet default icon URLs ────────────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -94,6 +95,8 @@ const esc = (s) =>
 
 function buildPopupHTML(r) {
   const thumb = getThumb(r);
+  const photoCount = submissionMedia(r).filter((item) => item.media_type === "image" && item.file_url).length;
+  const video = isVideo(r);
   const sevLabel = normSev(r.ai_severity) === "critical" ? "Critical"
     : normSev(r.ai_severity) === "non_critical" ? "Non_Critical" : "Unknown";
   const desc = (r.description || "").slice(0, 140) + (r.description?.length > 140 ? "…" : "");
@@ -104,11 +107,11 @@ function buildPopupHTML(r) {
         <span class="mv-popup-sev" style="background:${getSevColor(r.ai_severity)}">${esc(sevLabel)}</span>
       </div>
       ${thumb ? `
-        <div class="mv-popup-thumb" data-thumb="${esc(thumb)}" data-video="${isVideo(r)}">
-          ${isVideo(r)
-            ? `<video src="${esc(thumb)}" muted playsinline preload="metadata" style="width:100%;height:112px;object-fit:cover;display:block"></video>`
-            : `<img src="${esc(thumb)}" alt="Report evidence" />`}
-        </div>` : ""
+        <button type="button" class="mv-popup-thumb" data-thumb="${esc(thumb)}" data-video="${video}" aria-label="${video ? "Play report video" : `Open report gallery, ${photoCount || 1} ${photoCount > 1 ? "photos" : "photo"}`}">
+          ${video
+            ? `<video src="${esc(thumb)}" muted playsinline preload="metadata"></video><span class="report-evidence-play" aria-hidden="true"></span>`
+            : `<img src="${esc(thumb)}" alt="" />${photoCount > 1 ? `<span class="report-evidence-count">${photoCount}</span>` : ""}`}
+        </button>` : ""
       }
       <div class="mv-popup-body">
         <p class="mv-popup-desc">${esc(desc)}</p>
@@ -355,7 +358,13 @@ function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
       const thumbEl = el.querySelector("[data-thumb]");
       if (thumbEl) {
         thumbEl.onclick = () => {
-          onLightboxRef.current(thumbEl.dataset.thumb, thumbEl.dataset.video === "true");
+          const report = reportsRef.current.find((r) => String(r.id) === btn?.dataset.rid);
+          if (hasSubmissionPhotos(report)) {
+            map.closePopup();
+            onClickRef.current(report);
+          } else {
+            onLightboxRef.current(thumbEl.dataset.thumb, thumbEl.dataset.video === "true");
+          }
         };
       }
     };
@@ -369,10 +378,9 @@ function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
     const markers = reports.map((r) => {
       const m = L.marker(
         [parseFloat(r.latitude), parseFloat(r.longitude)],
-        { icon: getIcon(r) }
+        { icon: getIcon(r), title: `Report #${r.id}` }
       );
       m.bindPopup(buildPopupHTML(r), { maxWidth: 260, className: "mv-popup-wrap" });
-      m.on("click", () => onClickRef.current(r));
       return m;
     });
     groupRef.current.addLayers(markers);
@@ -754,7 +762,7 @@ export default function MapView() {
 
                 <div className="mv-panel-body">
                   {(() => {
-                    const attachments = selected.media_attachments || [];
+                    const attachments = submissionMedia(selected);
                     const mediaCount = attachments.length;
                     const currentAttachment = attachments[mediaIndex % Math.max(mediaCount, 1)];
                     const currentUrl = currentAttachment ? resolveMediaUrl(currentAttachment.file_url) : getThumb(selected);
@@ -770,7 +778,7 @@ export default function MapView() {
                     return (
                       <>
                         {/* ── Evidence media ── */}
-                        {currentUrl && (
+                        {hasSubmissionPhotos(selected) ? <ReportEvidence report={selected} showProof /> : currentUrl && (
                           <div className="mv-media-viewer">
                             {currentIsVideo ? (
                               <video
@@ -796,7 +804,7 @@ export default function MapView() {
                                 <span className="mv-panel-image-overlay"><Maximize2 size={20} color="#fff" /><span>Expand</span></span>
                               </button>
                             )}
-                            {mediaCount > 1 && (
+                            {mediaCount > 1 && !hasSubmissionPhotos(selected) && (
                               <>
                                 <button className="mv-media-nav mv-media-nav--prev" onClick={() => setMediaIndex((i) => (i - 1 + mediaCount) % mediaCount)} aria-label="Previous media">‹</button>
                                 <button className="mv-media-nav mv-media-nav--next" onClick={() => setMediaIndex((i) => (i + 1) % mediaCount)} aria-label="Next media">›</button>
@@ -806,7 +814,7 @@ export default function MapView() {
                           </div>
                         )}
 
-                        {mediaCount > 1 && (
+                        {mediaCount > 1 && !hasSubmissionPhotos(selected) && (
                           <div className="mv-media-thumbs" aria-label="Report media">
                             {attachments.map((attachment, index) => (
                               <button key={`${attachment.file_url}-${index}`} type="button" className={`mv-media-thumb${index === mediaIndex ? " mv-media-thumb--active" : ""}`} onClick={() => setMediaIndex(index)} aria-label={`View media ${index + 1}`}>
@@ -927,7 +935,6 @@ export default function MapView() {
               <span className="mv-strip-empty">No reports match your filters</span>
             ) : (
               filtered.map((r) => {
-                const thumb = getThumb(r);
                 return (
                   <div
                     key={r.id}
@@ -938,13 +945,7 @@ export default function MapView() {
                     aria-label={`View report #${r.id} — ${r.barangay || "unknown location"}`}
                     onKeyDown={(e) => e.key === "Enter" && openPanel(r)}
                   >
-                    {thumb ? (
-                      isVideo(r) ? (
-                        <video className="mv-strip-thumb" src={thumb} muted playsInline preload="metadata" />
-                      ) : (
-                        <img className="mv-strip-thumb" src={thumb} alt="" loading="lazy" />
-                      )
-                    ) : (
+                    {hasSubmissionEvidence(r) ? <ReportEvidence report={r} compact showProof /> : (
                       <div className="mv-strip-thumb mv-strip-thumb--empty">
                         <MapPin size={16} />
                       </div>

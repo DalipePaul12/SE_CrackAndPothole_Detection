@@ -14,6 +14,8 @@ CRITICAL FIXES:
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -28,6 +30,7 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     File,
+    Form,
     HTTPException,
     Query,
     Request,
@@ -37,7 +40,7 @@ from fastapi import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -51,6 +54,7 @@ from app.middleware.auth_middleware import (
 )
 from app.middleware.rate_limiter import limiter
 from app.models.admin_settings import AdminSettings
+from app.models.ai_detection_result import AIDetectionResult
 from app.models.audit_log import AuditLog
 from app.models.cctv import CCTV
 from app.models.comment import Comment
@@ -59,9 +63,11 @@ from app.models.enums import (
     MediaType,
     NotificationType,
     ReportStatus,
+    ReportType,
     SeverityLevel,
     UserRole,
 )
+from app.models.media_attachment import MediaAttachment, ProcessingStatus
 from app.models.report import Report
 from app.models.report_upvote import ReportUpvote
 from app.models.user import User
@@ -352,6 +358,25 @@ def _sanitize_filename(filename: str, fallback_ext: str = "") -> str:
 # Routes
 # ═════════════════════════════════════════════════════════════════════════════
 
+async def _find_submission(db: AsyncSession, owner_id: int, submission_id: uuid.UUID):
+    return await db.scalar(select(Report.id).where(
+        Report.owner_id == owner_id,
+        Report.capture_metadata["submission_id"].as_string() == str(submission_id),
+    ))
+
+
+@router.get("/submission/{submission_id}", response_model=ReportResponse)
+async def get_submission(
+    submission_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    report_id = await _find_submission(db, current_user.id, submission_id)
+    if report_id is None:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+    return ReportResponse.model_validate(await _fetch_report_or_404(db, report_id))
+
+
 @router.post("", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
 async def create_report(
@@ -360,6 +385,21 @@ async def create_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    submission_key = (data.capture_metadata or {}).get("submission_id")
+    if submission_key is not None:
+        try:
+            submission_id = uuid.UUID(str(submission_key))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid submission ID.")
+        data.capture_metadata["submission_id"] = str(submission_id)
+        # Protect the lookup and insert across every API worker.
+        await db.execute(select(func.pg_advisory_xact_lock(
+            func.hashtextextended(f"report:{current_user.id}:{submission_id}", 0)
+        )))
+        existing_id = await _find_submission(db, current_user.id, submission_id)
+        if existing_id is not None:
+            return ReportResponse.model_validate(await _fetch_report_or_404(db, existing_id))
+
     settings_result = await db.execute(select(AdminSettings).where(AdminSettings.id == 1))
     admin_settings = settings_result.scalar_one_or_none()
     if admin_settings and admin_settings.restrict_location:
@@ -815,6 +855,47 @@ async def delete_report(
 
 # ── UPLOAD MEDIA ──────────────────────────────────────────────────────────────
 
+async def _update_photo_summary(db: AsyncSession, report: Report) -> None:
+    results = (await db.execute(
+        select(
+            AIDetectionResult.detected_class,
+            cast(AIDetectionResult.severity, String).label("severity"),
+            AIDetectionResult.confidence,
+            AIDetectionResult.raw_output["task_id"].as_string().label("task_id"),
+        )
+        .join(MediaAttachment, AIDetectionResult.media_attachment_id == MediaAttachment.id)
+        .where(
+            AIDetectionResult.report_id == report.id,
+            MediaAttachment.report_id == report.id,
+            MediaAttachment.media_type == MediaType.image,
+            or_(MediaAttachment.attachment_type.is_(None), MediaAttachment.attachment_type == "submission"),
+        )
+    )).all()
+
+    predictions = [result for result in results if result.detected_class != DamageType.none]
+    if predictions:
+        best = min(predictions, key=lambda result: (-result.confidence, result.detected_class.value))
+        report.ai_damage_type = best.detected_class
+        report.ai_confidence = best.confidence
+        severities = {result.severity for result in predictions}
+        if SeverityLevel.critical in severities:
+            report.ai_severity = SeverityLevel.critical
+        elif SeverityLevel.non_critical in severities or "low" in severities:
+            report.ai_severity = SeverityLevel.non_critical
+        else:
+            report.ai_severity = None
+        return
+
+    scene_scores = [
+        result.confidence for result in results
+        if result.task_id == "inline_no_road_pavement"
+    ]
+    if scene_scores:
+        report.ai_damage_type = None
+        report.ai_severity = None
+        report.ai_confidence = max(scene_scores)
+
+
 @router.post("/{report_id}/media", status_code=status.HTTP_200_OK)
 @limiter.limit("20/minute")
 async def upload_media(
@@ -822,10 +903,13 @@ async def upload_media(
     report_id: int,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    upload_id: uuid.UUID | None = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    report = await _fetch_report_or_404(db, report_id)
+    report = await db.get(Report, report_id)
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
 
     if report.owner_id != current_user.id and current_user.role not in _STAFF_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
@@ -875,140 +959,142 @@ async def upload_media(
             detail=f"File exceeds the {size_limit_mb} MB limit.",
         )
 
-    # Sanitize filename
-    fallback_ext  = _mime_to_extension(actual_mime)
-    clean_name    = _sanitize_filename(file.filename or "", fallback_ext)
-    safe_name     = f"{uuid.uuid4().hex}_{clean_name}"
+    fallback_ext = _mime_to_extension(actual_mime)
+    clean_name = _sanitize_filename(file.filename or "", fallback_ext)
+    temp_name = f"{uuid.uuid4().hex}_{clean_name}"
+    object_prefix = f"/{report_id}/{upload_id.hex}_" if upload_id else None
+    object_name = f"{upload_id.hex}_{hashlib.sha256(contents).hexdigest()}{fallback_ext}" if upload_id else temp_name
 
-    # ── UPLOAD TO SUPABASE STORAGE (was: local disk write) ──────────────
-    from app.core.supabase_storage import upload_report_file
+    async def saved_attachment():
+        return await db.scalar(select(MediaAttachment).where(
+            MediaAttachment.report_id == report_id,
+            MediaAttachment.file_url.contains(object_prefix, autoescape=True),
+        ))
 
-    storage_subpath = f"{report_id}/{safe_name}"
-    try:
-        file_url = upload_report_file(
-            file_bytes=contents,
-            storage_path=storage_subpath,
-            content_type=actual_mime,
-        )
-    except Exception as e:
-        logger.error(f"Supabase upload failed for report {report_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to upload file to storage: {e}",
-        )
+    def saved_response(attachment):
+        if not attachment.file_url.endswith("/" + object_name):
+            raise HTTPException(status_code=409, detail="This evidence ID already belongs to a different file.")
+        return {"success": True, "data": {
+            "media_id": attachment.id, "file_url": attachment.file_url, "task_id": "inline",
+        }}
 
-    # ── Local temp copy — ONLY so run_yolo() below has a real file path.
-    #    Deleted right after ML inference finishes, in the finally block.
+    if upload_id and (existing := await saved_attachment()):
+        return saved_response(existing)
+
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / safe_name
+    file_path = upload_dir / temp_name
+    async with aiofiles.open(file_path, "wb") as temp:
+        await temp.write(contents)
 
-    async with aiofiles.open(file_path, "wb") as f:
-        await f.write(contents)
+    from app.services.ml_service import _check_road_pavement, run_yolo
 
-    # Persist DB record — file_url now points to Supabase, not local disk
-    from app.models.media_attachment import MediaAttachment
-
-    attachment = MediaAttachment(
-        report_id=report_id,
-        file_url=file_url,
-        file_name=clean_name,
-        file_size_bytes=len(contents),
-        media_type=media_type,
-        is_processed=False,
-        is_ai_generated=report.is_flagged_fake,
-        ai_generated_confidence=None,
-    )
-    db.add(attachment)
-    await db.commit()
-    await db.refresh(attachment)
-
-        # ── RUN ML CLASSIFICATION INLINE ─────────────────────────────────
-    import asyncio
-    from app.services.ml_service import run_yolo, _check_road_pavement
-    from app.models.enums import DamageType, SeverityLevel
-    from app.models.ai_detection_result import AIDetectionResult
-
+    scene = None
+    prediction = None
     try:
-        # Scene gate FIRST — this is the direct-upload path that previously
-        # bypassed process_media_pipeline entirely and went straight to
-        # run_yolo(), so a non-road image here got silently saved as a
-        # clean report with no damage type instead of being rejected.
         scene = await _check_road_pavement(contents)
         if not scene["is_road"]:
-            logger.info(
-                f"Report {report_id}: no road/pavement detected (score={scene['confidence']}) — skipping YOLO"
-            )
-            report.ai_damage_type = None
-            report.ai_severity = None
-            report.ai_confidence = scene["confidence"]
-            attachment.is_processed = True
-            await db.commit()
             task_id = "inline_no_road_pavement"
-            prediction = None
         else:
             prediction = await asyncio.to_thread(run_yolo, str(file_path))
-        logger.info(f"YOLO raw prediction for report {report_id}: {prediction}")
-
-        if prediction:
-            raw_label = prediction.get("label", "uncertain")
-            try:
-                detected_class = DamageType(raw_label)
-            except ValueError:
-                detected_class = DamageType.uncertain
-
-            raw_severity = prediction.get("severity")
-            severity = None
-            if raw_severity:
-                normalized_sev = str(raw_severity).lower().strip().replace("-", "_").replace(" ", "_")
-                try:
-                    severity = SeverityLevel(normalized_sev)
-                except ValueError:
-                    logger.warning(
-                        f"ML returned unknown severity '{raw_severity}' "
-                        f"(normalized: '{normalized_sev}') for report {report_id}. "
-                        f"Valid values: {[s.value for s in SeverityLevel]}"
-                    )
-
-            detection = AIDetectionResult(
-                report_id=report_id,
-                media_attachment_id=attachment.id,
-                detected_class=detected_class,
-                severity=severity,
-                confidence=prediction.get("confidence", 0),
-                bounding_boxes=prediction.get("boxes"),
-                model_version="yolo",
-                inference_time_ms=prediction.get("inference_time_ms", 0),
-            )
-            db.add(detection)
-
-            report.ai_damage_type = detected_class
-            report.ai_severity = severity
-            report.ai_confidence = prediction.get("confidence")
-            attachment.is_processed = True
-
-            await db.commit()
-            logger.info(
-                f"ML inline complete: report={report_id} | "
-                f"damage={detected_class.value} | "
-                f"severity={severity.value if severity else 'none'}"
-            )
-            task_id = "inline"
-        else:
-            logger.warning(f"No ML prediction for report {report_id}")
-            attachment.is_processed = True
-            await db.commit()
-            task_id = "inline_no_detection"
+            task_id = "inline" if prediction else "inline_no_detection"
     except Exception as ml_err:
         logger.error(f"ML inline failed for report {report_id}: {ml_err}")
-        attachment.is_processed = True
-        await db.commit()
         task_id = "inline_failed"
     finally:
         # Local temp copy served its purpose (ML inference) — clean it up.
         # File already lives in Supabase Storage as the source of truth.
         if file_path.exists():
             os.remove(file_path)
+
+    is_photo = media_type == MediaType.image
+    aggregate_photos = is_photo and report.report_type == ReportType.image
+    if is_photo and upload_id:
+        if task_id == "inline_failed":
+            raise HTTPException(status_code=503, detail="Photo analysis failed. Retry this evidence upload.")
+        if not prediction or prediction.get("label") not in {"crack", "pothole"}:
+            raise HTTPException(status_code=422, detail="No crack or pothole detected in this photo.")
+
+    if aggregate_photos or upload_id:
+        # Lock only after inference. Recheck after waiting for any competing upload to commit.
+        report = await db.get(Report, report_id, populate_existing=True, with_for_update=True)
+        if report is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+        if upload_id and (existing := await saved_attachment()):
+            return saved_response(existing)
+
+    from app.core.supabase_storage import upload_report_file
+
+    try:
+        file_url = await asyncio.to_thread(
+            upload_report_file, file_bytes=contents, storage_path=f"{report_id}/{object_name}",
+            content_type=actual_mime, **({"upsert": True} if upload_id else {}),
+        )
+    except Exception:
+        logger.exception("Storage upload failed for report %d", report_id)
+        raise HTTPException(status_code=502, detail="Could not save the evidence file.")
+
+    attachment = MediaAttachment(
+        report_id=report_id, file_url=file_url, file_name=clean_name, file_size_bytes=len(contents),
+        media_type=media_type, attachment_type="submission" if upload_id else None,
+        is_processed=False, is_ai_generated=report.is_flagged_fake,
+    )
+    db.add(attachment)
+    await db.flush()
+
+    if prediction:
+        try:
+            detected_class = DamageType(prediction.get("label"))
+        except ValueError:
+            detected_class = DamageType.uncertain
+
+        raw_severity = prediction.get("severity")
+        severity = None
+        if raw_severity:
+            normalized = str(raw_severity).lower().strip().replace("-", "_").replace(" ", "_")
+            try:
+                severity = SeverityLevel(normalized)
+            except ValueError:
+                logger.warning("Unknown severity %r for report %d", raw_severity, report_id)
+
+        db.add(AIDetectionResult(
+            report_id=report_id,
+            media_attachment_id=attachment.id,
+            detected_class=detected_class,
+            severity=severity,
+            confidence=prediction.get("confidence", 0),
+            bounding_boxes=prediction.get("boxes"),
+            raw_output=prediction if is_photo else None,
+            model_version="yolo",
+            inference_time_ms=prediction.get("inference_time_ms", 0),
+        ))
+        if not is_photo:
+            report.ai_damage_type = detected_class
+            report.ai_severity = severity
+            report.ai_confidence = prediction.get("confidence")
+    elif is_photo and task_id != "inline_failed":
+        db.add(AIDetectionResult(
+            report_id=report_id,
+            media_attachment_id=attachment.id,
+            detected_class=DamageType.none,
+            confidence=scene["confidence"] if task_id == "inline_no_road_pavement" else 0.0,
+            raw_output={"task_id": task_id, "scene": scene},
+            model_version="yolo" if task_id == "inline_no_detection" else None,
+        ))
+    elif not is_photo and task_id == "inline_no_road_pavement":
+        report.ai_damage_type = None
+        report.ai_severity = None
+        report.ai_confidence = scene["confidence"]
+
+    attachment.is_processed = True
+    if is_photo:
+        attachment.processing_status = (
+            ProcessingStatus.FAILED if task_id == "inline_failed" else ProcessingStatus.CLASSIFIED
+        )
+    if aggregate_photos and task_id != "inline_failed":
+        await db.flush()
+        await _update_photo_summary(db, report)
+    await db.commit()
 
     logger.info(
         "Media saved | report_id=%d | media_id=%d | mime=%s | size=%d bytes | url=%s | ml_task=%s",
@@ -1020,7 +1106,7 @@ async def upload_media(
         "data": {
             "media_id":    attachment.id,
             "file_url":    attachment.file_url,
-            "task_id":     task_id,
+            "task_id":     "inline_no_detection" if task_id == "inline_no_road_pavement" else task_id,
             "ai_validation": {
                 "is_ai_generated": report.is_flagged_fake,
                 "status": "flagged" if report.is_flagged_fake else "approved",

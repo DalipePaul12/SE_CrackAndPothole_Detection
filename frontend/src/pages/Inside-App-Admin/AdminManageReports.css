@@ -1534,8 +1534,6 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
   .action-btns { flex-wrap: wrap; }
 
   /* Hide less critical columns on small tablets */
-  .manage-table th.col-photo,
-  .manage-table td.col-photo,
   .manage-table th.col-damage,
   .manage-table td.col-damage {
     display: none;
@@ -2216,4 +2214,17 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+.manage-table .col-photo > .report-evidence--compact { margin-inline: auto; --evidence-cover-width: 40px; --evidence-cover-height: 40px; --evidence-cover-radius: var(--radius-md); --evidence-cover-border: 1px solid var(--border); }
+.manage-table-container, .manage-table-container .table-responsive { min-width: 0; max-width: 100%; }
+
+.manage-table-container .manage-table { min-width: 820px; }
+.modal-content.vmr-tabbed-modal { min-width: 0; max-width: min(850px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); box-sizing: border-box; }
+.vmr-media-tab { min-width: 0; --evidence-media-height: 380px; }
+@media (max-width: 480px) {
+  .vmr-tabbed-modal .vmr-tabs { flex-wrap: wrap; }
+}
+@media (max-width: 480px) {
+  .manage-table .col-photo > .report-evidence--compact { --evidence-cover-width: 32px; --evidence-cover-height: 32px; --evidence-play-size: 16px; }
 }
