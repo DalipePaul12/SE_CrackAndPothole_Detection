@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionEvidence, ReportDamageBadges, submissionMedia } from "../../components/ReportEvidence";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -33,7 +34,7 @@ const fmtDT = (iso) =>
 const STATUS_LABEL = { PENDING: "Pending", IN_PROGRESS: "In Progress", VERIFIED: "Verified", RESOLVED: "Resolved", DECLINED: "Declined" };
 const STATUS_STEPS = ["PENDING", "VERIFIED", "IN_PROGRESS", "RESOLVED"];
 
-const getMediaAttachment = (report) => report?.media_attachments?.[0] ?? null;
+const getMediaAttachment = (report) => submissionMedia(report)[0] ?? null;
 
 function Pagination({ page, setPage, total, pageSize = 10 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -228,7 +229,7 @@ function ReportModal({ report, onClose }) {
       aria-modal="true"
       aria-label="Report details"
     >
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content arm-report-modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
           <X size={16} />
         </button>
@@ -359,7 +360,7 @@ function ReportModal({ report, onClose }) {
                   <ImageIcon size={13} aria-hidden="true" /> DAMAGE EVIDENCE
                 </p>
                 <div className="arm-modal-media">
-                  {imageUrl && isVideo ? (
+                  {hasSubmissionEvidence(report) ? <ReportEvidence report={report} /> : imageUrl && isVideo ? (
                     <video src={imageUrl} controls style={{ width: "100%", borderRadius: 10 }} />
                   ) : imageUrl && !imgError ? (
                     <button
@@ -768,6 +769,7 @@ function AllReports() {
           <table className="allreports-table" aria-label="All reports">
             <thead>
               <tr>
+                <th scope="col" className="arm-evidence-cell">Evidence</th>
                 <th scope="col" className="th-sortable" onClick={() => handleSort("id")} aria-sort={sortField === "id" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <Activity size={13} /> Report <SortIcon field="id" sortField={sortField} sortDir={sortDir} />
@@ -812,6 +814,9 @@ function AllReports() {
                     role="button"
                     aria-label={`View Report #${report.id}`}
                   >
+                    <td className="arm-evidence-cell">
+                      {hasSubmissionEvidence(report) ? <ReportEvidence report={report} compact /> : <ImageIcon size={18} aria-hidden="true" />}
+                    </td>
                     <td>
                       <strong>Report #{report.id}</strong>
                       <div className="report-location-allreports" title={report.barangay}>
@@ -819,7 +824,7 @@ function AllReports() {
                         {report.barangay ?? report.street_name ?? "—"}
                       </div>
                     </td>
-                    <td>{report.ai_damage_type ?? "—"}</td>
+                    <td><ReportDamageBadges report={report} /></td>
                     <td>
                       <span className={`severity ${toClass(report.ai_severity ?? "")}`}>
                         {report.ai_severity ?? "—"}
@@ -835,7 +840,7 @@ function AllReports() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5" className="no-data-allreports">
+                  <td colSpan="6" className="no-data-allreports">
                     No reports found matching the selected filters.
                   </td>
                 </tr>

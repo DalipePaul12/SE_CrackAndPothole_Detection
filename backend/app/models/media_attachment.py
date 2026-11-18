@@ -88,4 +88,23 @@ class MediaAttachment(Base):
         "AIDetectionResult",
         back_populates="media",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
+
+    @property
+    def detections(self):
+        if self.media_type != MediaType.image or self.attachment_type == "completion_proof":
+            return []
+        detections = []
+        for result in self.ai_detections:
+            raw = result.raw_output or {}
+            objects = raw.get("all_detections") or result.bounding_boxes
+            if objects:
+                detections.extend(objects)
+            elif result.detected_class.value in {"crack", "pothole"}:
+                detections.append({
+                    "class": result.detected_class.value,
+                    "confidence": result.confidence,
+                    "severity": result.severity.value if result.severity else None,
+                })
+        return detections

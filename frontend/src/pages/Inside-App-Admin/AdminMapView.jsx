@@ -1,4 +1,6 @@
+import ReportEvidence, { hasSubmissionEvidence, hasSubmissionPhotos, submissionMedia } from "../../components/ReportEvidence";
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import "./AdminMapView.css";
 import { resolveMediaUrl } from "../../utils/mediaUrl";
@@ -16,7 +18,7 @@ import {
   Download, MapPin, User, Calendar, Cpu, Square, ZoomIn, Upload, CircleDot,
   ChevronRight, ChevronLeft, Flame, Map, BarChart2, SlidersHorizontal, ChevronDown,
   Search, Navigation, ImageOff, Eye, CheckCircle2, Circle as CircleIcon,
-  Maximize2, Play,
+  Maximize2,
 } from "lucide-react";
 
 function useIsDark() {
@@ -120,12 +122,12 @@ function passesDateFilter(r, range) {
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 function getImageSrc(r) {
-  const url = r?.media_attachments?.[0]?.file_url
+  const url = submissionMedia(r)[0]?.file_url
     ?? r?.image_url ?? r?.photo_url ?? r?.image ?? r?.photo ?? r?.attachment_url;
   return resolveMediaUrl(url) ?? null;
 }
 function getMediaType(r) {
-  return r?.media_attachments?.[0]?.media_type ?? "image";
+  return submissionMedia(r)[0]?.media_type ?? "image";
 }
 
 
@@ -159,6 +161,7 @@ function buildIcon(report) {
 
 function buildPopupHTML(r) {
   const imgSrc  = getImageSrc(r);
+  const photoCount = submissionMedia(r).filter((item) => item.media_type === "image" && item.file_url).length;
   const isVideo = getMediaType(r) === "video";
   const sevCfg = SEVERITY_CONFIG[getSevKey(r)] ?? SEVERITY_CONFIG.default;
   const stCfg  = STATUS_CONFIG[(r.status ?? "pending").toLowerCase()] ?? STATUS_CONFIG.pending;
@@ -170,14 +173,14 @@ function buildPopupHTML(r) {
       </div>
       ${imgSrc
         ? isVideo
-          ? `<div class="amv-popup-img-wrap">
+          ? `<button type="button" class="amv-popup-img-wrap amv-popup-cover" data-img="${esc(imgSrc)}" data-video="true" aria-label="Play report video">
                <video src="${esc(imgSrc)}" class="amv-popup-img" muted playsinline preload="metadata"></video>
-               <span class="amv-popup-play-badge"></span>
-             </div>`
-          : `<div class="amv-popup-img-wrap" data-img="${esc(imgSrc)}" style="cursor:zoom-in">
+               <span class="amv-popup-play-badge" aria-hidden="true"></span>
+             </button>`
+          : `<button type="button" class="amv-popup-img-wrap amv-popup-cover" data-img="${esc(imgSrc)}" aria-label="Open report gallery, ${photoCount || 1} ${photoCount > 1 ? "photos" : "photo"}">
                <img src="${esc(imgSrc)}" alt="Road damage" class="amv-popup-img" />
-               <span class="amv-popup-img-hint">View Photo</span>
-             </div>`
+               ${photoCount > 1 ? `<span class="report-evidence-count">${photoCount}</span>` : ""}
+             </button>`
         : `<div class="amv-popup-no-img">
              <span>No image available</span>
            </div>`
@@ -213,6 +216,7 @@ function useClickOutside(ref, handler) {
 function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
   const map          = useMap();
   const groupRef     = useRef(null);
+  const markerEntries = useRef(new globalThis.Map());
   const reportsRef   = useRef(reports);
   const onClickRef   = useRef(onMarkerClick);
   const onLightboxRef = useRef(onLightbox);
@@ -236,7 +240,8 @@ function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
       },
     });
     map.addLayer(groupRef.current);
-    return () => { map.removeLayer(groupRef.current); };
+    const entries = markerEntries.current;
+    return () => { map.removeLayer(groupRef.current); entries.clear(); };
   }, [map]);
 
   useEffect(() => {
@@ -254,8 +259,13 @@ function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
       const imgWrap = el.querySelector("[data-img]");
       if (imgWrap) {
         imgWrap.onclick = () => {
-          const src = imgWrap.dataset.img;
-          if (src) onLightboxRef.current(src);
+          const report = reportsRef.current.find((r) => String(r.id) === btn?.dataset.rid);
+          if (hasSubmissionPhotos(report)) {
+            map.closePopup();
+            onClickRef.current(report);
+          } else if (imgWrap.dataset.img) {
+            onLightboxRef.current(imgWrap.dataset.img, imgWrap.dataset.video === "true");
+          }
         };
       }
     };
@@ -265,16 +275,29 @@ function ClusterLayer({ reports, onMarkerClick, onLightbox }) {
 
   useEffect(() => {
     if (!groupRef.current) return;
-    groupRef.current.clearLayers();
-    const markers = reports.map((r) => {
+    const group = groupRef.current;
+    const entries = markerEntries.current;
+    const wanted = new Set(reports.map((r) => r.id));
+    for (const [id, entry] of entries) {
+      if (!wanted.has(id) && !entry.marker.isPopupOpen()) {
+        group.removeLayer(entry.marker);
+        entries.delete(id);
+      }
+    }
+    const added = [];
+    for (const r of reports) {
+      const existing = entries.get(r.id);
+      if (existing?.report === r) continue;
+      if (existing) group.removeLayer(existing.marker);
       const m = L.marker(
         [parseFloat(r.latitude), parseFloat(r.longitude)],
-        { icon: buildIcon(r) }
+        { icon: buildIcon(r), title: `Report #${r.id}` }
       );
       m.bindPopup(buildPopupHTML(r), { maxWidth: 260, className: "amv-popup-outer" });
-      return m;
-    });
-    groupRef.current.addLayers(markers);
+      entries.set(r.id, { report: r, marker: m });
+      added.push(m);
+    }
+    if (added.length) group.addLayers(added);
   }, [reports]);
 
   return null;
@@ -292,7 +315,7 @@ function PlainMarkers({ reports, onMarkerClick, onLightbox }) {
         key={r.id}
         position={[parseFloat(r.latitude), parseFloat(r.longitude)]}
         icon={buildIcon(r)}
-        eventHandlers={{ click: () => onMarkerClick(r) }}
+        title={`Report #${r.id}`}
       >
         <Popup className="amv-popup-outer" maxWidth={260}>
           <div className="amv-popup">
@@ -300,7 +323,7 @@ function PlainMarkers({ reports, onMarkerClick, onLightbox }) {
               <span className="amv-popup-id">#{r.id}</span>
               <span className="amv-popup-sev" style={{ background: sevCfg.color }}>{sevCfg.label}</span>
             </div>
-            {imgSrc ? (
+            {hasSubmissionEvidence(r) ? <ReportEvidence report={r} compact showProof /> : imgSrc ? (
               isVideo ? (
                 <div className="amv-popup-img-wrap">
                   <video src={imgSrc} className="amv-popup-img" muted playsInline preload="metadata" />
@@ -445,9 +468,10 @@ function ConfirmStatusDialog({ pending, onConfirm, onCancel, loading }) {
 function Lightbox({ items, index, onClose, onNext, onPrev }) {
   const current = items[index];
   if (!current) return null;
-  return (
-    <div className="amv-lightbox-overlay" onClick={onClose}>
-      <button className="amv-lightbox-close" onClick={onClose}><X size={18} strokeWidth={2.5} /></button>
+  return createPortal(
+    <div className="amv-lightbox-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Report evidence">
+      <button type="button" className="amv-lightbox-close" aria-label="Close evidence"
+        onClick={(e) => { e.stopPropagation(); onClose(); }}><X size={18} strokeWidth={2.5} /></button>
 
       {items.length > 1 && (
         <>
@@ -471,14 +495,16 @@ function Lightbox({ items, index, onClose, onNext, onPrev }) {
       )}
 
       <div className="amv-lightbox-inner" onClick={(e) => e.stopPropagation()}>
-        <img src={current.url} alt={current.label ?? "Road damage"} className="amv-lightbox-img" />
+        {current.video
+          ? <video src={current.url} className="amv-lightbox-img" controls autoPlay playsInline />
+          : <img src={current.url} alt={current.label ?? "Road damage"} className="amv-lightbox-img" />}
         {items.length > 1 && (
           <span className="amv-lightbox-counter">
             {index + 1} / {items.length}{current.label ? ` — ${current.label}` : ""}
           </span>
         )}
       </div>
-    </div>
+    </div>, document.body,
   );
 }
 
@@ -543,28 +569,21 @@ function ReportStrip({ reports, onSelect }) {
           <div className="amv-strip-empty">No reports match current filters.</div>
         ) : (
           reports.slice(0, 40).map((r) => {
-            const imgSrc  = getImageSrc(r);
-            const isVideo = getMediaType(r) === "video";
             const sevCfg = SEVERITY_CONFIG[getSevKey(r)] ?? SEVERITY_CONFIG.default;
             return (
-              <button
+              <div
                 key={r.id}
                 className="amv-strip-card"
                 onClick={() => onSelect(r)}
-                role="listitem"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(r); }
+                }}
                 aria-label={`Report #${r.id}`}
                 title={`Report #${r.id} — ${r.location_address ?? r.barangay ?? "Unknown"}`}
               >
-                {imgSrc && isVideo ? (
-                  <div className="amv-strip-thumb amv-strip-thumb--video-wrap" aria-hidden="true">
-                    <video src={imgSrc} className="amv-strip-thumb" muted playsInline preload="metadata" />
-                    <span className="amv-strip-play-badge" aria-hidden="true">
-                      <Play size={9} fill="#fff" />
-                    </span>
-                  </div>
-                ) : imgSrc ? (
-                  <img src={imgSrc} alt="" className="amv-strip-thumb" aria-hidden="true" />
-                ) : (
+                {hasSubmissionEvidence(r) ? <ReportEvidence report={r} compact showProof /> : (
                   <div className="amv-strip-thumb amv-strip-thumb--empty" aria-hidden="true">
                     <MapPin size={14} />
                   </div>
@@ -576,7 +595,7 @@ function ReportStrip({ reports, onSelect }) {
                     {sevCfg.label.toUpperCase()}
                   </span>
                 </div>
-              </button>
+              </div>
             );
           })
         )}
@@ -1054,8 +1073,8 @@ function AdminMapView() {
                   <DrawSelectTool active={drawMode} onBoundsSelected={handleBoundsSelected} />
                   {viewMode === "markers" && (
                     clusterEnabled
-                      ? <ClusterLayer  reports={mapVisibleReports} onMarkerClick={openPanel} onLightbox={(src) => openLightbox([{ url: src }], 0)} />
-                      : <PlainMarkers  reports={mapVisibleReports} onMarkerClick={openPanel} onLightbox={(src) => openLightbox([{ url: src }], 0)} />
+                      ? <ClusterLayer  reports={mapVisibleReports} onMarkerClick={openPanel} onLightbox={(src, video) => openLightbox([{ url: src, video }], 0)} />
+                      : <PlainMarkers  reports={mapVisibleReports} onMarkerClick={openPanel} onLightbox={(src, video) => openLightbox([{ url: src, video }], 0)} />
                   )}
                 </MapContainer>
               )}
@@ -1114,7 +1133,7 @@ function AdminMapView() {
                     </div>
                   );
                 } else {
-                  const attachments = selectedReport.media_attachments ?? [];
+                  const attachments = submissionMedia(selectedReport);
                   const mCount = attachments.length;
                   const currentAtt = attachments[mediaIndex] ?? attachments[0];
                   const currentUrl = currentAtt ? resolveMediaUrl(currentAtt.file_url) : imgSrc;
@@ -1123,7 +1142,7 @@ function AdminMapView() {
                     .map((att) => ({ url: resolveMediaUrl(att.file_url), type: att.media_type }))
                     .filter((it) => it.url && it.type !== "video");
 
-                  mediaContent = currentUrl && !showUpload && !imgError ? (
+                  mediaContent = hasSubmissionPhotos(selectedReport) && !showUpload ? <ReportEvidence report={selectedReport} showProof /> : currentUrl && !showUpload && !imgError ? (
                     <div style={{ position: "relative" }}>
                       {currentIsVideo ? (
                         <div className="amv-panel-photo" style={{ cursor: "default" }}>
@@ -1206,9 +1225,9 @@ function AdminMapView() {
 
                     {mediaContent}
 
-                    {(selectedReport.media_attachments?.length ?? 0) > 1 && (
+                    {!hasSubmissionPhotos(selectedReport) && submissionMedia(selectedReport).length > 1 && (
                       <div style={{ display: "flex", gap: 6, padding: "8px 14px 0", overflowX: "auto" }}>
-                        {selectedReport.media_attachments.map((att, i) => (
+                        {submissionMedia(selectedReport).map((att, i) => (
                           <button
                             key={i}
                             type="button"

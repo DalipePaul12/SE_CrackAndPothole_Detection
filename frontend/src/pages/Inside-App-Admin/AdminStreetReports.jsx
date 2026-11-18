@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionPhotos, submissionMedia } from "../../components/ReportEvidence";
 import React, { useEffect, useState, useCallback } from "react";
 import "./AdminStreetReports.css";
 import { getReports } from "../../api/reports";
@@ -473,8 +474,8 @@ function AdminStreetReports() {
 function StreetReportModal({ report: r, onClose }) {
   const damageType = r.ai_damage_type ?? r.damage_type ?? "—";
   const severity = r.ai_severity ?? r.severity ?? "—";
-  const mediaUrl = r.media_attachments?.[0]?.file_url;
-  const mediaType = r.media_attachments?.[0]?.media_type;
+  const mediaUrl = submissionMedia(r)[0]?.file_url;
+  const mediaType = submissionMedia(r)[0]?.media_type;
   const fullUrl = resolveMediaUrl(mediaUrl);
   const displayAddress =
     r.exact_address || r.street_name || r.location_address || "—";
@@ -536,7 +537,7 @@ function StreetReportModal({ report: r, onClose }) {
           </div>
           <div className="modal-right">
             <div className="modal-media">
-              {fullUrl ? (
+              {hasSubmissionPhotos(r) ? <ReportEvidence report={r} /> : fullUrl ? (
                 mediaType === "video" ? (
                   <video
                     src={fullUrl}

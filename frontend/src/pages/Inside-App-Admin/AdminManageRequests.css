@@ -1717,3 +1717,18 @@
 .amr-row-checked {
   background: var(--primary-subtle, rgba(22,163,74,0.06)) !important;
 }
+
+.report-cell > .report-evidence--compact { flex: 0 0 auto; --evidence-cover-width: 48px; --evidence-cover-height: 48px; --evidence-cover-radius: 50%; --evidence-cover-border: 2px solid var(--border); }
+.submissions-table-container { min-width: 0; max-width: 100%; overflow-x: auto; }
+.submissions-table-container .submissions-table { min-width: 680px; }
+.submissions-table-container .report-cell > :last-child { min-width: 0; overflow-wrap: anywhere; }
+.modal-content.amr-detail-modal { min-width: 0; max-width: min(850px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); box-sizing: border-box; }
+.amr-media-tab { min-width: 0; }
+@media (max-width: 480px) {
+  .amr-detail-modal .amr-modal-tabs { flex-wrap: wrap; }
+}
+@media (max-width: 640px) {
+  .report-cell > .report-evidence--compact { --evidence-cover-width: 36px; --evidence-cover-height: 36px; --evidence-play-size: 16px; }
+}
+
+.amr-media-tab { --evidence-media-height: 360px; }

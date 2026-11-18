@@ -117,6 +117,7 @@ console.error(`[API Error ${response.status}] ${endpoint}:`, JSON.stringify(data
       return {
         success: false,
         data:    null,
+        status:  response.status,
         error:   data?.error || (typeof detail === "string" ? detail : detail?.message) || `Request failed (${response.status})`,
       };
     }

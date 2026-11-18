@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionPhotos, submissionMedia } from "../components/ReportEvidence";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -256,7 +257,7 @@ export default function ProjectTracking() {
   const statusKey    = report.status?.toLowerCase();
   const isResolved   = statusKey === "resolved";
   const hasProject   = !!project;
-  const origAtt      = report.media_attachments?.[0];
+  const origAtt      = submissionMedia(report)[0];
   const origUrl      = mediaUrl(origAtt);
 
   return (
@@ -312,13 +313,11 @@ export default function ProjectTracking() {
           </SectionCard>
 
           {/* Original Photo */}
-          {origUrl && (
+          {(origUrl || hasSubmissionPhotos(report)) && (
             <SectionCard title="Damage Photo" icon={<Image size={15} />}>
-              <img
-                src={origUrl}
-                alt="Damage evidence"
-                className="pt-report-photo"
-              />
+              {hasSubmissionPhotos(report) ? <ReportEvidence report={report} /> : origAtt.media_type === "video"
+                ? <video src={origUrl} controls className="pt-report-photo" />
+                : <img src={origUrl} alt="Damage evidence" className="pt-report-photo" />}
             </SectionCard>
           )}
         </div>

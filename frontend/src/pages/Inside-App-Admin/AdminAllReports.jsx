@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "./AdminAllReports.css";
@@ -863,7 +864,7 @@ export default function AdminAllReports() {
                     Report <SortIcon field="id" />
                   </th>
                   <th className="th-reporter">Reporter</th>
-                  <th className="th-thumb">Photo</th>
+                  <th className="th-thumb">Evidence</th>
                   <th className="th-type">Type</th>
                   <th className="th-sev sortable" onClick={() => toggleSort("severity")}>
                     Severity <SortIcon field="severity" />
@@ -905,7 +906,7 @@ export default function AdminAllReports() {
                     const conf        = confVal(r);
                     const sev         = severity(r);
                     const isCritical  = sev.toLowerCase() === "critical";
-                    const thumb       = r.media_attachments?.[0];
+                    const thumb       = submissionMedia(r)[0];
                     const thumbUrl    = thumb ? mediaUrl(thumb) : null;
                     const transitions = STATUS_TRANSITIONS[r.status] ?? [];
                     const isActing    = !!actionLoading[r.id];
@@ -938,20 +939,7 @@ export default function AdminAllReports() {
                         </td>
 
                         <td className="td-thumb" onClick={(e) => e.stopPropagation()}>
-                          {thumbUrl && thumb?.media_type === "video" ? (
-                            <div className="thumb-video-wrap" onClick={() => setSelectedReport(r)}>
-                              <video
-                                className="thumb-img"
-                                src={thumbUrl}
-                                muted
-                                playsInline
-                                preload="metadata"
-                              />
-                              <span className="thumb-play-badge" aria-hidden="true">
-                                <Play size={10} fill="#fff" />
-                              </span>
-                            </div>
-                          ) : thumbUrl ? (
+                          {hasSubmissionEvidence(r) ? <ReportEvidence report={r} compact /> : thumbUrl ? (
                             <img
                               className="thumb-img"
                               src={thumbUrl}
@@ -1282,7 +1270,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   }, [r.id]);
 
   const transitions = STATUS_TRANSITIONS[r.status] ?? [];
-  const attachments = r.media_attachments ?? [];
+  const attachments = submissionMedia(r);
   const conf        = confVal(r);
   const sev         = severity(r);
   const sevClass    = toClass(sev);
@@ -1511,7 +1499,7 @@ return (
 
           {activeTab === "media" && (
             <div className="vmr-media-tab">
-              {attachments.length === 0 ? (
+              {hasSubmissionEvidence(r) ? <ReportEvidence report={r} /> : attachments.length === 0 ? (
                 <div className="vmr-media-empty"><Image size={48} /><p>No media attachments for this report</p></div>
               ) : (
                 <>

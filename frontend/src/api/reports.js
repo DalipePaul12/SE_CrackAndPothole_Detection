@@ -51,7 +51,7 @@ function buildQS(params = {}) {
 
 function unwrap(res) {
   if (res?.success === false) {
-    return { success: false, data: null, error: res.error ?? "Request failed." };
+    return { success: false, data: null, status: res.status, error: res.error ?? "Request failed." };
   }
   return { success: true, data: res?.data ?? res, error: null };
 }
@@ -147,12 +147,48 @@ export async function deleteReport(reportId) {
 
 // ── Media upload ──────────────────────────────────────────────────────────────
 
-export async function uploadMedia(reportId, file, onProgress) {
+export async function uploadMedia(reportId, file, _onProgress, uploadId) {
   const formData = new FormData();
   formData.append("file", file);
+  if (uploadId) formData.append("upload_id", uploadId);
 
   const res = await api.upload(`/reports/${reportId}/media`, formData);
   return unwrap(res);
+}
+
+export async function reconcileReport(payload) {
+  const key = payload.capture_metadata?.submission_id;
+  if (!key) return createReport(payload);
+  const endpoint = `/reports/submission/${key}`;
+  const known = await api.get(endpoint);
+  if (known.success) return known;
+  if (known.status !== 404) {
+    return { success: false, error: "Could not verify whether your report was saved. Reconnect and check again before retrying." };
+  }
+
+  const created = await createReport(payload);
+  if (created.success) return created;
+  const confirmed = await api.get(endpoint);
+  if (confirmed.success) return confirmed;
+  if (confirmed.status === 404) return created;
+  return { success: false, error: "Could not confirm whether your report was saved. Check again before retrying." };
+}
+
+export async function reconcileMedia(reportId, file, uploadId) {
+  if (!uploadId) return uploadMedia(reportId, file);
+  const matches = (report) => report?.media_attachments?.find(({ file_url }) =>
+    file_url?.includes(`/${reportId}/${uploadId.replaceAll("-", "")}_`));
+  const known = await getReport(reportId);
+  if (!known.success) return { success: false, error: "Could not check the report’s saved evidence. Check again before retrying." };
+  const attachment = matches(known.data);
+  if (attachment) return { success: true, data: attachment };
+
+  const uploaded = await uploadMedia(reportId, file, null, uploadId);
+  if (uploaded.success) return uploaded;
+  const confirmed = await getReport(reportId);
+  if (!confirmed.success) return { success: false, error: "Could not confirm whether the photo was saved. Check again before retrying." };
+  const saved = matches(confirmed.data);
+  return saved ? { success: true, data: saved } : uploaded;
 }
 
 // Alias for backwards compatibility

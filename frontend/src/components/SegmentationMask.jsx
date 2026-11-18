@@ -1,5 +1,5 @@
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useId, useMemo, useState } from "react";
 
 // ─── Severity colour palette ───────────────────────────────────────────────────
 const SEVERITY_STYLES = {
@@ -177,8 +177,9 @@ function DetectionOverlayItem({
     ? `${Math.round(detection.confidence * 100)}%`
     : "";
 
-  const filterId  = `seg-glow-${index}`;
-  const clipId    = `seg-clip-${index}`;
+  const overlayId = useId();
+  const filterId  = `seg-glow-${overlayId}`;
+  const clipId    = `seg-clip-${overlayId}`;
   const animDelay = `${index * 80}ms`;
 
   // Build raw polygon points

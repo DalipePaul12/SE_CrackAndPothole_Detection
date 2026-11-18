@@ -1630,7 +1630,7 @@ body.dark .rep-total {
 @media (min-width: 1600px) {
   .myprofile-container { max-width: 1400px; margin-right: auto; }
   .profile-content { max-width: 100%; }
-  .report-main { grid-template-columns: 200px 1fr; }
+  .report-main { --profile-report-thumb-width: 200px; }
   .report-media-wrap { height: 140px; }
 }
 
@@ -1912,4 +1912,19 @@ body:not(.dark) .mp-modal-box {
    ============================================================ */
 body.report-modal-open .chat-fab {
   display: none !important;
+}
+
+.myprofile-container, .reports-grid, .reports-grid .report-card, .report-main, .report-main .ai-result {
+  min-width: 0;
+  max-width: 100%;
+}
+.report-main { grid-template-columns: minmax(0, var(--profile-report-thumb-width, 160px)) minmax(0, 1fr); }
+.report-media-wrap > .report-evidence--compact { --evidence-cover-width: 100%; --evidence-cover-height: 100%; --evidence-cover-radius: var(--radius-lg); --evidence-cover-border: 6px solid var(--card); }
+.mp-modal-media-tab { --evidence-media-height: 380px; }
+.report-main .ai-result { overflow-wrap: anywhere; }
+@container report-card (max-width: 460px) {
+  .report-main { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .myprofile-container .reports-grid, .myprofile-container .report-main { grid-template-columns: minmax(0, 1fr); }
 }

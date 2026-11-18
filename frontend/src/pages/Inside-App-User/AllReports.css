@@ -411,11 +411,11 @@ body.dark .reset-filter-btn:hover {
   transition: background 0.3s ease;
 }
 
-.allreports-table th:nth-child(1) { width: 25%; }
-.allreports-table th:nth-child(2) { width: 15%; }
-.allreports-table th:nth-child(3) { width: 20%; }
-.allreports-table th:nth-child(4) { width: 20%; }
-.allreports-table th:nth-child(5) { width: 20%; }
+.allreports-table th:nth-child(2) { width: 25%; }
+.allreports-table th:nth-child(3) { width: 15%; }
+.allreports-table th:nth-child(4),
+.allreports-table th:nth-child(5),
+.allreports-table th:nth-child(6) { width: 20%; }
 
 .allreports-table td {
   padding: 14px;
@@ -1341,8 +1341,8 @@ body.dark .no-image {
   min-height: 140px;
 }
 
-.arm-modal-media img,
-.arm-modal-media video {
+.arm-modal-media img:not(.report-evidence img),
+.arm-modal-media video:not(.report-evidence video) {
   width: 100%;
   max-height: 320px;
   object-fit: cover;
@@ -1698,8 +1698,8 @@ body.arm-modal-open iframe[title*="chat" i] {
     line-height: 1.45;
   }
   
-  .arm-modal-media img,
-  .arm-modal-media video {
+  .arm-modal-media img:not(.report-evidence img),
+  .arm-modal-media video:not(.report-evidence video) {
     max-height: 220px;
   }
 
@@ -1821,3 +1821,18 @@ body.dark .modal-title {
   color: var(--subtext);
   line-height: 1.55;
 }
+
+.allreports-table-container { min-width: 0; max-width: 100%; overflow-x: auto; }
+.allreports-table .arm-evidence-cell { width: 92px; --evidence-cover-width: 64px; --evidence-cover-height: 64px; --evidence-cover-radius: var(--radius-md, 12px); }
+.modal-content.arm-report-modal {
+  box-sizing: border-box;
+  width: min(900px, calc(100% - 16px));
+  max-width: 900px;
+  max-height: calc(100dvh - 16px);
+  min-width: 0;
+  overflow: auto;
+}
+.arm-report-modal .arm-modal-tabs { flex-wrap: wrap; flex-shrink: 0; }
+.arm-report-modal .arm-modal-tab { min-height: 40px; }
+@media (max-width: 768px) { .arm-modal-media { --evidence-media-height: 220px; } }
+.arm-modal-media:has(> .report-evidence) { display: block; min-height: 0; padding: clamp(8px, 3vw, 14px); }

@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "./MySubmissions.css";
 import { useNavigate } from "react-router-dom";
@@ -15,7 +16,7 @@ import {
   ChevronLeft, ChevronRight, CircleCheck, Clock, Wrench,
   Send, FileSearch, Trash2, Pencil, Share2, Bot, ZoomIn,
   MessageSquare, Info, ShieldX, CheckCheck, MapPin, ChevronDown,
-  Sparkles, Play,
+  Sparkles,
 } from "lucide-react";
 
 const BASE_URL  = import.meta.env.VITE_API_URL || "";
@@ -411,8 +412,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
 
   useEffect(() => { setLiveReport(report); }, [report]);
 
-  const originalAtt = liveReport.media_attachments?.[0];
-  const proofAtt    = liveReport.media_attachments?.[1];
+  const originalAtt = submissionMedia(liveReport)[0];
+  const proofAtt    = liveReport.media_attachments?.find((item) => item.attachment_type === "completion_proof");
   const originalUrl = !imgErr1 ? mediaUrl(originalAtt) : null;
   const proofUrl    = !imgErr2 ? mediaUrl(proofAtt)    : null;
   const liveStatus  = normalizeStatus(liveReport.status);
@@ -423,7 +424,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
 
   // Evidence + repair proof share one swipeable gallery
   const mediaGalleryItems = [
-    originalUrl ? { url: originalUrl, label: "Damage Evidence" } : null,
+    !hasSubmissionEvidence(liveReport) && originalUrl ? { url: originalUrl, label: "Damage Evidence" } : null,
     (isResolved && proofUrl) ? { url: proofUrl, label: "Repair Proof" } : null,
   ].filter(Boolean);  const canEdit     = liveStatus === "PENDING" || liveStatus === "DECLINED";
   const canDelete   = liveStatus === "PENDING" || liveStatus === "DECLINED";
@@ -737,7 +738,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
                 <div className="sub-media-block">
                   <p className="sub-media-label"><Image size={14} aria-hidden="true" />Damage Evidence</p>
                   <div className="sub-modal-media">
-                    {originalUrl ? (
+                    {hasSubmissionEvidence(liveReport) ? <ReportEvidence report={liveReport} /> : originalUrl ? (
                       originalAtt.media_type === "video" ? (
                         <video src={originalUrl} controls />
                       ) : (
@@ -756,7 +757,7 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
                       </div>
                     )}
                   </div>
-                  {originalUrl && (
+                  {originalUrl && !hasSubmissionEvidence(liveReport) && (
                     <p className="sub-zoom-hint">
                       <ZoomIn size={12} aria-hidden="true" /> Click image to expand
                     </p>
@@ -924,9 +925,6 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
 
 function ReportCard({ report, onView }) {
   const navigate = useNavigate();
-  const [imgError, setImgError] = useState(false);
-  const att      = report.media_attachments?.[0];
-  const thumbUrl = !imgError ? mediaUrl(att) : null;
   const status   = normalizeStatus(report.status);
   const trackable = status === "IN_PROGRESS" || status === "RESOLVED";
 
@@ -940,24 +938,7 @@ function ReportCard({ report, onView }) {
       aria-label={`View report #${report.id}`}
     >
       <div className="sub-card-thumb">
-        {thumbUrl ? (
-          att.media_type === "video"
-            ? (
-              <div className="sub-thumb-video-wrap">
-                <video
-                  src={thumbUrl}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  onError={() => setImgError(true)}
-                />
-                <span className="sub-thumb-play-badge" aria-hidden="true">
-                  <Play size={14} fill="#fff" />
-                </span>
-              </div>
-            )
-            : <img src={thumbUrl} alt="Report thumbnail" onError={() => setImgError(true)} />
-        ) : (
+        {hasSubmissionEvidence(report) ? <ReportEvidence report={report} compact /> : (
           <Image size={22} aria-hidden="true" />
         )}
       </div>
@@ -1001,9 +982,6 @@ function ReportCard({ report, onView }) {
 
 function TableRow({ report, onView }) {
   const navigate = useNavigate();
-  const [imgError, setImgError] = useState(false);
-  const att      = report.media_attachments?.[0];
-  const thumbUrl = !imgError ? mediaUrl(att) : null;
   const status   = normalizeStatus(report.status);
   const trackable = status === "IN_PROGRESS" || status === "RESOLVED";
 
@@ -1016,24 +994,7 @@ function TableRow({ report, onView }) {
     >
       <td className="sub-thumb-cell">
         <div className="sub-row-thumb">
-          {thumbUrl ? (
-            att.media_type === "video"
-              ? (
-                <div className="sub-thumb-video-wrap">
-                  <video
-                    src={thumbUrl}
-                    muted
-                    playsInline
-                    preload="metadata"
-                    onError={() => setImgError(true)}
-                  />
-                  <span className="sub-thumb-play-badge" aria-hidden="true">
-                    <Play size={12} fill="#fff" />
-                  </span>
-                </div>
-              )
-              : <img src={thumbUrl} alt="" onError={() => setImgError(true)} />
-          ) : (
+          {hasSubmissionEvidence(report) ? <ReportEvidence report={report} compact /> : (
             <Image size={18} aria-hidden="true" />
           )}
         </div>

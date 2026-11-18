@@ -175,6 +175,7 @@ class Report(Base):
             if (
                 hasattr(attachment, "media_type")
                 and attachment.media_type.value == "image"
+                and attachment.attachment_type in (None, "submission")
             ):
                 return attachment.file_url
         return None
@@ -233,4 +234,4 @@ class Report(Base):
         back_populates="report",
         cascade="all, delete-orphan",
     )
-from app.models.frame_detection import FrameDetection 
+from app.models.frame_detection import FrameDetection

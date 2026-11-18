@@ -539,8 +539,8 @@ def _run_yolo_all_sync(
                     ]
                 if det.get("segments"):
                     det["segments"] = [
-                        [round(x * scale_x, 2), round(y * scale_y, 2)]
-                        for x, y in det["segments"]
+                        [[round(x * scale_x, 2), round(y * scale_y, 2)] for x, y in polygon]
+                        for polygon in det["segments"]
                     ]
                 # norm_bbox and segments_norm are already correct
                 # (computed from inference-size image, which maps 1:1 to norm)

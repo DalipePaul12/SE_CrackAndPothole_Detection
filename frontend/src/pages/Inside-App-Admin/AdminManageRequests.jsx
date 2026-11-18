@@ -1,3 +1,4 @@
+import ReportEvidence, { hasSubmissionEvidence, hasSubmissionPhotos, submissionMedia } from "../../components/ReportEvidence";
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdminManageRequests.css";
@@ -9,7 +10,7 @@ import {
   Check, X, Mail, Camera, Video, MapPin, CheckCircle, XCircle,
   User, AlertTriangle, Calendar, Clock, ChevronDown, Navigation,
   FileText, Image, MessageSquare, Activity, Shield, Send, Download,
-  Loader2, Play,
+  Loader2,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
@@ -23,8 +24,8 @@ const dateStr    = (r) =>
   r.created_at ? new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
 const timeStr    = (r) =>
   r.created_at ? new Date(r.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—";
-const mediaUrl = (r) => resolveMediaUrl(r.media_attachments?.[0]?.file_url);
-const mediaCount = (r) => r.media_attachments?.length ?? 0;
+const mediaUrl = (r) => resolveMediaUrl(submissionMedia(r)[0]?.file_url);
+const mediaCount = (r) => submissionMedia(r).length;
 const aiConfidence = (r) => r.ai_confidence ?? r.confidence ?? null;
 
 const PAGE_SIZE = 25;
@@ -241,7 +242,6 @@ export default function AdminManageRequests() {
                 filtered.map((r) => {
 
                   const thumb = mediaUrl(r, BASE_URL);
-                  const mediaIsVideo = r.media_attachments?.[0]?.media_type === "video";
                   return (
                     <tr
                       key={r.id}
@@ -258,22 +258,8 @@ export default function AdminManageRequests() {
                       </td>
                       <td>
                         <div className="report-cell">
-                          {thumb && !mediaIsVideo && (
+                          {hasSubmissionEvidence(r) ? <ReportEvidence report={r} compact /> : thumb && (
                             <img className="report-thumb" src={thumb} alt="report" loading="lazy" />
-                          )}
-                          {thumb && mediaIsVideo && (
-                            <div className="report-thumb report-thumb--video-wrap">
-                              <video
-                                className="report-thumb"
-                                src={thumb}
-                                muted
-                                playsInline
-                                preload="metadata"
-                              />
-                              <span className="report-thumb-play-badge" aria-hidden="true">
-                                <Play size={12} fill="#fff" />
-                              </span>
-                            </div>
                           )}
                           {!thumb && (
                             <div className="report-thumb report-thumb--empty"><Camera size={24} /></div>
@@ -481,7 +467,7 @@ function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline
   const sev     = r.ai_severity      ?? r.severity    ?? "—";
   const conf    = aiConfidence(r);
   const mCount  = mediaCount(r);
-  const currentAtt = r.media_attachments?.[mediaIndex];
+  const currentAtt = submissionMedia(r)[mediaIndex];
   const mType   = currentAtt?.media_type;
   const fullUrl = resolveMediaUrl(currentAtt?.file_url);
   const status  = r.status ?? REPORT_STATUS.PENDING;
@@ -626,7 +612,7 @@ function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline
           {activeTab === "media" && (
             <div className="amr-media-tab">
               <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center" }}>
-                {fullUrl ? (
+                {hasSubmissionEvidence(r) ? <ReportEvidence report={r} showProof /> : fullUrl ? (
                   mType === "video" ? (
                     <video key={mediaIndex} src={fullUrl} controls className="amr-media-main" />
                   ) : (
@@ -638,7 +624,7 @@ function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline
                     <p>No media attached</p>
                   </div>
                 )}
-                {mCount > 1 && (
+                {mCount > 1 && !hasSubmissionPhotos(r) && (
                   <>
                     <button type="button" aria-label="Previous media"
                       onClick={() => setMediaIndex((i) => (i - 1 + mCount) % mCount)}
@@ -651,11 +637,11 @@ function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline
                   </>
                 )}
               </div>
-              {mCount > 1 && (
+              {mCount > 1 && !hasSubmissionPhotos(r) && (
                 <>
                   <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "4px 0 0", textAlign: "center" }}>{mediaIndex + 1} / {mCount}</p>
                   <div className="amr-media-thumbs">
-                    {r.media_attachments.map((att, i) => (
+                    {submissionMedia(r).map((att, i) => (
                       <div
                         key={i}
                         className="amr-media-thumb"
