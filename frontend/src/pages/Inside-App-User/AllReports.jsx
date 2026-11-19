@@ -1,6 +1,8 @@
 import ReportEvidence, { hasSubmissionEvidence, ReportDamageBadges, submissionMedia } from "../../components/ReportEvidence";
+import ReportDialog from "../../components/ReportDialog";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   AlertTriangle, ChevronLeft, ChevronRight, X,
   ChevronDown, ChevronUp, ImageOff, MapPin, Calendar,
@@ -10,6 +12,7 @@ import {
 } from "lucide-react";
 import "./AllReports.css";
 import { useReports } from "../../hooks/useReports";
+import { getReport } from "../../api/reports";
 import { SkeletonTableRow } from "../../components/SkeletonRow";
 // ASSUMPTION: adjust this path/export name to match your actual API module.
 // Must be reachable by a citizen (report owner), not admin-only.
@@ -128,7 +131,7 @@ function ReportTimeline({ report }) {
   );
 }
 
-function ReportModal({ report, onClose }) {
+function ReportModal({ report, onClose, isNearbyReview }) {
   const mediaAtt = getMediaAttachment(report);
   const imageUrl = mediaAtt ? resolveMediaUrl(mediaAtt.file_url) : null;
   const isVideo  = mediaAtt?.media_type === "video";
@@ -198,7 +201,9 @@ function ReportModal({ report, onClose }) {
     };
   }, []);
   useEffect(() => {
-    const handler = (e) => { if (e.key === "Escape" && lightboxItems.length === 0) onClose(); };
+    const handler = (e) => {
+      if (e.key === "Escape" && lightboxItems.length === 0 && !document.querySelector("dialog:modal")) onClose();
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose, lightboxItems.length]);
@@ -229,7 +234,8 @@ function ReportModal({ report, onClose }) {
       aria-modal="true"
       aria-label="Report details"
     >
-      <div className="modal-content arm-report-modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal-content arm-report-modal${isNearbyReview ? " arm-nearby-review" : ""}`}
+        onClick={(e) => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
           <X size={16} />
         </button>
@@ -247,8 +253,6 @@ function ReportModal({ report, onClose }) {
           </span>
         </div>
 
-        <StatusProgress status={status} />
-
         <div className="arm-modal-tabs" role="tablist">
           {TABS.map(({ id, label, Icon }) => (
             <button
@@ -265,6 +269,7 @@ function ReportModal({ report, onClose }) {
         </div>
 
         <div className="arm-modal-body">
+          {(!isNearbyReview || activeTab === "timeline") && <StatusProgress status={status} />}
           {activeTab === "details" && (
             <div>
               <div className="arm-detail-grid">
@@ -580,6 +585,27 @@ function SortIcon({ field, sortField, sortDir }) {
 }
 
 function AllReports() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const reviewId = new URLSearchParams(location.search).get("nearby_report");
+  const [reviewResult, setReviewResult] = useState(null);
+  const review = reviewResult?.locationKey === location.key ? reviewResult : null;
+  const backToDuplicates = useCallback(() => {
+    if (location.state?.duplicateReview) navigate(-1);
+    else navigate("/dashboard/reports", { replace: true });
+  }, [location.state, navigate]);
+
+  useEffect(() => {
+    if (!reviewId) return;
+    let cancelled = false;
+    const load = async () => {
+      const result = await getReport(reviewId);
+      const report = result.success && String(result.data?.id) === reviewId ? result.data : null;
+      if (!cancelled) setReviewResult({ locationKey: location.key, report });
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [location.key, reviewId]);
   const [filters, setFilters]           = useState({ type: "All", severity: "All", status: "All" });
   const [activeFilters, setActiveFilters] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
@@ -658,6 +684,19 @@ function AllReports() {
 
   return (
     <div className="allreports-container">
+      {reviewId && !review?.report && (
+        <ReportDialog label="Nearby report preview" onClose={backToDuplicates}>
+          <div className="modal-overlay">
+            <div className="modal-content arm-report-modal arm-review-state">
+              <p role="status">{review ? "This report is no longer available" : "Loading report…"}</p>
+              <button type="button" className="arm-review-back" onClick={backToDuplicates}>
+                <ChevronLeft size={14} aria-hidden="true" />
+                Back to possible duplicates
+              </button>
+            </div>
+          </div>
+        </ReportDialog>
+      )}
       <div className="allreports-filters">
         <div className="allreports-header">
           <Database size={18} style={{ color: "var(--primary)", flexShrink: 0 }} />
@@ -854,7 +893,10 @@ function AllReports() {
         <Pagination page={page} setPage={setPage} total={total} pageSize={pageSize} />
       )}
 
-      {selectedReport && (
+      {reviewId && review?.report && (
+        <ReportModal key={location.key} report={review.report} onClose={backToDuplicates} isNearbyReview />
+      )}
+      {!reviewId && selectedReport && (
         <ReportModal report={selectedReport} onClose={closeModal} />
       )}
     </div>

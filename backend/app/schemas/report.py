@@ -64,6 +64,9 @@ class ReportCreate(AppBaseModel):
     #    frontend's live analysis) — max ~10 small JPEGs, uploaded to
     #    storage and persisted as FrameDetection rows on report creation.
     detection_snapshots: Optional[List[FrameSnapshotIn]] = None
+    duplicate_confirmed: bool = False
+    duplicate_match_ids: list[int] = Field(default_factory=list)
+    duplicate_confirmation_token: Optional[str] = None
 
     # ── Philippine coordinate validation ──────────────────────────────────────
 

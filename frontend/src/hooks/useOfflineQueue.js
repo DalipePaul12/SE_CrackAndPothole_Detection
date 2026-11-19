@@ -18,6 +18,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { reconcileReport, reconcileMedia } from "../api/reports";
 
 const QUEUE_KEY = "snap2fix_offline_report_queue";
+const QUEUE_CHANGED = "snap2fix:offline-queue-changed";
+let processing = null;
 
 // ── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -33,6 +35,7 @@ function readQueue() {
 
 function writeQueue(queue) {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  window.dispatchEvent(new Event(QUEUE_CHANGED));
 }
 
 function makeQueueId() {
@@ -109,30 +112,32 @@ function updateQueueItem(queueId, updates) {
  * saved via enqueueOfflineReport(). Call `onResult` to surface a
  * toast/notification for each queued item as it succeeds or fails.
  */
-export function useOfflineQueue({ onResult } = {}) {
+export function useOfflineQueue({ onResult, userId } = {}) {
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true
   );
-  const [queueCount, setQueueCount] = useState(() => getOfflineQueueCount());
-  const processingRef = useRef(false);
+  const [queueItems, setQueueItems] = useState(readQueue);
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
 
   const refreshQueueCount = useCallback(() => {
-    setQueueCount(getOfflineQueueCount());
+    setQueueItems(readQueue());
   }, []);
 
-  const processQueue = useCallback(async () => {
-    if (processingRef.current) return;
-    if (!navigator.onLine) return;
+  const processQueue = useCallback(() => {
+    if (processing) return processing;
+    if (!navigator.onLine || userId == null) return;
 
-    processingRef.current = true;
-    try {
+    const sync = async () => {
       let queue = readQueue();
 
       let index = 0;
       while (index < queue.length) {
         const item = queue[index];
+        if (String(item.payload?.user_id) !== String(userId) || item.needsConfirmation) {
+          index += 1;
+          continue;
+        }
 
         let reportId = item.reportId;
         const files = item.files ?? (item.file ? [item.file] : []);
@@ -149,6 +154,11 @@ export function useOfflineQueue({ onResult } = {}) {
         try {
           if (!reportId) {
             const result = await reconcileReport(item.payload);
+            if (result.detail?.code === "nearby_duplicate_confirmation_required") {
+              updateQueueItem(item.queueId, { needsConfirmation: result.detail });
+              index += 1;
+              continue;
+            }
             if (!result.success) throw new Error(result.error || "Failed to submit queued report");
             reportId = result.data?.id ?? result.data?.report_id;
             if (!reportId) throw new Error("Server did not return a report ID.");
@@ -174,11 +184,22 @@ export function useOfflineQueue({ onResult } = {}) {
           index += 1;
         }
       }
-    } finally {
-      processingRef.current = false;
+    };
+    processing = sync().finally(() => {
+      processing = null;
       refreshQueueCount();
-    }
-  }, [refreshQueueCount]);
+    });
+    return processing;
+  }, [refreshQueueCount, userId]);
+
+  const resumeQueuedReport = async (queueId, payload) => {
+    await processing;
+    const item = readQueue().find((entry) => entry.queueId === queueId);
+    if (!item || String(item.payload?.user_id) !== String(userId)) return null;
+    updateQueueItem(queueId, { payload, needsConfirmation: null });
+    await processQueue();
+    return readQueue().find((entry) => entry.queueId === queueId);
+  };
 
   useEffect(() => {
     const handleOnline = () => {
@@ -189,6 +210,7 @@ export function useOfflineQueue({ onResult } = {}) {
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    window.addEventListener(QUEUE_CHANGED, refreshQueueCount);
 
     // Attempt a retry on mount too, in case items were queued in a
     // previous session and the app reloaded while already online.
@@ -197,8 +219,11 @@ export function useOfflineQueue({ onResult } = {}) {
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener(QUEUE_CHANGED, refreshQueueCount);
     };
-  }, [processQueue]);
+  }, [processQueue, refreshQueueCount]);
 
-  return { isOnline, queueCount, refreshQueueCount };
+  const confirmationItems = queueItems.filter((item) =>
+    userId != null && String(item.payload?.user_id) === String(userId) && item.needsConfirmation);
+  return { isOnline, queueCount: queueItems.length, refreshQueueCount, confirmationItems, resumeQueuedReport };
 }

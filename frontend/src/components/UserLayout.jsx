@@ -6,6 +6,9 @@ import AppHeader from "./AppHeader";
 import ChatbotWidget from "./ChatbotWidget";
 import { useAuth } from "../hooks/useAuth";
 import { useNotifications } from "../pages/Contexts/NotificationContext";
+import { useOfflineQueue } from "../hooks/useOfflineQueue";
+import { invalidateReportsCache } from "../hooks/useReports";
+import CreateReport from "../pages/Inside-App-User/CreateReport";
 import "./UserLayout.css";
 
 const TYPE_ICON = {
@@ -41,10 +44,15 @@ function UserLayout() {
   const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth < 1024);
   const [toasts, setToasts] = useState([]);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [queuedReviewOpen, setQueuedReviewOpen] = useState(false);
   const timerRef = useRef({});
 
   const { user } = useAuth();
   const { liveNotification } = useNotifications();
+  const { confirmationItems } = useOfflineQueue({
+    userId: user?.public_id ?? user?.id,
+    onResult: ({ success }) => { if (success) invalidateReportsCache(); },
+  });
 
   useEffect(() => {
     if (!liveNotification) return;
@@ -100,8 +108,17 @@ return (
       />
 
       <main className={`user-main-content ${isCollapsed ? 'collapsed' : ''}`}>
+        {confirmationItems.length > 0 && (
+          <section className="nearby-queue nearby-queue-item" aria-label="Queued reports needing confirmation">
+            <strong>Queued reports · Needs confirmation ({confirmationItems.length})</strong>
+            <button type="button" className="btn-modal-secondary" onClick={() => setQueuedReviewOpen(true)}>
+              Review queued reports
+            </button>
+          </section>
+        )}
         <Outlet />
       </main>
+      {queuedReviewOpen && <CreateReport reviewQueued onClose={() => setQueuedReviewOpen(false)} />}
 
       {isSidebarOpen && <div className="sidebar-backdrop" onClick={closeSidebar} />}
 

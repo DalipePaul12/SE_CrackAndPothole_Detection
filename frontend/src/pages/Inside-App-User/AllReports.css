@@ -1826,13 +1826,50 @@ body.dark .modal-title {
 .allreports-table .arm-evidence-cell { width: 92px; --evidence-cover-width: 64px; --evidence-cover-height: 64px; --evidence-cover-radius: var(--radius-md, 12px); }
 .modal-content.arm-report-modal {
   box-sizing: border-box;
-  width: min(900px, calc(100% - 16px));
+  width: min(900px, calc(100% - 24px));
   max-width: 900px;
-  max-height: calc(100dvh - 16px);
+  max-height: calc(100dvh - 24px);
   min-width: 0;
+  padding: clamp(12px, 2vw, 22px);
+  overflow: hidden;
+}
+.arm-report-modal .arm-modal-header { flex-shrink: 0; margin-bottom: 12px; }
+.arm-report-modal .arm-modal-tabs { flex-wrap: wrap; flex-shrink: 0; margin: 0 0 10px; padding-inline: 4px; }
+.arm-report-modal .arm-modal-tab { min-height: 40px; padding: 8px 10px; }
+.arm-modal-body { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.arm-report-modal .arm-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.arm-report-modal .arm-status-progress { margin-bottom: 12px; }
+.arm-nearby-review .arm-detail-grid { gap: 6px; margin-bottom: 0; }
+.arm-nearby-review .arm-detail-item { min-width: 0; padding: 7px 9px; }
+.arm-nearby-review .arm-detail-desc-text { overflow-wrap: anywhere; }
+.arm-review-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 4px 6px;
+  background: transparent;
+  border: 0;
+  color: var(--subtext);
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.arm-review-back:hover { color: var(--primary); text-decoration: underline; }
+.arm-review-back svg { flex-shrink: 0; }
+@media (max-width: 600px) {
+  .arm-review-back { min-height: 40px; }
+}
+.modal-content.arm-review-state {
+  width: min(380px, calc(100% - 24px));
+  gap: 12px;
   overflow: auto;
 }
-.arm-report-modal .arm-modal-tabs { flex-wrap: wrap; flex-shrink: 0; }
-.arm-report-modal .arm-modal-tab { min-height: 40px; }
+.arm-review-state p { margin: 0; }
 @media (max-width: 768px) { .arm-modal-media { --evidence-media-height: 220px; } }
 .arm-modal-media:has(> .report-evidence) { display: block; min-height: 0; padding: clamp(8px, 3vw, 14px); }

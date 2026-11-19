@@ -1,3 +1,4 @@
+import ReportDialog from "../../components/ReportDialog";
 import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "./MySubmissions.css";
@@ -187,22 +188,6 @@ function Lightbox({ items, initialIndex = 0, onClose }) {
   const next = useCallback(() => setIndex((i) => (i + 1) % items.length), [items.length]);
   const prev = useCallback(() => setIndex((i) => (i - 1 + items.length) % items.length), [items.length]);
 
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    document.body.classList.add("report-modal-open");
-    const h = (e) => {
-      if (e.key === "Escape")    onClose();
-      if (e.key === "ArrowRight") next();
-      if (e.key === "ArrowLeft")  prev();
-    };
-    document.addEventListener("keydown", h);
-    return () => {
-      document.body.style.overflow = "";
-      document.body.classList.remove("report-modal-open");
-      document.removeEventListener("keydown", h);
-    };
-  }, [onClose, next, prev]);
-
   const handleTouchStart = (e) => { touchStartXRef.current = e.touches[0].clientX; };
   const handleTouchEnd = (e) => {
     if (touchStartXRef.current == null) return;
@@ -214,12 +199,14 @@ function Lightbox({ items, initialIndex = 0, onClose }) {
   const current = items[index];
 
   return (
+    <ReportDialog label="Image preview" onClose={onClose}>
     <div
       className="sub-lightbox-overlay"
       onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Image preview"
+      onKeyDown={(e) => {
+        if (e.key === "ArrowRight") next();
+        if (e.key === "ArrowLeft") prev();
+      }}
     >
       <div
         className="sub-lightbox-inner"
@@ -252,6 +239,7 @@ function Lightbox({ items, initialIndex = 0, onClose }) {
         )}
       </div>
     </div>
+    </ReportDialog>
   );
 }
 
@@ -370,7 +358,8 @@ function ReportTimeline({ report }) {
 
 function DeleteConfirmModal({ report, onConfirm, onCancel, loading, error }) {
   return (
-    <div className="s2f-modal-overlay" onClick={onCancel} role="dialog" aria-modal="true" aria-labelledby="del-title">
+    <ReportDialog label="Withdraw report" onClose={onCancel}>
+    <div className="s2f-modal-overlay" onClick={onCancel}>
       <div className="sub-confirm-modal" onClick={(e) => e.stopPropagation()}>
         <h3 id="del-title">Withdraw Report?</h3>
         <p>Are you sure you want to withdraw <strong>Report #{report.id}</strong>? This cannot be undone.</p>
@@ -387,6 +376,7 @@ function DeleteConfirmModal({ report, onConfirm, onCancel, loading, error }) {
         </div>
       </div>
     </div>
+    </ReportDialog>
   );
 }
 
@@ -492,16 +482,14 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
   }, [report.id]);
 
   useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.body.classList.add("report-modal-open");
-    const h = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", h);
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
       document.body.classList.remove("report-modal-open");
-      document.removeEventListener("keydown", h);
     };
-  }, [onClose]);
+  }, []);
 
   useEffect(() => { loadComments(); }, [loadComments]);
 
@@ -548,7 +536,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
 
   return (
     <>
-      <div className="s2f-modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <ReportDialog label={`Report #${liveReport.id}`} onClose={onClose}>
+      <div className="s2f-modal-overlay sub-report-overlay" onClick={onClose}>
         <div className="sub-modal-content" onClick={(e) => e.stopPropagation()}>
           <button className="sub-modal-close-btn" onClick={onClose} aria-label="Close">
             <X size={16} />
@@ -746,7 +735,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
                           src={originalUrl}
                           alt="Damage evidence"
                           className="sub-zoomable"
-                          onClick={() => openLightbox(mediaGalleryItems, 0)}
+                          tabIndex={-1}
+                          onClick={(event) => { event.currentTarget.focus(); openLightbox(mediaGalleryItems, 0); }}
                           onError={() => setImgErr1(true)}
                         />
                       )
@@ -810,7 +800,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
                             src={proofUrl}
                             alt="Repair proof"
                             className="sub-zoomable"
-                            onClick={() => openLightbox(mediaGalleryItems, mediaGalleryItems.findIndex((i) => i.label === "Repair Proof"))}
+                            tabIndex={-1}
+                          onClick={(event) => { event.currentTarget.focus(); openLightbox(mediaGalleryItems, mediaGalleryItems.findIndex((i) => i.label === "Repair Proof")); }}
                             onError={() => setImgErr2(true)}
                           />
                         )
@@ -902,6 +893,8 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
         </div>
       </div>
 
+      </ReportDialog>
+
       {lightboxState && (
         <Lightbox
           items={lightboxState.items}
@@ -931,7 +924,7 @@ function ReportCard({ report, onView }) {
   return (
     <div
       className="sub-report-card"
-      onClick={() => onView(report)}
+      onClick={(event) => { event.currentTarget.focus(); onView(report); }}
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onView(report); } }}
       role="button"
@@ -988,7 +981,7 @@ function TableRow({ report, onView }) {
   return (
     <tr
       className="sub-table-row"
-      onClick={() => onView(report)}
+      onClick={(event) => { event.currentTarget.focus(); onView(report); }}
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onView(report); } }}
     >
@@ -1069,6 +1062,7 @@ function EmptyState({ hasFilters, onClear }) {
 function FilterDrawer({ typeFilter, setTypeFilter, sevFilter, setSevFilter, statusFilter, handleStatusChange, hasActiveFilters, handleReset }) {
   const [open, setOpen] = useState(false);
   const drawerRef = useRef(null);
+  const triggerRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -1088,7 +1082,9 @@ function FilterDrawer({ typeFilter, setTypeFilter, sevFilter, setSevFilter, stat
 
   useEffect(() => {
     const handleEsc = (e) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key !== "Escape" || document.querySelector("dialog:modal")) return;
+      setOpen(false);
+      triggerRef.current?.focus();
     };
     if (open) {
       document.addEventListener("keydown", handleEsc);
@@ -1099,6 +1095,7 @@ function FilterDrawer({ typeFilter, setTypeFilter, sevFilter, setSevFilter, stat
   return (
     <div className="sub-filter-drawer-wrap" ref={drawerRef}>
       <button
+        ref={triggerRef}
         className={`sub-filter-toggle-btn ${hasActiveFilters ? "has-active" : ""}`}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}

@@ -1,3 +1,4 @@
+import ReportDialog from "../../components/ReportDialog";
 import ReportEvidence, { hasSubmissionEvidence, hasSubmissionPhotos, submissionMedia } from "../../components/ReportEvidence";
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -127,6 +128,7 @@ export default function AdminManageRequests() {
     } catch {
       showToast("Failed to send message.", "error");
     }
+    if (selectedReport?.id === report.id) setSelected(null);
     setMessageDialog(null);
   };
 
@@ -246,7 +248,11 @@ export default function AdminManageRequests() {
                     <tr
                       key={r.id}
                       className={`amr-clickable-row${checked.has(r.id) ? " amr-row-checked" : ""}`}
-                      onClick={() => setSelected(r)}
+                      tabIndex={0}
+                      onClick={(event) => { event.currentTarget.focus(); setSelected(r); }}
+                      onKeyDown={(event) => {
+                        if (event.target === event.currentTarget && event.key === "Enter") setSelected(r);
+                      }}
                     >
                       <td className="amr-cb-col" onClick={e => e.stopPropagation()}>
                         <input
@@ -348,14 +354,12 @@ export default function AdminManageRequests() {
           navigate={navigate}  
           onClose={() => setSelected(null)}
           onConfirm={(r) => {
-            setSelected(null);
             setConfirmDialog({ id: r.id, name: `Report#${String(r.id).padStart(3, "0")}` });
           }}
           onDecline={(r) => {
-            setSelected(null);
             setDeclineDialog({ id: r.id, name: `Report#${String(r.id).padStart(3, "0")}` });
           }}
-          onMessage={(r) => { setSelected(null); setMessageDialog(r); }}
+          onMessage={setMessageDialog}
           actionLoading={
             actionLoading.has(selectedReport?.id + "-confirm") ||
             actionLoading.has(selectedReport?.id + "-decline")
@@ -431,6 +435,7 @@ function BulkDeclineDialog({ count, onDecline, onCancel, loading }) {
   const [reason, setReason] = useState("");
   const valid = reason.trim().length >= 5;
   return (
+    <ReportDialog label={"Decline selected reports"} onClose={onCancel}>
     <div className="amr-dialog-overlay" onClick={onCancel}>
       <div className="amr-dialog" onClick={e => e.stopPropagation()}>
         <div className="amr-dialog-icon amr-dialog-icon--decline"><XCircle size={28} /></div>
@@ -453,6 +458,7 @@ function BulkDeclineDialog({ count, onDecline, onCancel, loading }) {
         </div>
       </div>
     </div>
+    </ReportDialog>
   );
 }
 
@@ -482,9 +488,10 @@ function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline
   ];
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ReportDialog label={`Report #${r.id}`} onClose={onClose}>
+    <div className="modal-overlay amr-detail-overlay" onClick={onClose}>
       <div className="modal-content amr-detail-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose}><X size={20} /></button>
+        <button type="button" className="modal-close-btn" aria-label="Close report" onClick={onClose}><X size={20} /></button>
 
         <div className="amr-modal-header">
           <div className="amr-modal-id">
@@ -770,11 +777,13 @@ function RequestModal({ report: r, base, navigate, onClose, onConfirm, onDecline
         </div>
       </div>
     </div>
+    </ReportDialog>
   );
 }
 
 function ConfirmActionDialog({ title, message, confirmLabel, confirmClass, onConfirm, onCancel, loading }) {
   return (
+    <ReportDialog label={title} onClose={onCancel}>
     <div className="amr-dialog-overlay" onClick={onCancel}>
       <div className="amr-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="amr-dialog-icon amr-dialog-icon--confirm"><CheckCircle size={28} /></div>
@@ -788,6 +797,7 @@ function ConfirmActionDialog({ title, message, confirmLabel, confirmClass, onCon
         </div>
       </div>
     </div>
+    </ReportDialog>
   );
 }
 
@@ -796,6 +806,7 @@ function DeclineDialog({ name, onDecline, onCancel, loading }) {
   const valid = reason.trim().length >= 5;
 
   return (
+    <ReportDialog label={`Decline ${name}`} onClose={onCancel}>
     <div className="amr-dialog-overlay" onClick={onCancel}>
       <div className="amr-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="amr-dialog-icon amr-dialog-icon--decline"><XCircle size={28} /></div>
@@ -820,6 +831,7 @@ function DeclineDialog({ name, onDecline, onCancel, loading }) {
         </div>
       </div>
     </div>
+    </ReportDialog>
   );
 }
 
@@ -832,6 +844,7 @@ function MessageDialog({ report, onSend, onCancel }) {
   const name  = report.owner?.full_name ?? "the reporter";
 
   return (
+    <ReportDialog label={`Message ${name}`} onClose={onCancel}>
     <div className="amr-dialog-overlay" onClick={onCancel}>
       <div className="amr-dialog amr-dialog--wide" onClick={(e) => e.stopPropagation()}>
         <div className="amr-dialog-icon amr-dialog-icon--message"><Mail size={28} /></div>
@@ -867,5 +880,6 @@ function MessageDialog({ report, onSend, onCancel }) {
         </div>
       </div>
     </div>
+    </ReportDialog>
   );
 }

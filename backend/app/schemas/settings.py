@@ -25,6 +25,7 @@ class AdminSettingsResponse(BaseModel):
     default_lng:  float
     default_zoom: int
     restrict_location: bool
+    nearby_duplicate_check: bool = True
 
     # Notifications (sms_alerts removed — no SMS provider)
     email_alerts:         bool
@@ -81,6 +82,7 @@ class AdminSettingsUpdate(BaseModel):
 
     # Security & Privacy
     require_2fa:               Optional[bool] = None
+    nearby_duplicate_check:    Optional[bool] = None
     password_min_length:       Optional[int]  = Field(None, ge=6, le=64)
     session_timeout:           Optional[int]  = Field(None, ge=5, le=1440)
     data_retention_days:       Optional[int]  = Field(None, ge=1, le=3650)

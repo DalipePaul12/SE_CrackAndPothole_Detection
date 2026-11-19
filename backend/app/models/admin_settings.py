@@ -1,11 +1,11 @@
 """
 AdminSettings — single-row singleton table (id=1) storing all UI-configurable
-system settings. The row is created with defaults on first GET if absent.
+system settings. The row is created with defaults on the first save if absent.
 """
 import secrets
 
 from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Float, Integer, String, Text
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, true
 
 from app.db.base import Base
 
@@ -44,6 +44,7 @@ class AdminSettings(Base):
     default_zoom = Column(Integer,     nullable=False, default=13)
     map_provider = Column(String(32),  nullable=False, default="google")
     restrict_location = Column(Boolean, nullable=False, default=False)
+    nearby_duplicate_check = Column(Boolean, nullable=False, default=True, server_default=true())
 
     # ── Notifications ─────────────────────────────────────────────────────────
     email_alerts        = Column(Boolean,     nullable=False, default=True)

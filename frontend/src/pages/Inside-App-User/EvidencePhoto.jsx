@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FaChevronLeft, FaChevronRight, FaExpand, FaMinus, FaPlus, FaTimes } from "react-icons/fa";
 import SegmentationMask from "../../components/SegmentationMask";
+import { useNativeDialog } from "../../components/ReportDialog";
 import "./CreateReport.css";
 import "../../components/SegmentationMask.css";
 
@@ -88,11 +89,7 @@ export function EvidencePhotoViewer({ photo, onClose, navigation }) {
   const dialog = useRef(null);
   const [zoom, setZoom] = useState(1);
 
-  useEffect(() => {
-    const el = dialog.current;
-    el.showModal();
-    return () => { if (el.open) el.close(); };
-  }, []);
+  useNativeDialog(dialog);
 
   const step = (offset) => {
     setZoom(1);

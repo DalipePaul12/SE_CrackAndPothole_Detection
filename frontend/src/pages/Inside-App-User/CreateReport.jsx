@@ -19,7 +19,7 @@
  */
 
 import React, {
-  useState, useRef, useEffect, useCallback, useMemo,
+  useState, useRef, useEffect, useCallback, useMemo, useId,
 } from "react";
 import ReactDOM from "react-dom";
 import "./CreateReport.css";
@@ -35,8 +35,10 @@ import { useUser } from "../../hooks/useUser";
 import { analyzeRealtimeFrame, analyzeVideo } from "../../api/ml";
 import { EvidencePhotoPreview, EvidencePhotoViewer } from "./EvidencePhoto";
 import { analyzeReportPhoto } from "./photoAnalysis";
-import { reconcileReport, reconcileMedia } from "../../api/reports";
+import { checkNearbyDuplicates, reconcileReport, reconcileMedia } from "../../api/reports";
 import { useOfflineQueue, enqueueOfflineReport } from "../../hooks/useOfflineQueue";
+import ReportDialog from "../../components/ReportDialog";
+import { useLocation, useNavigate } from "react-router-dom";
 import { invalidateReportsCache } from "../../hooks/useReports";
 import PhotoCaptureGuide from "../../components/PhotoCaptureGuide";
 import DetectionOverlay from "../../components/DetectionOverlay";
@@ -582,7 +584,9 @@ function AIAnalysisSummary({
 // ─── Main Component ───────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════════
 
-function CreateReport({ onClose }) {
+function CreateReport({ onClose, reviewQueued = false }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     console.log("[CreateReport] MOUNTED");
     return () => console.log("[CreateReport] UNMOUNTED");
@@ -595,10 +599,16 @@ function CreateReport({ onClose }) {
   }, [profile]);
 
   const userId = useMemo(() => {
-    return profile?.id || profile?.user_id || profile?.uid || null;
+    if (profile?.public_id || profile?.id) return profile.public_id ?? profile.id;
+    try {
+      const cached = JSON.parse(localStorage.getItem("user"));
+      return cached?.public_id ?? cached?.id ?? null;
+    } catch {
+      return null;
+    }
   }, [profile]);
 
-  const [showGuide,    setShowGuide]    = useState(true);
+  const [showGuide,    setShowGuide]    = useState(!reviewQueued);
   const [activeTab,    setActiveTab]    = useState("photo");
   const [showCamera,   setShowCamera]   = useState(false);
   const [videoFile, setFile] = useState(null);
@@ -694,6 +704,26 @@ const [barangayVerified, setBarangayVerified] = useState(true);
   const [pendingUploads, setPendingUploads] = useState(null);
   const [showDiscardModal,  setShowDiscardModal]  = useState(false);
   const [showSubmitModal,   setShowSubmitModal]   = useState(false);
+  const [duplicateReview, setDuplicateReview] = useState(null);
+  const [differentDefect, setDifferentDefect] = useState(false);
+  const duplicateMatchesId = useId();
+  const duplicateMatches = duplicateReview?.result?.matches ?? [];
+  const visibleMatches = duplicateReview?.expanded ? duplicateMatches : duplicateMatches.slice(0, 2);
+  const reviewSubmissionId = duplicateReview?.draft.payload.capture_metadata?.submission_id;
+  const viewingMatch = Boolean(reviewSubmissionId && location.state?.duplicateReview === reviewSubmissionId);
+  const eligibleDamageTypes = [...new Set((isPhoto
+    ? qualifyingPhotos.flatMap(({ analysis }) => analysis.allDetections.map(({ class: label }) => label))
+    : [damageType, secondaryDamage, ...detectionSnapshots.map(({ label }) => label)]
+  ).flatMap((label) => (label ?? "").split("+").map((part) => normalizeDamageType(part.trim())))
+    .filter(Boolean))].sort();
+  const duplicateKey = JSON.stringify([coords?.lat, coords?.lng, eligibleDamageTypes]);
+  const duplicateKeyRef = useRef(duplicateKey);
+  duplicateKeyRef.current = duplicateKey;
+
+  useEffect(() => {
+    setDuplicateReview((review) => review && !review.draft.queueId && review.draft.key !== duplicateKey ? null : review);
+    setDifferentDefect(false);
+  }, [duplicateKey]);
 
   // ── Offline queue toasts ─────────────────────────────────────────────────
   const [offlineToasts, setOfflineToasts] = useState([]);
@@ -705,7 +735,8 @@ const [barangayVerified, setBarangayVerified] = useState(true);
     }, toast.onRetry ? 15000 : 6000);
   }, []);
 
-  const { isOnline } = useOfflineQueue({
+  const { isOnline, confirmationItems, resumeQueuedReport } = useOfflineQueue({
+    userId,
     onResult: ({ success, error, reportId, partial }) => {
       if (success) {
         pushOfflineToast({ type: "success", message: `Queued report #${reportId} submitted successfully.` });
@@ -1376,9 +1407,12 @@ setCameraActive(true);
     setShowSubmitModal(true);
   };
 
-  const submitEvidence = async (payload, files, existingReportId = null) => {
+  const submitEvidence = async ({ payload, files, reportId: existingReportId, key }) => {
     let reportId = existingReportId;
     let remaining = files;
+    if (!navigator.onLine && !payload.user_id) {
+      throw new Error("Could not identify your account offline. Reconnect to submit this draft.");
+    }
     try {
       if (navigator.onLine) {
         if (!reportId) {
@@ -1386,6 +1420,7 @@ setCameraActive(true);
           if (!result.success) {
             const error = new Error(result.error || "Report submission failed.");
             error.status = result.status;
+            if (result.detail?.code === "nearby_duplicate_confirmation_required") error.duplicate = result.detail;
             throw error;
           }
           reportId = result.data?.id ?? result.data?.report_id;
@@ -1400,10 +1435,12 @@ setCameraActive(true);
         await enqueueOfflineReport(payload, remaining, reportId);
       }
     } catch (err) {
+      if (err.duplicate) throw err;
       if (reportId || !(err.status >= 400 && err.status < 500 && err.status !== 408)) {
-        setPendingUploads({ payload, files: remaining, reportId });
+        setPendingUploads({ payload, files: remaining, reportId, key });
       }
       if (!navigator.onLine) {
+        if (!payload.user_id) throw err;
         await enqueueOfflineReport(payload, remaining, reportId);
       } else {
         throw new Error(reportId ? `Report #${reportId} was saved. ${err.message}` : err.message);
@@ -1412,76 +1449,130 @@ setCameraActive(true);
     invalidateReportsCache();
   };
 
-  const handleSubmitConfirm = async () => {
+  const buildSubmissionDraft = () => {
+    const analyses = qualifyingPhotos.map(({ analysis }) => analysis);
+    const ranked = analyses.filter(({ predictionResult }) => normalizeDamageType(predictionResult?.label))
+      .sort((a, b) => b.predictionResult.confidence - a.predictionResult.confidence
+        || a.predictionResult.label.localeCompare(b.predictionResult.label));
+    const primary = ranked[0] ?? analyses[0];
+    const authenticity = analyses.find(({ imageType }) => imageType === "AI-GENERATED") ?? primary;
+    const reportSeverity = ranked.some(({ predictionResult }) => normalizeSeverity(predictionResult.severity) === "CRITICAL")
+      ? "CRITICAL" : normalizeSeverity(primary?.predictionResult?.severity);
+    const primaryLabel = normalizeDamageType(primary?.predictionResult?.label);
+    const photoType = eligibleDamageTypes.includes(primaryLabel) ? primaryLabel : eligibleDamageTypes[0];
+    const reportPayloadType = DAMAGE_TYPE_BACKEND[isPhoto ? photoType : damageType] ?? null;
+    const reportPayload = {
+      user_id: userId, reporter_name: reporterName,
+      latitude: coords.lat, longitude: coords.lng,
+      barangay, street_name: streetName || null,
+      city: city?.trim() || null,
+      description: additionalInfo?.trim() || null,
+      ai_damage_type: reportPayloadType,
+      ai_severity: SEVERITY_BACKEND[isPhoto ? reportSeverity : severity] ?? null,
+      ai_confidence: (isPhoto ? primary?.predictionResult?.confidence : aiConfidence) ?? 0,
+      is_flagged_fake: (isPhoto ? authenticity?.imageType : imageType) === "AI-GENERATED",
+      fake_confidence: (isPhoto ? authenticity?.hfConfidence : hfConfidence) ?? 0,
+      report_type: isPhoto ? "image" : "video",
+      is_hybrid: isPhoto ? eligibleDamageTypes.length > 1 : isHybrid,
+      secondary_damage: isPhoto
+        ? DAMAGE_TYPE_BACKEND[eligibleDamageTypes.find((type) => DAMAGE_TYPE_BACKEND[type] !== reportPayloadType)] ?? null
+        : DAMAGE_TYPE_BACKEND[normalizeDamageType(secondaryDamage)] ?? null,
+      detection_note: detectionNote ?? null,
+      detection_snapshots: !isPhoto && detectionSnapshots.length ? detectionSnapshots.map((s) => ({
+        frame: s.frame, timestamp_seconds: s.timestamp_seconds ?? null,
+        label: s.label, confidence: s.confidence, image_b64: s.image_b64,
+      })) : null,
+      ai_validation_status: (isPhoto ? authenticity?.hfStatus : hfStatus) ?? null,
+      ai_validation_confidence: (isPhoto ? authenticity?.hfConfidence : hfConfidence) ?? null,
+      ai_validation_model: (isPhoto ? authenticity?.hfModel : videoHfModel) ?? null,
+      requires_admin_review: requiresReview,
+      review_reason: (isPhoto ? analyses.find(({ requiresReview }) => requiresReview)?.reviewReason : reviewReason) ?? null,
+      disclaimer_accepted: disclaimerAccepted,
+      capture_metadata: {
+        submission_id: crypto.randomUUID(),
+        angle_degrees: phoneAngle !== null ? Math.round(phoneAngle) : null,
+        angle_valid: angleValid,
+        estimated_distance_text: (isPhoto ? primary?.predictionResult : predictionResult)?.distance?.text ?? null,
+        distance_method: "bbox_area_estimation",
+      },
+    };
+
+    const files = (isPhoto ? qualifyingPhotos.map(({ file }) => file) : [file])
+      .map((file) => ({ file, uploadId: crypto.randomUUID() }));
+    return { payload: reportPayload, files, key: duplicateKey };
+  };
+
+  const openDuplicateReview = (draft, result, error = "") => {
+    setDifferentDefect(false);
+    setDuplicateReview({ draft, result, error, expanded: false });
+  };
+
+  const runSubmission = async (draft, lookup = false) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setIsSubmitting(true);
     setShowSubmitModal(false);
     setFormError("");
-
     try {
-      if (pendingUploads) {
-        const { payload, files, reportId } = pendingUploads;
-        await submitEvidence(payload, files, reportId);
-      } else {
-        const analyses = qualifyingPhotos.map(({ analysis }) => analysis);
-        const ranked = analyses.filter(({ predictionResult }) => normalizeDamageType(predictionResult?.label))
-          .sort((a, b) => b.predictionResult.confidence - a.predictionResult.confidence
-            || a.predictionResult.label.localeCompare(b.predictionResult.label));
-        const primary = ranked[0] ?? analyses[0];
-        const authenticity = analyses.find(({ imageType }) => imageType === "AI-GENERATED") ?? primary;
-        const reportSeverity = ranked.some(({ predictionResult }) => normalizeSeverity(predictionResult.severity) === "CRITICAL")
-          ? "CRITICAL" : normalizeSeverity(primary?.predictionResult?.severity);
-        const reportPayload = {
-          user_id: userId, reporter_name: reporterName,
-          latitude: coords.lat, longitude: coords.lng,
-          barangay, street_name: streetName || null,
-          city: city?.trim() || null,
-          description: additionalInfo?.trim() || null,
-          ai_damage_type: DAMAGE_TYPE_BACKEND[isPhoto ? normalizeDamageType(primary?.predictionResult?.label) : damageType] ?? null,
-          ai_severity: SEVERITY_BACKEND[isPhoto ? reportSeverity : severity] ?? null,
-          ai_confidence: (isPhoto ? primary?.predictionResult?.confidence : aiConfidence) ?? 0,
-          is_flagged_fake: (isPhoto ? authenticity?.imageType : imageType) === "AI-GENERATED",
-          fake_confidence: (isPhoto ? authenticity?.hfConfidence : hfConfidence) ?? 0,
-          report_type: isPhoto ? "image" : "video",
-          is_hybrid: isHybrid,
-          secondary_damage: secondaryDamage ?? null,
-          detection_note: detectionNote ?? null,
-          detection_snapshots: !isPhoto && detectionSnapshots.length ? detectionSnapshots.map((s) => ({
-            frame: s.frame, timestamp_seconds: s.timestamp_seconds ?? null,
-            label: s.label, confidence: s.confidence, image_b64: s.image_b64,
-          })) : null,
-          ai_validation_status: (isPhoto ? authenticity?.hfStatus : hfStatus) ?? null,
-          ai_validation_confidence: (isPhoto ? authenticity?.hfConfidence : hfConfidence) ?? null,
-          ai_validation_model: (isPhoto ? authenticity?.hfModel : videoHfModel) ?? null,
-          requires_admin_review: requiresReview,
-          review_reason: (isPhoto ? analyses.find(({ requiresReview }) => requiresReview)?.reviewReason : reviewReason) ?? null,
-          disclaimer_accepted: disclaimerAccepted,
-          capture_metadata: {
-            submission_id: crypto.randomUUID(),
-            angle_degrees: phoneAngle !== null ? Math.round(phoneAngle) : null,
-            angle_valid: angleValid,
-            estimated_distance_text: (isPhoto ? primary?.predictionResult : predictionResult)?.distance?.text ?? null,
-            distance_method: "bbox_area_estimation",
-          },
-        };
-
-        const files = (isPhoto ? qualifyingPhotos.map(({ file }) => file) : [file])
-          .map((file) => ({ file, uploadId: crypto.randomUUID() }));
-        await submitEvidence(reportPayload, files);
+      if (lookup && (navigator.onLine || draft.queueId)) {
+        const result = await checkNearbyDuplicates(draft.payload);
+        if (!draft.queueId && draft.key !== duplicateKeyRef.current) return;
+        if (!result.success || !Array.isArray(result.data?.matches)) {
+          openDuplicateReview(draft, null, true);
+          return;
+        }
+        if (result.data.matches.length) {
+          openDuplicateReview(draft, result.data);
+          return;
+        }
       }
+      if (draft.queueId) {
+        const remaining = await resumeQueuedReport(draft.queueId, draft.payload);
+        if (remaining?.needsConfirmation) {
+          openDuplicateReview(draft, remaining.needsConfirmation);
+          return;
+        }
+        setDuplicateReview(null);
+        invalidateReportsCache();
+        return;
+      }
+      await submitEvidence(draft);
+      setDuplicateReview(null);
       setPendingUploads(null);
       setSubmitSuccess(true);
       setTimeout(onClose, 600);
     } catch (err) {
-      setFormError(err.message || "Submission failed.");
-      if (String(err.message).includes("out_of_bounds")) {
-        setFormError("This location is outside the supported service area.");
+      if (err.duplicate) {
+        setPendingUploads(null);
+        if (draft.key === duplicateKeyRef.current) openDuplicateReview(draft, err.duplicate);
+      } else {
+        setDuplicateReview(null);
+        setFormError(err.message || "Submission failed.");
       }
     } finally {
       setIsSubmitting(false);
       submittingRef.current = false;
     }
+  };
+
+  const handleSubmitConfirm = () => runSubmission(pendingUploads ?? buildSubmissionDraft(), !pendingUploads);
+
+  const reviewQueuedDraft = (item) => runSubmission({
+    queueId: item.queueId, payload: item.payload, files: item.files,
+  }, true);
+
+  const confirmDuplicateReview = () => {
+    const { draft, result } = duplicateReview;
+    if (!differentDefect || (!draft.queueId && draft.key !== duplicateKeyRef.current)) return;
+    runSubmission({
+      ...draft,
+      payload: {
+        ...draft.payload,
+        duplicate_confirmed: true,
+        duplicate_match_ids: result.matches.map(({ id }) => id),
+        duplicate_confirmation_token: result.confirmation_token,
+      },
+    });
   };
 
   // ── Derived values ─────────────────────────────────────────────────────────
@@ -1534,7 +1625,7 @@ setCameraActive(true);
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
   return ReactDOM.createPortal(
-    <div className="snap-overlay">
+    <div className="snap-overlay" style={viewingMatch ? { display: "none" } : undefined}>
       {viewerOpen && selectedPhoto && <EvidencePhotoViewer photo={selectedPhoto} onClose={() => setViewerOpen(false)} />}
       <div className="snap-modal">
 
@@ -1550,6 +1641,21 @@ setCameraActive(true);
             <FaExclamationTriangle aria-hidden="true" />
             <span>You're offline — submitting will save this report and send it automatically once you're back online.</span>
           </div>
+        )}
+
+        {confirmationItems.length > 0 && (
+          <section className="nearby-queue" aria-label="Queued reports needing confirmation">
+            <strong>Queued reports · Needs confirmation</strong>
+            {confirmationItems.map((item) => (
+              <div className="nearby-queue-item" key={item.queueId}>
+                <span>{item.payload.street_name || item.payload.barangay || "Saved report"}</span>
+                <button type="button" className="btn-modal-secondary"
+                  disabled={isSubmitting || !isOnline} onClick={() => reviewQueuedDraft(item)}>
+                  Review draft
+                </button>
+              </div>
+            ))}
+          </section>
         )}
 
         {offlineToasts.length > 0 && (
@@ -2109,6 +2215,97 @@ setCameraActive(true);
               </div>
             </div>
           </div>
+        )}
+
+        {duplicateReview && !viewingMatch && (
+          <ReportDialog label={duplicateReview.error ? "Couldn’t check for nearby reports" : "Possible duplicate reports nearby"}
+            onClose={() => { if (!submittingRef.current) setDuplicateReview(null); }}>
+            <div className="modal-backdrop nearby-duplicate-backdrop">
+              <div className="modal-box nearby-duplicate-dialog">
+                <header>
+                  <h3>{duplicateReview.error ? "Couldn’t check for nearby reports" : "Possible duplicate reports nearby"}</h3>
+                  {duplicateReview.error ? (
+                    <p role="alert">Your draft is still here. Try again to check for nearby reports.</p>
+                  ) : (
+                    <p>We found nearby reports that may show the same damage. Review them before submitting. If this is a different defect, you can continue.</p>
+                  )}
+                </header>
+                {duplicateMatches.length > 0 && (
+                  <div className="nearby-duplicate-list-header">
+                    <span>{duplicateMatches.length === 1 ? "1 match" : `${duplicateMatches.length} matches`}</span>
+                    {duplicateMatches.length > 2 && (
+                      <button type="button" className="btn-modal-secondary"
+                        aria-controls={duplicateMatchesId} aria-expanded={duplicateReview.expanded}
+                        onClick={() => setDuplicateReview((review) => ({ ...review, expanded: !review.expanded }))}>
+                        {duplicateReview.expanded ? "Show fewer" : `Show ${duplicateMatches.length - 2} more reports`}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {(duplicateReview.draft.queueId || visibleMatches.length > 0) && (
+                  <div className="nearby-duplicate-results">
+                    {duplicateReview.draft.queueId && (
+                      <div className="nearby-queued-draft">
+                        <strong>Queued draft</strong>
+                        <div>{[duplicateReview.draft.payload.street_name, duplicateReview.draft.payload.barangay].filter(Boolean).join(", ")}</div>
+                        <div>{duplicateReview.draft.payload.description}</div>
+                        <div className="nearby-queued-evidence">
+                          {(duplicateReview.draft.files ?? []).map((file) => (
+                            file.type?.startsWith("image/") && file.dataUrl
+                              ? <img key={file.uploadId} src={file.dataUrl} alt={file.name} />
+                              : <span key={file.uploadId}>{file.name}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!duplicateReview.error && (
+                      <ul id={duplicateMatchesId} className="nearby-duplicate-matches">
+                        {visibleMatches.map((match) => (
+                          <li key={match.id}>
+                            <div className="nearby-duplicate-report">
+                              <strong>Report #{match.id}</strong>
+                              <span>
+                                {match.damage_types.join(" / ")} · {match.status.replaceAll("_", " ")}
+                                {match.distance_meters != null && ` · ${match.distance_meters} m`}
+                              </span>
+                              {match.street_name && <span>{match.street_name}</span>}
+                            </div>
+                            <button type="button" className="btn-modal-secondary"
+                              aria-label={`View report #${match.id}`}
+                              onClick={() => navigate(`/dashboard/reports?nearby_report=${match.id}`, {
+                                state: { duplicateReview: reviewSubmissionId },
+                              })}>
+                              View report
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+                <footer className="nearby-duplicate-footer">
+                  {!duplicateReview.error && (
+                    <label className="nearby-duplicate-check">
+                      <input type="checkbox" checked={differentDefect} disabled={isSubmitting}
+                        onChange={(event) => setDifferentDefect(event.target.checked)} />
+                      This is a different defect
+                    </label>
+                  )}
+                  <div className="modal-actions">
+                    <button type="button" className="btn-modal-secondary" disabled={isSubmitting}
+                      onClick={() => setDuplicateReview(null)}>Back</button>
+                    {duplicateReview.error ? (
+                      <button type="button" className="btn-modal-primary" disabled={isSubmitting || !isOnline}
+                        onClick={() => runSubmission(duplicateReview.draft, true)}>Retry</button>
+                    ) : (
+                      <button type="button" className="btn-modal-primary" disabled={!differentDefect || isSubmitting}
+                        onClick={confirmDuplicateReview}>Continue submitting</button>
+                    )}
+                  </div>
+                </footer>
+              </div>
+            </div>
+          </ReportDialog>
         )}
 
         {showSubmitModal && (

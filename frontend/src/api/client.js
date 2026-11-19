@@ -112,12 +112,15 @@ console.log(">>> FETCH", `${BASE_URL}${API_PREFIX}${endpoint}`, "token:", token 
 
     if (!response.ok) {
       // 🔍 DEBUG: always log the full error body so 422 details are visible
-console.error(`[API Error ${response.status}] ${endpoint}:`, JSON.stringify(data, null, 2));
       const detail = data?.detail;
+      if (detail?.code !== "nearby_duplicate_confirmation_required") {
+        console.error(`[API Error ${response.status}] ${endpoint}:`, JSON.stringify(data, null, 2));
+      }
       return {
         success: false,
         data:    null,
         status:  response.status,
+        detail,
         error:   data?.error || (typeof detail === "string" ? detail : detail?.message) || `Request failed (${response.status})`,
       };
     }
