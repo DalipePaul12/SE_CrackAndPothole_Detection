@@ -50,9 +50,14 @@ async def get_settings(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> AdminSettingsResponse:
-    """Return the current admin settings, creating the singleton row if absent."""
-    row = await _get_or_create(db)
-    return row
+    """Return saved settings or the model defaults without creating a row."""
+    row = await db.get(AdminSettings, _SINGLETON_ID)
+    if row is not None:
+        return row
+    return AdminSettingsResponse(**{
+        name: AdminSettings.__table__.columns[name].default.arg
+        for name in AdminSettingsResponse.model_fields if name != "updated_at"
+    })
 
 
 @router.put("", response_model=AdminSettingsResponse)

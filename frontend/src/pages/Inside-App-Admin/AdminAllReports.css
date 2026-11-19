@@ -2094,8 +2094,6 @@
   color: var(--text);
   width: 100%;
   max-width: min(760px, calc(100vw - 48px));
-  max-height: 96vh;
-  height: 96vh;
   border-radius: 20px;
   padding: 0;
   position: relative;
@@ -2138,7 +2136,7 @@
   font-size: 0.68rem; font-weight: 700; padding: 1px 6px; min-width: 18px; text-align: center;
 }
 
-.vmr-body { padding: 14px 24px; overflow-y: auto; flex: 1; min-height: 0; }
+.vmr-body { padding: 24px 28px 28px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .vmr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .vmr-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; min-width: 0; }
 .vmr-card--full { grid-column: 1 / -1; }
@@ -2306,3 +2304,30 @@
 .td-thumb > .report-evidence--compact { margin-inline: auto; --evidence-cover-width: 42px; --evidence-cover-height: 42px; --evidence-cover-radius: 50%; --evidence-cover-border: 1.5px solid var(--border); }
 .aar-table-card, .aar-table-scroll { min-width: 0; max-width: 100%; }
 .vmr-media-tab { min-width: 0; --evidence-media-height: 380px; }
+
+.modal-overlay.report-detail-overlay {
+  align-items: center;
+  height: 100dvh;
+  box-sizing: border-box;
+  padding: clamp(12px, 3vw, 24px);
+  overflow: hidden;
+  background: var(--overlay);
+  backdrop-filter: blur(4px);
+}
+.report-detail-overlay > .modal-content.vmr-tabbed-modal {
+  height: auto;
+  max-width: 760px;
+  max-height: 100%;
+  box-shadow: var(--shadow-xl);
+  scrollbar-gutter: auto;
+}
+.report-detail-overlay .vmr-header { flex: 0 0 auto; padding: 24px 56px 16px 28px; }
+.report-detail-overlay .vmr-header-id { flex-wrap: wrap; }
+.report-detail-overlay .vmr-body { min-width: 0; overflow-x: hidden; overscroll-behavior: contain; overflow-wrap: anywhere; }
+@media (max-width: 768px) {
+  .report-detail-overlay .vmr-header { padding: 16px 56px 12px 16px; }
+  .report-detail-overlay .vmr-body { padding: 16px; }
+  .report-detail-overlay .vmr-grid { grid-template-columns: minmax(0, 1fr); }
+  .report-detail-overlay .vmr-tabs { flex-wrap: wrap; overflow: visible; }
+  .report-detail-overlay .vmr-tab { padding: 10px 8px; }
+}

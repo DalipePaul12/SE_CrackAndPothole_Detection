@@ -119,3 +119,5 @@ replit.nix
 .config/
 .cache/
 .upm/
+# Playwright CLI output (may contain credentials)
+.playwright-cli/

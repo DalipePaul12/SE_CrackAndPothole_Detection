@@ -38,6 +38,7 @@ function fromApi(d) {
     digestFrequency:          d.digest_frequency,
     criticalAlertSound:       d.critical_alert_sound,
     require2FA:               d.require_2fa,
+    nearbyDuplicateCheck:     d.nearby_duplicate_check ?? true,
     passwordMinLength:        d.password_min_length,
     sessionTimeout:           d.session_timeout,
     allowPublicRegistration:  d.allow_public_registration,
@@ -68,6 +69,7 @@ function toApi(s) {
     digest_frequency:          s.digestFrequency,
     critical_alert_sound:      s.criticalAlertSound,
     require_2fa:               s.require2FA,
+    nearby_duplicate_check:    s.nearbyDuplicateCheck,
     password_min_length:       s.passwordMinLength,
     session_timeout:           s.sessionTimeout,
     allow_public_registration: s.allowPublicRegistration,
@@ -86,7 +88,7 @@ const DEFAULTS = {
   defaultLat: 14.5995, defaultLng: 120.9842, defaultZoom: 13,
   restrictLocation: false,
   emailAlerts: true, pushAlerts: true, digestFrequency: "daily", criticalAlertSound: true,
-  require2FA: false, passwordMinLength: 8, sessionTimeout: 60,
+  require2FA: false, nearbyDuplicateCheck: true, passwordMinLength: 8, sessionTimeout: 60,
   allowPublicRegistration: false,
   maintenanceMode: false,
   maintenanceMessage: "System under maintenance. Please check back shortly.",
@@ -561,6 +563,18 @@ const AdminSettings = () => {
                     />
                     <span className="toggle-slider"></span>
                     Require 2FA for All  Accounts
+                  </label>
+                </div>
+                <div className="form-group full-width">
+                  <label className="toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={settings.nearbyDuplicateCheck}
+                      onChange={(e) => handleChange("nearbyDuplicateCheck", e.target.checked)}
+                      disabled={loading}
+                    />
+                    <span className="toggle-slider"></span>
+                    Nearby duplicate check
                   </label>
                 </div>
                 <div className="form-group">

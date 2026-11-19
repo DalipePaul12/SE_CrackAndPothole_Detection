@@ -1917,9 +1917,9 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
 }
 /* ── Body ───────────────────────────────────────────────────────── */
 .vmr-body {
-  padding: 20px 24px;
+  padding: 24px 28px 28px;
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
 }
 

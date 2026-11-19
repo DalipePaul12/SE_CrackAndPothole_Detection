@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { EvidencePhotoPreview, EvidencePhotoViewer } from "../pages/Inside-App-User/EvidencePhoto";
 import { normalizePrediction } from "./SegmentationMask";
+import { useNativeDialog } from "./ReportDialog";
 import { resolveMediaUrl } from "../utils/mediaUrl";
 import "./ReportEvidence.css";
 
@@ -113,13 +114,7 @@ export default function ReportEvidence({ report, compact = false, showProof = fa
   const index = group.findIndex(({ id }) => id === selected);
   const current = group[index];
   const allDetections = photos.flatMap((photo) => photo.analysis.allDetections);
-  useEffect(() => {
-    if (!galleryOpen) return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    dialog.showModal();
-    return () => { if (dialog.open) dialog.close(); };
-  }, [galleryOpen]);
+  useNativeDialog(dialogRef, galleryOpen);
 
   if (!photos.length && !video) return null;
   const gallery = (

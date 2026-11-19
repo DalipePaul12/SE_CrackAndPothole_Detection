@@ -78,7 +78,7 @@ from app.schemas.report import (
     ReportResponse,
     ReportUpdate,
 )
-from app.services import report_service, summary_service
+from app.services import duplicate_detection, report_service, summary_service
 from app.services.notification_service import notify_background
 from app.services.location_service import is_inside_malabon
 from app.utils.geo import calculate_distance
@@ -377,6 +377,26 @@ async def get_submission(
     return ReportResponse.model_validate(await _fetch_report_or_404(db, report_id))
 
 
+@router.get("/nearby-duplicates")
+@limiter.limit("60/minute")
+async def nearby_duplicates(
+    request: Request,
+    latitude: float = Query(..., ge=4.5, le=21.5),
+    longitude: float = Query(..., ge=116.0, le=127.0),
+    damage_types: list[DamageType] = Query(default=[]),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.citizen:
+        raise HTTPException(status_code=403, detail="Only citizens can check their nearby reports.")
+    types = duplicate_detection.normalize_damage_types(*damage_types)
+    enabled = await db.scalar(select(AdminSettings.nearby_duplicate_check).where(AdminSettings.id == 1))
+    matches = [] if enabled is False else await duplicate_detection.find_nearby_matches(
+        db, current_user.id, latitude, longitude, types,
+    )
+    return duplicate_detection.confirmation_payload(current_user.id, latitude, longitude, types, matches)
+
+
 @router.post("", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
 async def create_report(
@@ -413,6 +433,28 @@ async def create_report(
                     "message": "This location is outside the supported service area.",
                 },
             )
+
+    if current_user.role == UserRole.citizen and (admin_settings is None or admin_settings.nearby_duplicate_check is not False):
+        types = duplicate_detection.normalize_damage_types(
+            data.ai_damage_type, data.secondary_damage,
+            *(snapshot.label for snapshot in data.detection_snapshots or []),
+        )
+        if types:
+            # Serialize distinct submissions by the same owner through the duplicate check and insert.
+            await db.execute(select(func.pg_advisory_xact_lock(
+                func.hashtextextended(f"nearby-report:{current_user.id}", 0)
+            )))
+            matches = await duplicate_detection.find_nearby_matches(
+                db, current_user.id, data.latitude, data.longitude, types,
+            )
+            if matches and not duplicate_detection.confirmation_is_valid(data, current_user.id, types, matches):
+                raise HTTPException(status_code=409, detail={
+                    "code": "nearby_duplicate_confirmation_required",
+                    "message": "Confirm that this is a different defect.",
+                    **duplicate_detection.confirmation_payload(
+                        current_user.id, data.latitude, data.longitude, types, matches,
+                    ),
+                })
 
     report = await report_service.create_report(db, data, current_user.id)
 

@@ -1,3 +1,4 @@
+import ReportDialog from "../../components/ReportDialog";
 import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -805,8 +806,9 @@ export default function AdminAllReports() {
 
         {/* ── Bulk Decline reason modal ─────────────────────────────────────── */}
         {bulkDeclineOpen && (
+          <ReportDialog label="Decline reports" onClose={() => setBulkDeclineOpen(false)}>
           <div className="bdr-overlay" onClick={(e) => { if (e.target === e.currentTarget) setBulkDeclineOpen(false); }}>
-            <div className="bdr-box" role="dialog" aria-modal="true" aria-labelledby="bdr-title">
+            <div className="bdr-box">
               <div className="bdr-header">
                 <XCircle size={20} className="bdr-icon" />
                 <h3 id="bdr-title" className="bdr-title">
@@ -823,7 +825,6 @@ export default function AdminAllReports() {
                 placeholder="e.g. Duplicate report, insufficient evidence…"
                 value={bulkDeclineReason}
                 onChange={(e) => setBulkDeclineReason(e.target.value)}
-                autoFocus
               />
               <div className="bdr-footer">
                 <button className="bdr-cancel-btn" onClick={() => setBulkDeclineOpen(false)}>
@@ -838,6 +839,7 @@ export default function AdminAllReports() {
               </div>
             </div>
           </div>
+          </ReportDialog>
         )}
 
         {error && (
@@ -918,7 +920,9 @@ export default function AdminAllReports() {
                       <tr
                         key={r.id}
                         className={`aar-row ${isSelected ? "row-selected" : ""} ${isCritical ? "row-critical" : ""}`}
-                        onClick={() => setSelectedReport(r)}
+                        tabIndex={0}
+                        onClick={(event) => { event.currentTarget.focus(); setSelectedReport(r); }}
+                        onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === "Enter") setSelectedReport(r); }}
                       >
                         <td className="td-check" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(r.id)} />
@@ -944,7 +948,8 @@ export default function AdminAllReports() {
                               className="thumb-img"
                               src={thumbUrl}
                               alt="Damage preview"
-                              onClick={() => setSelectedReport(r)}
+                              tabIndex={-1}
+                              onClick={(event) => { event.currentTarget.focus(); setSelectedReport(r); }}
                               onError={(e) => { e.target.style.display = "none"; }}
                             />
                           ) : (
@@ -1086,6 +1091,7 @@ export default function AdminAllReports() {
         <ConfirmChangesModal
           variant="danger"
           title="Delete Reports"
+          nativeDialog
           message={
             selectedIds.size === 1
               ? `Permanently delete report ${padId([...selectedIds][0])}? This cannot be undone.`
@@ -1290,23 +1296,6 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   }, [r.status, project?.id]);
 
   useEffect(() => {
-    const fn = (e) => { if (e.key === "Escape" && lightboxItems.length === 0) onClose(); };
-    document.addEventListener("keydown", fn);
-    return () => document.removeEventListener("keydown", fn);
-  }, [onClose, lightboxItems.length]);
-
-  useEffect(() => {
-    if (lightboxItems.length === 0) return;
-    const fn = (e) => {
-      if (e.key === "Escape")    closeLightbox();
-      if (e.key === "ArrowRight") lightboxNext();
-      if (e.key === "ArrowLeft")  lightboxPrev();
-    };
-    document.addEventListener("keydown", fn);
-    return () => document.removeEventListener("keydown", fn);
-  }, [lightboxItems.length]);
-
-  useEffect(() => {
     const token = localStorage.getItem("access_token");
     fetch(`${BASE_URL}/api/v1/reports/${r.id}/comments`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -1401,7 +1390,8 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
   ];
 
 return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ReportDialog label={`Report #${r.id}`} onClose={onClose}>
+    <div className="modal-overlay report-detail-overlay" onClick={onClose}>
       <div className="modal-content vmr-tabbed-modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close modal"><X size={18} /></button>
 
@@ -1862,13 +1852,14 @@ return (
                             alt={ph.file_name ?? "Completion photo"}
                             className="vmr-compl-photo"
                             style={{ cursor: "pointer" }}
-                            onClick={() => openLightbox(
+                            tabIndex={-1}
+                            onClick={(event) => { event.currentTarget.focus(); openLightbox(
                               completion.completion_photos.map((p) => ({
                                 url: resolveMediaUrl(p.file_url),
                                 label: p.file_name ?? "Completion photo",
                               })),
                               phIdx
-                            )}
+                            ); }}
                           />
                         ))}
                       </div>
@@ -1882,9 +1873,14 @@ return (
         </div>
       </div>
       {lightboxUrl && (
+        <ReportDialog label="Image preview" onClose={closeLightbox}>
         <div
           className="vmr-lightbox-overlay"
           onClick={closeLightbox}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight") lightboxNext();
+            if (e.key === "ArrowLeft") lightboxPrev();
+          }}
         >
           <button
             className="vmr-lightbox-close"
@@ -1925,7 +1921,9 @@ return (
             )}
           </div>
         </div>
+        </ReportDialog>
       )}
     </div>
+    </ReportDialog>
   );
 }

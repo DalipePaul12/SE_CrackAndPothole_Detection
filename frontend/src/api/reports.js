@@ -51,7 +51,7 @@ function buildQS(params = {}) {
 
 function unwrap(res) {
   if (res?.success === false) {
-    return { success: false, data: null, status: res.status, error: res.error ?? "Request failed." };
+    return { success: false, data: null, status: res.status, detail: res.detail, error: res.error ?? "Request failed." };
   }
   return { success: true, data: res?.data ?? res, error: null };
 }
@@ -62,6 +62,17 @@ function unwrap(res) {
 export async function createReport(data) {
   const res = await api.post("/reports", data);
   return unwrap(res);
+}
+
+export async function checkNearbyDuplicates(payload) {
+  const params = new URLSearchParams({ latitude: payload.latitude, longitude: payload.longitude });
+  const labels = [payload.ai_damage_type, payload.secondary_damage,
+    ...(payload.detection_snapshots ?? []).map(({ label }) => label)];
+  const types = new Set(labels.flatMap((label) => (label ?? "").toLowerCase().split("+").map((part) => part.trim())));
+  for (const type of ["crack", "pothole"]) {
+    if (types.has(type)) params.append("damage_types", type);
+  }
+  return unwrap(await api.get(`/reports/nearby-duplicates?${params}`));
 }
 
 // Alias for backwards compatibility
@@ -167,7 +178,7 @@ export async function reconcileReport(payload) {
   }
 
   const created = await createReport(payload);
-  if (created.success) return created;
+  if (created.success || created.detail?.code === "nearby_duplicate_confirmation_required") return created;
   const confirmed = await api.get(endpoint);
   if (confirmed.success) return confirmed;
   if (confirmed.status === 404) return created;

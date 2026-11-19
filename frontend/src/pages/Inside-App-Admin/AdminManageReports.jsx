@@ -1,3 +1,4 @@
+import ReportDialog from "../../components/ReportDialog";
 import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -966,11 +967,12 @@ function AdminManageReports() {
 
       {/* ── Bulk action confirmation dialog ──────────────────────────────── */}
       {bulkConfirm && (
+        <ReportDialog label="Confirm bulk action" onClose={() => setBulkConfirm(null)}>
         <div
           className="bmr-overlay"
           onClick={(e) => { if (e.target === e.currentTarget) setBulkConfirm(null); }}
         >
-          <div className="bmr-box" role="dialog" aria-modal="true" aria-labelledby="bmr-title">
+          <div className="bmr-box">
             <div className="bmr-header">
               {bulkConfirm.danger ? <IcoBan size={20} className="bmr-icon bmr-icon--danger" /> : <IcoCheck size={20} className="bmr-icon bmr-icon--success" />}
               <h3 id="bmr-title" className="bmr-title">
@@ -995,6 +997,7 @@ function AdminManageReports() {
             </div>
           </div>
         </div>
+        </ReportDialog>
       )}
 
       <div className="manage-table-container">
@@ -1058,7 +1061,9 @@ function AdminManageReports() {
                   <tr
                     key={r.id}
                     className={`clickable-row ${isSelec ? "selected-row" : ""} ${isCrit ? "critical-row" : ""}`}
-                    onClick={() => setViewReport(r)}
+                    tabIndex={0}
+                    onClick={(event) => { event.currentTarget.focus(); setViewReport(r); }}
+                    onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === "Enter") setViewReport(r); }}
                   >
                     <td className="col-check" onClick={e => { e.stopPropagation(); toggleOne(r.id); }}>
                       <input type="checkbox" checked={isSelec} onChange={() => toggleOne(r.id)} className="amr-cb" />
@@ -1097,7 +1102,8 @@ function AdminManageReports() {
                           src={media.url}
                           alt=""
                           className="photo-thumb"
-                          onClick={e => { e.stopPropagation(); setViewReport(r); }}
+                          tabIndex={-1}
+                          onClick={e => { e.stopPropagation(); e.currentTarget.focus(); setViewReport(r); }}
                           onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                         />
                       ) : null}
@@ -1268,18 +1274,20 @@ function AdminManageReports() {
 
 function ModalShell({ maxWidth = 860, onClose, children }) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ReportDialog label="Manage report" onClose={onClose}>
+    <div className="modal-overlay report-detail-overlay" onClick={onClose}>
       <div className={`modal-content modal-content-${maxWidth <= 520 ? 'sm' : maxWidth <= 640 ? 'md' : 'lg'}`} onClick={e => e.stopPropagation()}>
         {children}
       </div>
     </div>
+    </ReportDialog>
   );
 }
 function ModalTitle({ children, colorClass }) {
   return <h3 className={`modal-title ${colorClass || ""}`}>{children}</h3>;
 }
 function CloseBtn({ onClose }) {
-  return <button className="modal-close-btn" onClick={onClose}><IcoX size={20} /></button>;
+  return <button className="modal-close-btn" onClick={onClose} aria-label="Close modal"><IcoX size={20} /></button>;
 }
 function InfoBlock({ children }) {
   return <div className="reporter-info">{children}</div>;
@@ -1475,17 +1483,6 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
   useEffect(() => { setMediaIndex(0); }, [r.id]);
 
   useEffect(() => {
-    if (lightboxItems.length === 0) return;
-    const fn = (e) => {
-      if (e.key === "Escape")    closeLightbox();
-      if (e.key === "ArrowRight") lightboxNext();
-      if (e.key === "ArrowLeft")  lightboxPrev();
-    };
-    document.addEventListener("keydown", fn);
-    return () => document.removeEventListener("keydown", fn);
-  }, [lightboxItems.length]);
-
-  useEffect(() => {
     if (st !== REPORT_STATUS.RESOLVED || !project?.id) return;
     let cancelled = false;
     setCompLoading(true);
@@ -1523,9 +1520,10 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
   ];
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ReportDialog label={`Report #${r.id}`} onClose={onClose}>
+    <div className="modal-overlay report-detail-overlay" onClick={onClose}>
       <div className="modal-content vmr-tabbed-modal" onClick={e => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose}><IcoX size={18} /></button>
+        <button className="modal-close-btn" onClick={onClose} aria-label="Close modal"><IcoX size={18} /></button>
 
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="vmr-header">
@@ -1907,13 +1905,14 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
                             alt={ph.file_name ?? "Completion photo"}
                             className="vmr-compl-photo"
                             style={{ cursor: "pointer" }}
-                            onClick={() => openLightbox(
+                            tabIndex={-1}
+                            onClick={(event) => { event.currentTarget.focus(); openLightbox(
                               completion.completion_photos.map((p) => ({
                                 url: resolveMediaUrl(p.file_url),
                                 label: p.file_name ?? "Completion photo",
                               })),
                               phIdx
-                            )}
+                            ); }}
                           />
                         ))}
                       </div>
@@ -1927,9 +1926,14 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
       </div>
 
       {lightboxUrl && (
+        <ReportDialog label="Image preview" onClose={closeLightbox}>
         <div
           className="vmr-lightbox-overlay"
           onClick={closeLightbox}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight") lightboxNext();
+            if (e.key === "ArrowLeft") lightboxPrev();
+          }}
         >
           <button
             className="vmr-lightbox-close"
@@ -1970,8 +1974,10 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
             )}
           </div>
         </div>
+        </ReportDialog>
       )}
     </div>
+    </ReportDialog>
   );
 }
 
