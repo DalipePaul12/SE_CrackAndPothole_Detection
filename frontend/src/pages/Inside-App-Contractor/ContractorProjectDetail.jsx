@@ -1,4 +1,5 @@
 import ReportEvidence, { hasSubmissionPhotos } from "../../components/ReportEvidence";
+import ReportDirectionsLink from "../../components/ReportDirectionsLink";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -7,6 +8,7 @@ import {
   Info, ChevronDown, ChevronUp, X,
 } from "lucide-react";
 import { getContractorProject, acceptProject, declineProject, completeProject } from "../../api/contractor";
+import { getRepairReview } from "../../api/projects";
 import { getComments, addComment } from "../../api/reports";
 import { resolveMediaUrl } from "../../utils/mediaUrl";
 import SeverityBadge from "../../components/SeverityBadge.jsx";
@@ -324,6 +326,8 @@ export default function ContractorProjectDetail() {
   const [submitting,   setSubmitting]   = useState(false);
   const [submitError,  setSubmitError]  = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [reviewResult, setReviewResult] = useState(null);
+  const [reviewRefresh, setReviewRefresh] = useState(0);
 
   const fileRef = useRef(null);
   const previewUrlsRef = useRef([]);
@@ -344,6 +348,14 @@ export default function ContractorProjectDetail() {
       .catch(() => setDataError("Network error loading project."))
       .finally(() => setLoadingData(false));
   }, [projectId, project]);
+
+  useEffect(() => {
+    let active = true;
+    getRepairReview(projectId).then(result => {
+      if (active) setReviewResult(result);
+    });
+    return () => { active = false; };
+  }, [projectId, reviewRefresh]);
 
   /* ── Cleanup object URLs on unmount ──────────────────────────────────── */
   useEffect(() => {
@@ -423,6 +435,8 @@ export default function ContractorProjectDetail() {
   const isPending  = status === "SCHEDULED";
   const isIP       = status === "IN_PROGRESS";
   const isDone     = status === "COMPLETED";
+  const review = reviewResult?.data;
+  const waitingForReview = review?.status === "pending";
 
   const allAttachments    = report.media_attachments ?? [];
   const submissionPhotos  = allAttachments.filter((a) => a.attachment_type !== "completion_proof");
@@ -507,11 +521,10 @@ export default function ContractorProjectDetail() {
     setSubmitting(false);
 
     if (!res.success) {
-      // The project may have been saved successfully but the server crashed
-      // on the post-commit notification step. Re-fetch to get the real status.
-      const fresh = await getContractorProject(project.id);
-      if (fresh.success && fresh.data?.status === "COMPLETED") {
-        setProject(fresh.data);
+      // Refresh after an uncertain response, such as an upload timeout.
+      const fresh = await getRepairReview(project.id);
+      if (fresh.success && fresh.data?.status === "pending") {
+        setReviewResult(fresh);
         setSubmitSuccess(true);
         setTimeout(() => navigate("/contractorpanel/projects", { replace: true }), 2500);
         return;
@@ -520,6 +533,7 @@ export default function ContractorProjectDetail() {
       return;
     }
 
+    setReviewResult({ success: true, data: res.data });
     setSubmitSuccess(true);
     setTimeout(() => navigate("/contractorpanel/projects", { replace: true }), 2500);
   };
@@ -581,7 +595,7 @@ export default function ContractorProjectDetail() {
       {submitSuccess && (
         <div className="cpd-success-banner">
           <CheckCircle2 size={18} />
-          Project marked as complete! Redirecting…
+          Repair proof submitted for admin review. Redirecting…
         </div>
       )}
 
@@ -671,21 +685,16 @@ export default function ContractorProjectDetail() {
         {/* ── LEFT: Info ──────────────────────────────────────────────────── */}
         <div className="cpd-info-col">
           {/* Location */}
-          {(report.barangay || report.street_name || report.exact_address) && (
-            <div className="cpd-card">
-              <div className="cpd-card-title">
-                <MapPin size={15} /> Location
-              </div>
-              <p className="cpd-location-primary">
-                {report.barangay ?? "—"}
-              </p>
-              {(report.street_name || report.exact_address) && (
-                <p className="cpd-location-secondary">
-                  {report.street_name || report.exact_address}
-                </p>
-              )}
+          <div className="cpd-card">
+            <div className="cpd-card-title">
+              <MapPin size={15} /> Location
             </div>
-          )}
+            {report.barangay && <p className="cpd-location-primary">{report.barangay}</p>}
+            {(report.street_name || report.exact_address) && (
+              <p className="cpd-location-secondary">{report.street_name || report.exact_address}</p>
+            )}
+            <div><ReportDirectionsLink report={report} projectId={project.id} className="cpd-back-btn" /></div>
+          </div>
 
           {/* Report info */}
           <div className="cpd-card">
@@ -801,7 +810,22 @@ export default function ContractorProjectDetail() {
       {/* ══════════════════════════════════════════════════════════════════════
           COMPLETION FORM (only when IN_PROGRESS)
       ══════════════════════════════════════════════════════════════════════ */}
-      {isIP && !submitSuccess && (
+      {isIP && !submitSuccess && waitingForReview && (
+        <div className="cpd-completion-section" role="status">Repair proof is awaiting admin review.</div>
+      )}
+      {isIP && review?.status === "retake_requested" && (
+        <div className="cpd-completion-section" role="status"><strong>Retake requested</strong><p>{review.reason}</p></div>
+      )}
+      {isIP && !reviewResult?.success && (
+        <div className="cpd-completion-section">
+          <p>{reviewResult ? "Could not check repair review status." : "Checking repair review status…"}</p>
+          {reviewResult && <button type="button" onClick={() => { setReviewResult(null); setReviewRefresh(n => n + 1); }}>Retry</button>}
+        </div>
+      )}
+      {isIP && review?.status === "approved" && (
+        <div className="cpd-completion-section" role="status">Repair approved and report resolved.</div>
+      )}
+      {isIP && reviewResult?.success && !waitingForReview && review?.status !== "approved" && !submitSuccess && (
         <div className="cpd-completion-section">
           <h2 className="cpd-section-title">
             <Wrench size={18} /> Submit Completion Report
@@ -970,7 +994,7 @@ export default function ContractorProjectDetail() {
       {showConfirm && (
         <ConfirmSubmitModal
           title="Submit Completion?"
-          message="This will mark the project as complete and notify the admin for review. This action cannot be undone."
+          message="An admin will review the repair photos before closing the report."
           onConfirm={handleConfirmedSubmit}
           onCancel={() => setShowConfirm(false)}
           confirmText="Yes, Submit"

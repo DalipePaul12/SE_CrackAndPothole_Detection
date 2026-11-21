@@ -403,7 +403,9 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
   useEffect(() => { setLiveReport(report); }, [report]);
 
   const originalAtt = submissionMedia(liveReport)[0];
-  const proofAtt    = liveReport.media_attachments?.find((item) => item.attachment_type === "completion_proof");
+  const proofAttachments = (liveReport.media_attachments ?? [])
+    .filter(item => item.attachment_type === "completion_proof" && mediaUrl(item));
+  const proofAtt    = proofAttachments[0];
   const originalUrl = !imgErr1 ? mediaUrl(originalAtt) : null;
   const proofUrl    = !imgErr2 ? mediaUrl(proofAtt)    : null;
   const liveStatus  = normalizeStatus(liveReport.status);
@@ -415,8 +417,10 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
   // Evidence + repair proof share one swipeable gallery
   const mediaGalleryItems = [
     !hasSubmissionEvidence(liveReport) && originalUrl ? { url: originalUrl, label: "Damage Evidence" } : null,
-    (isResolved && proofUrl) ? { url: proofUrl, label: "Repair Proof" } : null,
-  ].filter(Boolean);  const canEdit     = liveStatus === "PENDING" || liveStatus === "DECLINED";
+    ...(isResolved ? proofAttachments.filter((_, index) => index !== 0 || !imgErr2)
+      .map(item => ({ url: mediaUrl(item), label: "Repair Proof" })) : []),
+  ].filter(Boolean);
+  const canEdit     = liveStatus === "PENDING" || liveStatus === "DECLINED";
   const canDelete   = liveStatus === "PENDING" || liveStatus === "DECLINED";
 
   const startEdit = () => {
@@ -812,6 +816,12 @@ function ReportModal({ report, onClose, onDelete, onEdit, onUpdated, onSummaryGe
                         </div>
                       )}
                     </div>
+                    {proofAttachments.length > 1 && mediaGalleryItems.some(item => item.label === "Repair Proof") && (
+                      <button type="button" className="sub-tab-btn"
+                        onClick={() => openLightbox(mediaGalleryItems, mediaGalleryItems.findIndex(item => item.label === "Repair Proof"))}>
+                        View repair photos ({proofAttachments.length})
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

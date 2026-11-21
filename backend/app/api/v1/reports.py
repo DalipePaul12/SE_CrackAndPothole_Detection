@@ -39,7 +39,7 @@ from fastapi import (
 )
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -62,6 +62,7 @@ from app.models.enums import (
     DamageType,
     MediaType,
     NotificationType,
+    ProjectStatus,
     ReportStatus,
     ReportType,
     SeverityLevel,
@@ -73,12 +74,13 @@ from app.models.report_upvote import ReportUpvote
 from app.models.user import User
 from app.schemas.report import (
     DeclineRequest,
+    PriorRepairResponse,
     ReportCreate,
     ReportListResponse,
     ReportResponse,
     ReportUpdate,
 )
-from app.services import duplicate_detection, report_service, summary_service
+from app.services import duplicate_detection, prior_repairs, repair_service, report_service, summary_service
 from app.services.notification_service import notify_background
 from app.services.location_service import is_inside_malabon
 from app.utils.geo import calculate_distance
@@ -476,21 +478,49 @@ async def list_reports(
     barangay: str | None = Query(None, max_length=100),
     damage_type: DamageType | None = Query(None),
     severity: SeverityLevel | None = Query(None),
+    search: str | None = Query(None, max_length=200),
+    awaiting_repair_review: bool = Query(False),
+    include_repeat_damage: bool = Query(False),
+    possible_repeat_damage: bool = Query(False),
+    created_from: AwareDatetime | None = Query(None),
+    created_before: AwareDatetime | None = Query(None),
+    sort_by: report_service.ReportSort = Query("created_at"),
+    sort_dir: report_service.SortDirection = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if created_from and created_before and created_from >= created_before:
+        raise HTTPException(422, detail="created_from must be earlier than created_before.")
+    if awaiting_repair_review and current_user.role not in (UserRole.admin, UserRole.superadmin):
+        raise HTTPException(403, "Not authorized to view the repair review queue.")
+    if (include_repeat_damage or possible_repeat_damage) and current_user.role not in (UserRole.admin, UserRole.superadmin):
+        raise HTTPException(403, "Only admins may view repeat-damage matches.")
     reports, total = await report_service.list_reports(
         db,
         status=status,
         barangay=barangay,
         damage_type=damage_type,
         severity=severity,
+        search=search,
+        awaiting_repair_review=awaiting_repair_review,
+        possible_repeat_damage=possible_repeat_damage,
+        created_from=created_from,
+        created_before=created_before,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
         page=page,
         page_size=page_size,
     )
     results = await _build_report_list(db, reports)
+    if possible_repeat_damage:
+        for item in results:
+            item.possible_repeat_damage = True
+    elif include_repeat_damage:
+        matching_ids = await prior_repairs.matching_report_ids(db, [item.id for item in results])
+        for item in results:
+            item.possible_repeat_damage = item.id in matching_ids
     return ReportListResponse(total=total, page=page, page_size=page_size, results=results)
 
 
@@ -565,6 +595,18 @@ async def delete_comment(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized.")
     await db.delete(comment)
     await db.commit()
+
+
+@router.get("/{report_id}/prior-repairs", response_model=list[PriorRepairResponse])
+async def get_prior_repairs(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    result = await db.execute(select(Report.id).where(Report.id == report_id))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(404, "Report not found")
+    return await prior_repairs.list_prior_repairs(db, report_id)
 
 
 @router.get("/{report_id}", response_model=ReportResponse)
@@ -706,6 +748,16 @@ async def update_report(
 
     # ── Normalize status input ───────────────────────────────────────────
     normalized_status = _normalize_status(data.status)
+    if normalized_status is not None or data.assigned_to is not None:
+        await repair_service.lock_report(db, report_id)
+        if normalized_status in (ReportStatus.RESOLVED, ReportStatus.COMPLETED):
+            if current_user.role not in (UserRole.admin, UserRole.superadmin):
+                raise HTTPException(403, "Only admins may close reports.")
+            if data.assigned_to and data.assigned_to.strip():
+                raise HTTPException(409, "Assignment and direct close cannot be combined.")
+            await repair_service.require_unassigned(db, report)
+        elif normalized_status != report.status or data.assigned_to is not None:
+            await repair_service.require_no_pending_report_review(db, report_id)
 
     # ── Handle assignment (if assigned_to provided) ──────────────────────
     if data.assigned_to is not None:
@@ -799,6 +851,39 @@ async def update_report(
 
     logger.info("PATCH report_id=%d completed successfully", report_id)
     return response
+
+
+@router.post("/{report_id}/resolve")
+async def resolve_report(
+    report_id: int,
+    background_tasks: BackgroundTasks,
+    photo: UploadFile | None = File(None),
+    note: str | None = Form(None, max_length=2000),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    proof = await repair_service.read_proof(photo) if photo else None
+    report = await repair_service.lock_report(db, report_id)
+    project = await repair_service.require_unassigned(db, report)
+    if report.status == ReportStatus.RESOLVED:
+        return {"status": report.status}
+    if report.status in repair_service.CLOSED_REPORT_STATUSES:
+        raise HTTPException(409, "This report is closed.")
+
+    paths = await repair_service.publish_proof(db, report_id, [proof]) if proof else []
+    if note and note.strip():
+        db.add(Comment(report_id=report_id, user_id=current_user.id, content=note.strip()))
+    report.status = ReportStatus.RESOLVED
+    if project:
+        project.status = ProjectStatus.COMPLETED
+        project.completion_percentage = 100
+        project.actual_completion_date = datetime.now(timezone.utc)
+    repair_service.add_notification(
+        db, background_tasks, report.owner_id, report_id, "Report Resolved",
+        f"Your report #{report_id} has been resolved.", NotificationType.success,
+    )
+    await repair_service.commit_with_proof(db, paths)
+    return {"status": ReportStatus.RESOLVED}
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1177,7 +1262,8 @@ async def validate_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    report = await _fetch_report_or_404(db, report_id)
+    report = await repair_service.lock_report(db, report_id)
+    await repair_service.require_no_pending_report_review(db, report_id)
     report.status = ReportStatus.VERIFIED
     report.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -1202,7 +1288,8 @@ async def decline_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    report = await _fetch_report_or_404(db, report_id)
+    report = await repair_service.lock_report(db, report_id)
+    await repair_service.require_no_pending_report_review(db, report_id)
     report.status = ReportStatus.DECLINED
     report.decline_reason = data.reason
     report.updated_at = datetime.now(timezone.utc)

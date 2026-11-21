@@ -20,7 +20,7 @@
 export const MALABON_BARANGAYS = [
   "Acacia","Baritan","Bayan-bayanan","Catmon","Concepcion","Dampalit",
   "Flores","Hulong Duhat","Ibaba","Longos","Maysilo","Muzon","Niugan",
-  "Panghulo","Potrero","San Agustin","Santolan","Tanong","Tinajeros","Tonsuya",
+  "Panghulo","Potrero","San Agustin","Santolan","Tañong","Tinajeros","Tonsuya","Tugatog",
 ];
 
 export const DEFAULT_CITY = "Malabon";
@@ -52,7 +52,7 @@ const BARANGAY_BOUNDS = [
   { name: "Potrero",      latMin: 14.6760, latMax: 14.6860, lngMin: 120.9620, lngMax: 120.9720 },
   { name: "San Agustin",  latMin: 14.6680, latMax: 14.6780, lngMin: 120.9600, lngMax: 120.9700 },
   { name: "Santolan",     latMin: 14.6920, latMax: 14.7000, lngMin: 120.9640, lngMax: 120.9730 },
-  { name: "Tanong",       latMin: 14.6660, latMax: 14.6760, lngMin: 120.9640, lngMax: 120.9730 },
+  { name: "Tañong",       latMin: 14.6660, latMax: 14.6760, lngMin: 120.9640, lngMax: 120.9730 },
   { name: "Tinajeros",    latMin: 14.6560, latMax: 14.6660, lngMin: 120.9580, lngMax: 120.9680 },
   { name: "Tonsuya",      latMin: 14.6750, latMax: 14.6850, lngMin: 120.9690, lngMax: 120.9800 },
 ];
@@ -112,7 +112,7 @@ export function detectBarangay(lat, lng, nominatimAddr = null) {
     : [];
 
   for (const candidate of candidates) {
-    const normalized = candidate.toLowerCase().trim();
+    const normalized = candidate.toLowerCase().trim().replace("tanong", "tañong");
     const match = MALABON_BARANGAYS.find(
       (b) => b.toLowerCase() === normalized ||
              normalized.includes(b.toLowerCase()) ||

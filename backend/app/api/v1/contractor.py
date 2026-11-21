@@ -1,35 +1,24 @@
-import io
-import json
-import logging
-import os
-import uuid
+import math
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import List, Optional
 
-logger = logging.getLogger(__name__)
-
-import aiofiles
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from pydantic import BaseModel
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from app.core.supabase_storage import upload_report_file
 
 from app.core.config import settings
 from app.db.session import get_db
 from app.middleware.auth_middleware import require_contractor
-from app.models.enums import MediaType, NotificationType, ProjectStatus, ReportStatus, UserRole
-from app.models.media_attachment import MediaAttachment
+from app.models.enums import NotificationType, ProjectStatus, ReportStatus, UserRole
 from app.models.project import Project
 from app.models.project_update import ProjectUpdate as ProjectUpdateLog
+from app.models.repair_review import RepairReview, RepairReviewPhoto
 from app.models.report import Report
 from app.models.user import User
+from app.services import repair_service
 from app.services.notification_service import notify
-from app.utils.image_validator import validate_image_bytes
-
-UPLOAD_ROOT = Path(settings.UPLOAD_DIR)
 
 router = APIRouter(prefix="/contractor", tags=["Contractor"])
 
@@ -109,14 +98,6 @@ _PROJECT_LOAD_OPTIONS = [
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    return project
-
-
 async def _notify_admin(
     db: AsyncSession,
     project: Project,
@@ -164,6 +145,15 @@ async def _notify_admin(
 
 class DeclineBody(BaseModel):
     reason: str
+
+
+class RepairMaterial(BaseModel):
+    name: str = Field(min_length=1)
+    quantity: float = Field(gt=0, allow_inf_nan=False)
+    unit_cost: float = Field(ge=0, allow_inf_nan=False)
+
+
+REPAIR_MATERIALS = TypeAdapter(list[RepairMaterial])
 
 
 class AvailabilityUpdate(BaseModel):
@@ -241,7 +231,7 @@ async def accept_project(
     current_user: User = Depends(require_contractor),
 ):
     """Contractor: accept an assigned project — sets status to IN_PROGRESS."""
-    project = await _get_project_or_404(db, project_id)
+    project, locked_report = await repair_service.lock_project(db, project_id)
 
     if project.contractor_id != current_user.id:
         raise HTTPException(
@@ -249,7 +239,7 @@ async def accept_project(
             detail="You are not assigned to this project.",
         )
 
-    if project.status != ProjectStatus.SCHEDULED:
+    if project.status != ProjectStatus.SCHEDULED or locked_report.status in repair_service.CLOSED_REPORT_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This project cannot be accepted in its current status.",
@@ -296,7 +286,7 @@ async def decline_project(
     current_user: User = Depends(require_contractor),
 ):
     """Contractor: decline an assigned project — clears contractor_id and resets status to SCHEDULED."""
-    project = await _get_project_or_404(db, project_id)
+    project, locked_report = await repair_service.lock_project(db, project_id)
 
     if project.contractor_id != current_user.id:
         raise HTTPException(
@@ -304,7 +294,7 @@ async def decline_project(
             detail="You are not assigned to this project.",
         )
 
-    if project.status != ProjectStatus.SCHEDULED:
+    if project.status != ProjectStatus.SCHEDULED or locked_report.status in repair_service.CLOSED_REPORT_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This project cannot be declined in its current status.",
@@ -346,6 +336,7 @@ async def decline_project(
 @router.post("/projects/{project_id}/complete")
 async def complete_project(
     project_id: int,
+    background_tasks: BackgroundTasks,
     notes: Optional[str] = Form(None),
     materials: Optional[str] = Form(None),
     actual_cost: Optional[float] = Form(None),
@@ -353,159 +344,54 @@ async def complete_project(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_contractor),
 ):
-    """Contractor: mark a project complete with proof photos, materials, and cost."""
-    project = await _get_project_or_404(db, project_id)
-
-    if project.contractor_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not assigned to this project.",
-        )
-
-    if project.status != ProjectStatus.IN_PROGRESS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This project cannot be completed in its current status.",
-        )
-
-    from sqlalchemy import select as _select
-    locked_result = await db.execute(
-        _select(Project).where(Project.id == project_id).with_for_update()
-    )
-    project = locked_result.scalar_one_or_none()
-    if project is None or project.status != ProjectStatus.IN_PROGRESS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This project cannot be completed in its current status.",
-        )
-
+    """Submit an assigned repair for admin review."""
     if not notes or not notes.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Completion notes are required.",
-        )
-
+        raise HTTPException(422, "Completion notes are required.")
     if not photos:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="At least one proof photo is required.",
+        raise HTTPException(422, "At least one proof photo is required.")
+    if actual_cost is not None and (not math.isfinite(actual_cost) or actual_cost < 0):
+        raise HTTPException(422, "Actual cost must be a finite, non-negative amount.")
+    try:
+        parsed_materials = (
+            [item.model_dump() for item in REPAIR_MATERIALS.validate_json(materials)]
+            if materials is not None else None
         )
+    except ValidationError as exc:
+        raise HTTPException(422, "Enter a name, positive quantity, and non-negative unit cost for each material.") from exc
 
-    # ── Parse materials JSON ──────────────────────────────────────────────────
-    parsed_materials = None
-    if materials is not None:
-        try:
-            parsed_materials = json.loads(materials)
-        except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="materials must be a valid JSON string.",
-            )
+    project, report = await repair_service.lock_project(db, project_id)
+    if project.contractor_id != current_user.id:
+        raise HTTPException(403, "You are not assigned to this project.")
+    if project.status != ProjectStatus.IN_PROGRESS or report.status != ReportStatus.IN_PROGRESS:
+        raise HTTPException(409, "This repair is no longer in progress.")
+    previous = await db.scalar(repair_service.latest_review(project_id))
+    if previous and previous.status == repair_service.PENDING_REVIEW:
+        raise HTTPException(409, "Repair proof is already awaiting review.")
 
-
-    saved_attachments: list[MediaAttachment] = []
+    remaining = settings.MAX_IMAGE_SIZE_MB * 1024 * 1024
+    proof_photos = []
     for photo in photos:
-        data = await photo.read()
+        contents, content_type = await repair_service.read_proof(photo, remaining)
+        remaining -= len(contents)
+        proof_photos.append(RepairReviewPhoto(content=contents, content_type=content_type))
 
-        ok, err = validate_image_bytes(data)
-        if not ok:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Invalid photo '{photo.filename}': {err}",
-            )
-
-        ext = Path(photo.filename or "photo").suffix.lower() or ".jpg"
-        safe_name = f"{uuid.uuid4().hex}{ext}"
-
-        storage_subpath = f"{project.report_id}/completion_{safe_name}"
-        file_url = upload_report_file(
-            file_bytes=data,
-            storage_path=storage_subpath,
-            content_type="image/jpeg",  # or detect properly like Doc 14 does
-        )
-        attachment = MediaAttachment(
-            report_id=project.report_id,
-            file_url=file_url,
-            file_name=safe_name,
-            file_size_bytes=len(data),
-            media_type=MediaType.image,
-            attachment_type="completion_proof",
-            is_processed=False,
-        )
-        db.add(attachment)
-        saved_attachments.append(attachment)
-
-    # ── Update project ────────────────────────────────────────────────────────
-    now = datetime.now(timezone.utc)
-    old_status = project.status
-
-    project.status = ProjectStatus.COMPLETED
-    project.completion_percentage = 100.0
-    project.actual_completion_date = now
-    if notes is not None:
-        project.notes = notes
-    if parsed_materials is not None:
-        project.materials_used = parsed_materials
-    if actual_cost is not None:
-        project.actual_cost = actual_cost
-
-    # ── Cascade linked report to RESOLVED ─────────────────────────────────────
-    report_result = await db.execute(
-        select(Report).where(Report.id == project.report_id)
+    review = RepairReview(
+        project_id=project.id, contractor_id=current_user.id, status=repair_service.PENDING_REVIEW,
+        notes=notes.strip(), materials=parsed_materials, actual_cost=actual_cost, photos=proof_photos,
     )
-    report = report_result.scalar_one_or_none()
-    if report:
-        report.status = ReportStatus.RESOLVED
-
-    # ── Audit log ─────────────────────────────────────────────────────────────
-    log = ProjectUpdateLog(
-        project_id=project.id,
-        changed_by_id=current_user.id,
-        old_status=old_status,
-        new_status=ProjectStatus.COMPLETED,
-        completion_percentage=100.0,
-        note="Contractor marked project as complete.",
-    )
-    db.add(log)
+    db.add(review)
+    admin_ids = await db.scalars(select(User.id).where(
+        User.role.in_([UserRole.admin, UserRole.superadmin]), User.is_active.is_(True),
+    ))
+    recipients = list(admin_ids)
+    if project.assigned_admin_id in recipients:
+        recipients = [project.assigned_admin_id]
+    for user_id in recipients:
+        repair_service.add_notification(
+            db, background_tasks, user_id, report.id, "Repair proof ready for review",
+            f"Review the repair photos for report #{report.id}.", NotificationType.info,
+        )
+    await db.flush()
+    attempt_id = review.id
     await db.commit()
-    await db.refresh(project)
-
-    # ── Notify admin (best-effort — never fail the response) ─────────────────
-    try:
-        await _notify_admin(
-            db,
-            project,
-            title=f"Project #{project.id} completed",
-            message=(
-                f"Contractor {current_user.full_name or current_user.email} "
-                f"has marked project #{project.id} as complete."
-            ),
-            notification_type=NotificationType.success,
-        )
-    except Exception:
-        logger.warning("Failed to notify admin for project %s completion.", project.id, exc_info=True)
-
-    # ── Notify report submitter (best-effort) ─────────────────────────────────
-    try:
-        if report and report.owner_id:
-            owner_result = await db.execute(
-                select(User).where(User.id == report.owner_id)
-            )
-            owner = owner_result.scalar_one_or_none()
-            if owner:
-                await notify(
-                    db,
-                    user_id=owner.id,
-                    title="Your report has been resolved",
-                    message=(
-                        f"The road damage you reported (Report #{report.id}) "
-                        f"has been repaired and marked complete."
-                    ),
-                    type=NotificationType.success,
-                    report_id=report.id,
-                    email=owner.email,
-                )
-    except Exception:
-        logger.warning("Failed to notify owner for project %s completion.", project.id, exc_info=True)
-
-    return project
+    return {"id": attempt_id, "status": repair_service.PENDING_REVIEW}

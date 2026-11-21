@@ -588,7 +588,7 @@
   text-align: right; word-break: break-word;
 }
 
-.amv-panel-actions { padding: 0.5rem 1.1rem; }
+.amv-panel-actions { display: grid; gap: 6px; padding: 0.5rem 1.1rem; }
 
 .amv-fly-btn {
   display: flex; align-items: center; justify-content: center; gap: 0.4rem;
@@ -600,6 +600,7 @@
   cursor: pointer; transition: background 0.13s, border-color 0.13s;
 }
 .amv-fly-btn:hover { background: var(--primary-hover, rgba(21,83,24,0.14)); border-color: var(--primary); }
+.amv-fly-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .amv-admin-actions {
   padding: 0.5rem 1.1rem 1.2rem;
@@ -1201,3 +1202,13 @@
 .amv-popup > .report-evidence--compact { --evidence-cover-width: 100%; --evidence-cover-height: 112px; --evidence-cover-radius: 0; --evidence-play-size: 26px; }
 .amv-popup-outer .leaflet-popup-content { max-width: calc(100vw - 46px); }
 .amv-popup-cover { display: block; border: 0; padding: 0; }
+.amv-proof-fields,
+.amv-proof-fields label {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.amv-proof-fields textarea {
+  min-height: 64px;
+}

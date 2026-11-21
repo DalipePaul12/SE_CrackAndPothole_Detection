@@ -17,9 +17,10 @@ from app.models.ai_detection_result import AIDetectionResult
 from app.models.refresh_token import RefreshToken
 from app.models.report_upvote import ReportUpvote
 from app.models.admin_settings import AdminSettings
+from app.models.repair_review import RepairReview, RepairReviewPhoto
 
 __all__ = [
     "User", "Report", "Project", "ProjectUpdate", "Comment",
     "Notification", "OTP", "AuditLog", "CCTV", "MediaAttachment",
-    "AIDetectionResult", "RefreshToken", "ReportUpvote", "AdminSettings",
+    "AIDetectionResult", "RefreshToken", "ReportUpvote", "AdminSettings", "RepairReview", "RepairReviewPhoto",
 ]

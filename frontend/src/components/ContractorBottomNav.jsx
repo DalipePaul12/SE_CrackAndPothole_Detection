@@ -6,13 +6,14 @@ import { useNotifications } from "../hooks/useNotifications";
 import { tokenStorage } from "../api/client";
 
 import {
-  LayoutDashboard, ClipboardList, CheckSquare, Bell,
+  LayoutDashboard, ClipboardList, CheckSquare, Bell, Map,
   MoreHorizontal, UserCircle, Sun, Moon, LogOut, X,
 } from "lucide-react";
 
 const navItems = [
   { to: "/contractorpanel/dashboard",     icon: LayoutDashboard, label: "Dashboard"     },
   { to: "/contractorpanel/projects",      icon: ClipboardList,   label: "Projects"      },
+  { to: "/contractorpanel/map",           icon: Map,             label: "Map"           },
   { to: "/contractorpanel/completed",     icon: CheckSquare,     label: "Completed"     },
   { to: "/contractorpanel/notifications", icon: Bell,            label: "Notifications" },
 ];

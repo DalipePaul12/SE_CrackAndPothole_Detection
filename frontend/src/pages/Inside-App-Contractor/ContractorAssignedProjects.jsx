@@ -6,6 +6,7 @@ import {
   CheckCircle2, Wrench, MapPin, Calendar, X, ArrowRight,
 } from "lucide-react";
 import SeverityBadge from "../../components/SeverityBadge.jsx";
+import ReportDirectionsLink from "../../components/ReportDirectionsLink";
 import { useContractorProjects } from "../../hooks/useContractorProjects.js";
 import "./ContractorAssignedProjects.css";
 
@@ -141,6 +142,7 @@ function ProjectCard({ project, onAccept, onDecline, actionLoading, actionError 
               {[report.barangay, report.street_name].filter(Boolean).join(" · ")}
             </p>
           )}
+          <div><ReportDirectionsLink report={report} projectId={project.id} className="cap-btn-detail" /></div>
 
           {report.description && (
             <p className="cap-card-desc">{report.description}</p>

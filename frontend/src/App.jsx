@@ -33,6 +33,7 @@ import Settings        from "./pages/Inside-App-User/Settings.jsx";
 // Inside App — Contractor
 import ContractorDashboard         from "./pages/Inside-App-Contractor/ContractorDashboard.jsx";
 import ContractorAssignedProjects  from "./pages/Inside-App-Contractor/ContractorAssignedProjects.jsx";
+import ContractorMapView from "./pages/Inside-App-Contractor/ContractorMapView.jsx";
 import ContractorCompletedProjects from "./pages/Inside-App-Contractor/ContractorCompletedProjects.jsx";
 import ContractorProjectDetail     from "./pages/Inside-App-Contractor/ContractorProjectDetail.jsx";
 import ContractorNotifications     from "./pages/Inside-App-Contractor/ContractorNotifications.jsx";
@@ -189,6 +190,7 @@ function AppShell({ showLogin, showSignUp, setShowLogin, setShowSignUp }) {
           <Route element={<ContractorLayoutGuard />}>
             <Route path="/contractorpanel/dashboard"           element={<ContractorDashboard />} />
             <Route path="/contractorpanel/projects"            element={<ContractorAssignedProjects />} />
+            <Route path="/contractorpanel/map"                 element={<ContractorMapView />} />
             <Route path="/contractorpanel/projects/:projectId" element={<ContractorProjectDetail />} />
             <Route path="/contractorpanel/completed"           element={<ContractorCompletedProjects />} />
             <Route path="/contractorpanel/notifications"       element={<ContractorNotifications />} />

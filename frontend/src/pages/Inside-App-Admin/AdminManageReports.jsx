@@ -1,12 +1,16 @@
 import ReportDialog from "../../components/ReportDialog";
+import ReportDirectionsLink from "../../components/ReportDirectionsLink";
 import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import RepairReviewPanel from "../../components/RepairReviewPanel";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   getReports,
+  getReportsForExport,
   getReport,
+  getPriorRepairs,
   updateReport,
-  uploadReportMedia,
+  resolveReport,
   addComment,
   getComments,
 } from "../../api/reports";
@@ -14,6 +18,7 @@ import { getAvailableContractors, assignContractor, createProject, getProjects, 
 import "./AdminManageReports.css";
 import { REPORT_STATUS } from "../../constants/reportStatus";
 import { resolveMediaUrl } from "../../utils/mediaUrl";
+import { MALABON_BARANGAYS } from "../../utils/geolocationUtils";
 function isCoordinateString(str) {
   if (!str) return false;
   return /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(str.trim());
@@ -551,22 +556,47 @@ function ActionButtons({ r, onVerify, onStart, onComplete, onCancel, isPatching 
 
 const PAGE_SIZE = 25;
 
+function dateRange(filterDate, now) {
+  if (filterDate === "Week") return { created_from: new Date(now.getTime() - 7 * 86400000).toISOString() };
+  if (filterDate !== "Today") return {};
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return { created_from: start.toISOString(), created_before: end.toISOString() };
+}
+
 function AdminManageReports() {
   const [reports,    setReports]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
-  const [page,       setPage]       = useState(1);
+  const [actionError, setActionError] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
 
-  const [search,         setSearch]         = useState("");
-  const [filterType,     setFilterType]     = useState("All");
-  const [filterSeverity, setFilterSeverity] = useState("All");
-  const [filterStatus,   setFilterStatus]   = useState("All");
-  const [filterDate,     setFilterDate]     = useState("All");
-  const [filtersOpen,    setFiltersOpen]    = useState(false);
+  const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [query, setQuery] = useState(() => ({
+    page: 1, term: "", filterType: "All", filterSeverity: "All", filterStatus: "All",
+    filterBarangay: "All", filterDate: "All", repeatDamage: false,
+    sortCol: "created_at", sortDir: "desc", asOf: new Date(),
+  }));
+  const { page, term, filterType, filterSeverity, filterStatus, filterBarangay, filterDate, repeatDamage, sortCol, sortDir, asOf } = query;
+  const changeCriteria = useCallback(changes => {
+    setQuery(prev => ({ ...prev, ...changes, page: 1, asOf: new Date() }));
+  }, []);
+  const refresh = useCallback(() => setQuery(prev => ({ ...prev, asOf: new Date() })), []);
+  useEffect(() => {
+    if (term === search.trim()) return;
+    const timer = setTimeout(() => changeCriteria({ term: search.trim() }), 250);
+    return () => clearTimeout(timer);
+  }, [search, term, changeCriteria]);
 
-  const [sortCol, setSortCol] = useState("created_at");
-  const [sortDir, setSortDir] = useState("desc");
+  const params = useMemo(() => ({
+    search: term, barangay: filterBarangay, severity: filterSeverity,
+    status: filterStatus === "awaiting_repair_review" ? undefined : filterStatus,
+    awaiting_repair_review: filterStatus === "awaiting_repair_review" || undefined,
+    possible_repeat_damage: repeatDamage || undefined,
+    damage_type: filterType === "All" ? undefined : filterType.toLowerCase(),
+    sort_by: sortCol, sort_dir: sortDir, ...dateRange(filterDate, asOf),
+  }), [term, filterBarangay, filterStatus, filterSeverity, filterType, sortCol, sortDir, filterDate, repeatDamage, asOf]);
 
   const [selected, setSelected] = useState(new Set());
 
@@ -608,20 +638,16 @@ function AdminManageReports() {
 
     if (shouldAbort) return false;
 
-    setError(null);
+    setActionError(null);
 
     const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : status;
 
-    const res = await updateReport(id, { status: normalizedStatus, ...extra });
+    const res = normalizedStatus === REPORT_STATUS.RESOLVED
+      ? await resolveReport(id)
+      : await updateReport(id, { status: normalizedStatus, ...extra });
 
-    if (res.success) {
-      setReports(prev =>
-        prev.map(r =>
-          r.id === id ? { ...r, status: normalizedStatus, ...extra } : r
-        )
-      );
-    } else {
-      setError(res.error || `Failed to update report #${String(id).padStart(3, '0')}. Please try again.`);
+    if (!res.success) {
+      setActionError(res.error || `Failed to update report #${String(id).padStart(3, '0')}. Please try again.`);
     }
 
     setPatching(prev => {
@@ -636,7 +662,12 @@ function AdminManageReports() {
   // ═════════════════════════════════════════════════════════════════
   // REFACTORED STATUS HANDLERS — No more assign handler
   // ═════════════════════════════════════════════════════════════════
-  const handleVerify  = useCallback((id) => patchStatus(id, REPORT_STATUS.VERIFIED), [patchStatus]);
+  const handleVerify = async id => {
+    if (await patchStatus(id, REPORT_STATUS.VERIFIED)) {
+      setViewReport(prev => prev?.id === id ? { ...prev, status: REPORT_STATUS.VERIFIED } : prev);
+      refresh();
+    }
+  };
   // "Start" no longer patches status — it opens ViewModal with the assignment section revealed.
   // The IN_PROGRESS transition now only happens via the contractor-accept endpoint.
   const handleStart = useCallback((id) => {
@@ -667,70 +698,37 @@ function AdminManageReports() {
 
   const handleCancel = useCallback(async (id, reason) => {
     const success = await patchStatus(id, REPORT_STATUS.CANCELLED, { decline_reason: reason });
-    if (success) setCancelReport(null);
+    if (success) { setCancelReport(null); refresh(); }
     return success;
-  }, [patchStatus]);
+  }, [patchStatus, refresh]);
 
-  const handleCompleteSuccess = useCallback((id) => {
-    setReports(prev => prev.map(r => r.id === id ? { ...r, status: REPORT_STATUS.RESOLVED } : r));
+  const handleCompleteSuccess = useCallback(() => {
+    refresh();
     setCompleteReport(null);
-  }, []);
+  }, [refresh]);
 
   const selectedIds = [...selected];
 
   const bulkPatch = useCallback(async (statusValue) => {
-    setSelected(prev => {
-      const ids = [...prev];
-      Promise.all(ids.map(id => patchStatus(id, statusValue))).then(() => {
-        setSelected(new Set());
-        setBulkMode(null);
-      });
-      return prev;
-    });
-  }, [patchStatus]);
+    await Promise.all([...selected].map(id => patchStatus(id, statusValue)));
+    setSelected(new Set());
+    setBulkMode(null);
+    refresh();
+  }, [selected, patchStatus, refresh]);
 
-  const exportAll = useCallback(async () => {
+  const [exportError, setExportError] = useState("");
+  const exportAll = async () => {
     setExportAllLoading(true);
+    setExportError("");
     try {
-      const params = {};
-      if (filterType     !== "All") params.damage_type = filterType.toLowerCase();
-      if (filterSeverity !== "All") params.severity    = filterSeverity;
-      if (filterStatus   !== "All") params.status      = filterStatus;
-
-      const first = await getReports({ ...params, page: 1, page_size: 100 });
-      if (!first.success) { setExportAllLoading(false); return; }
-
-      const serverTotal = first.data?.total ?? 0;
-      const allRows = [...(first.data?.results ?? [])];
-
-      if (serverTotal > 100) {
-        const pageCount = Math.ceil(serverTotal / 100);
-        const pages = await Promise.all(
-          Array.from({ length: pageCount - 1 }, (_, i) =>
-            getReports({ ...params, page: i + 2, page_size: 100 })
-          )
-        );
-        pages.forEach(r => { if (r.success) allRows.push(...(r.data?.results ?? [])); });
-      }
-
-      let rows = allRows;
-      if (search) {
-        const q = search.toLowerCase();
-        rows = rows.filter(r =>
-          String(r.id).includes(q) ||
-          (r.barangay ?? "").toLowerCase().includes(q) ||
-          (r.street_name ?? "").toLowerCase().includes(q) ||
-          (r.owner?.full_name ?? "").toLowerCase().includes(q)
-        );
-      }
-
+      const rows = await getReportsForExport(params);
       exportCSV(rows, "all");
-    } catch {
-      // silently swallow — export is best-effort
+    } catch (err) {
+      setExportError(`Export failed. ${err.message} Please retry Export All.`);
     } finally {
       setExportAllLoading(false);
     }
-  }, [filterType, filterSeverity, filterStatus, search]);
+  };
 
   // fetchProjects — builds a report_id → project map for assignment display.
   const fetchProjects = useCallback(async () => {
@@ -746,8 +744,9 @@ function AdminManageReports() {
   const handleAssigned = useCallback((project) => {
     if (project?.report_id) {
       setProjectByReportId(prev => ({ ...prev, [project.report_id]: project }));
+      refresh();
     }
-  }, []);
+  }, [refresh]);
 
   // markNotesSeen — called by ViewModal when the admin views the Notes tab,
   // so the unread badge (row + tab) clears for that report.
@@ -760,77 +759,50 @@ function AdminManageReports() {
     });
   }, []);
 
-  // fetchPage — always uses the current server-side filter state via closure.
-  // Call with a page number; server filters (status/damage_type/severity) are
-  // applied here so the backend returns only matching rows before pagination.
-  const fetchPage = useCallback(async (pg = 1) => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
-    const res = await getReports({
-      page:        pg,
-      page_size:   PAGE_SIZE,
-      // "All" is stripped by cleanParams inside getReports → buildQS
-      status:      filterStatus   !== "All" ? filterStatus   : undefined,
-      damage_type: filterType     !== "All" ? filterType     : undefined,
-      severity:    filterSeverity !== "All" ? filterSeverity : undefined,
-    });
-
-    if (!res.success) {
-      setError(res.error);
-      setLoading(false);
-      return;
+  useEffect(() => {
+    let active = true;
+    async function loadPage() {
+      setLoading(true);
+      setError(null);
+      setExportError("");
+      setSelected(new Set());
+      try {
+        const res = await getReports({ ...params, include_repeat_damage: true, page, page_size: PAGE_SIZE });
+        if (!active) return;
+        if (!res.success) throw new Error(res.error || "Could not load reports.");
+        const { results, total } = res.data;
+        const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        if (page > lastPage) {
+          setQuery(prev => ({ ...prev, page: lastPage }));
+          return;
+        }
+        setReports(results);
+        setTotalCount(total);
+        setLoading(false);
+        const geocoded = await reverseGeocodeAll(results);
+        if (active) setReports(geocoded);
+      } catch (err) {
+        if (!active) return;
+        setReports([]);
+        setTotalCount(0);
+        setError(err.message);
+        setLoading(false);
+      }
     }
+    loadPage();
+    return () => { active = false; };
+  }, [params, page]);
 
-    const raw = res.data?.results ?? [];
-    console.log("SAMPLE REPORT OBJECT:", raw[0]); // TEMP — remove after checking
-    setReports(raw);
-    setTotalCount(res.data?.total ?? 0);
-    setPage(pg);
-    setSelected(new Set()); // clear row selections on page change
-    setLoading(false);
-
-    reverseGeocodeAll(raw).then(geocoded => setReports(geocoded));
-  }, [filterStatus, filterType, filterSeverity]); // re-created when server filters change
-
-  // Re-fetch from page 1 whenever the server-side filter callback changes.
-  useEffect(() => { fetchPage(1); fetchProjects(); }, [fetchPage, fetchProjects]);
-
-  const handleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortCol(col); setSortDir("asc"); }
-  };
-
-  const filtered = reports
-    .filter(r => {
-      // status, damage_type, severity are already filtered server-side.
-      // Only apply client-side predicates that the backend doesn't support.
-      const q  = search.toLowerCase();
-      const bg = barangay(r).toLowerCase();
-      const id = String(r.id).padStart(3, "0");
-      if (search && !bg.includes(q) && !id.includes(q) && !street(r).toLowerCase().includes(q)) return false;
-      if (filterDate !== "All" && r.created_at) {
-        const d = new Date(r.created_at), now = new Date();
-        if (filterDate === "Today" && d.toDateString() !== now.toDateString()) return false;
-        if (filterDate === "Week"  && d < new Date(now - 7 * 86400000))        return false;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const mul = sortDir === "asc" ? 1 : -1;
-      if (sortCol === "created_at") return mul * (new Date(a.created_at ?? 0) - new Date(b.created_at ?? 0));
-      if (sortCol === "severity")   return mul * (severity(a) > severity(b) ? 1 : -1);
-      if (sortCol === "status")     return mul * ((a.status ?? "") > (b.status ?? "") ? 1 : -1);
-      if (sortCol === "priority") {
-        const o = { high: 0, medium: 1, low: 2 };
-        return mul * (o[getPriority(a)] - o[getPriority(b)]);
-      }
-      return 0;
-    });
-
-  const allSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
+  const handleSort = col => changeCriteria({
+    sortCol: col,
+    sortDir: sortCol === col && sortDir === "asc" ? "desc" : "asc",
+  });
+  const pendingSearch = term !== search.trim();
+  const allSelected = reports.length > 0 && reports.every(r => selected.has(r.id));
   const toggleAll   = () =>
-    setSelected(allSelected ? new Set() : new Set(filtered.map(r => r.id)));
+    setSelected(allSelected ? new Set() : new Set(reports.map(r => r.id)));
   const toggleOne   = (id) =>
     setSelected(prev => {
       const n = new Set(prev);
@@ -838,7 +810,7 @@ function AdminManageReports() {
       return n;
     });
 
-  const hasActiveFilters = filterType !== "All" || filterSeverity !== "All" || filterStatus !== "All" || filterDate !== "All";
+  const hasActiveFilters = repeatDamage || filterBarangay !== "All" || filterType !== "All" || filterSeverity !== "All" || filterStatus !== "All" || filterDate !== "All";
 
   return (
     <div className="manage-container">
@@ -847,7 +819,7 @@ function AdminManageReports() {
         <div className="filters-top-row">
           <h2 className="manage-title">Manage Reports</h2>
           <div className="refresh-area">
-            <button className="refresh-btn" onClick={() => fetchPage(page)}>
+            <button className="refresh-btn" onClick={refresh}>
               <IcoRefresh size={12} /> Refresh
             </button>
           </div>
@@ -860,10 +832,12 @@ function AdminManageReports() {
               className="search-input"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              maxLength={200}
+              aria-label="Search by ID, barangay or street"
               placeholder="Search by ID, barangay or street…"
             />
             {search && (
-              <button className="search-clear" onClick={() => setSearch("")}>
+              <button className="search-clear" aria-label="Clear search" onClick={() => setSearch("")}>
                 <IcoX size={12} />
               </button>
             )}
@@ -873,6 +847,8 @@ function AdminManageReports() {
             <button
               className={`filters-trigger ${filtersOpen ? "open" : ""} ${hasActiveFilters ? "active" : ""}`}
               onClick={() => setFiltersOpen(o => !o)}
+              aria-expanded={filtersOpen}
+              aria-controls="manage-report-filters"
             >
               <IcoSliders size={14} />
               <span>Filters</span>
@@ -882,13 +858,13 @@ function AdminManageReports() {
           </div>
 
           <div className="export-btns-wrap">
-            <button className="btn-export" onClick={() => exportCSV(reports, "page")}>
+            <button className="btn-export" disabled={loading || pendingSearch || !reports.length} onClick={() => exportCSV(reports, "page")}>
               <IcoDownload size={14} /> Export Page
             </button>
             <button
               className="btn-export btn-export--all"
               onClick={exportAll}
-              disabled={exportAllLoading}
+              disabled={exportAllLoading || loading || pendingSearch}
             >
               {exportAllLoading
                 ? <><IcoRefresh size={14} className="spin" /> Exporting…</>
@@ -898,8 +874,16 @@ function AdminManageReports() {
         </div>
 
         {filtersOpen && (
-          <div className="filters-drawer">
+          <div className="filters-drawer" id="manage-report-filters">
             <div className="filters-row">
+              <div className="filter-group custom-select">
+                <label htmlFor="manage-barangay">Barangay</label>
+                <select id="manage-barangay" value={filterBarangay}
+                  onChange={e => changeCriteria({ filterBarangay: e.target.value })}>
+                  <option value="All">All barangays</option>
+                  {MALABON_BARANGAYS.map(name => <option key={name}>{name}</option>)}
+                </select>
+              </div>
               <div className="filter-group">
                 <label>Damage Type</label>
                 <div className="filter-buttons">
@@ -907,15 +891,16 @@ function AdminManageReports() {
                     <button
                       key={t}
                       className={filterType === t ? "active" : ""}
-                      onClick={() => setFilterType(t)}
+                      aria-pressed={filterType === t}
+                      onClick={() => changeCriteria({ filterType: t })}
                     >{t}</button>
                   ))}
                 </div>
               </div>
 
               <div className="filter-group custom-select">
-                <label>Severity</label>
-                <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
+                <label htmlFor="manage-severity">Severity</label>
+                <select id="manage-severity" value={filterSeverity} onChange={e => changeCriteria({ filterSeverity: e.target.value })}>
                   <option value="All">All Severity</option>
                   <option value="non_critical">Non-Critical</option>
                   <option value="critical">Critical</option>
@@ -923,9 +908,10 @@ function AdminManageReports() {
               </div>
 
               <div className="filter-group custom-select">
-                <label>Status</label>
-                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                <label htmlFor="manage-status">Status</label>
+                <select id="manage-status" value={filterStatus} onChange={e => changeCriteria({ filterStatus: e.target.value })}>
                   <option value="All">All Status</option>
+                  <option value="awaiting_repair_review">Awaiting Repair Review</option>
                   {STATUS_FLOW.map(s => (
                     <option key={s} value={s}>{STATUS_LABELS[s]}</option>
                   ))}
@@ -933,18 +919,24 @@ function AdminManageReports() {
               </div>
 
               <div className="filter-group custom-select">
-                <label>Date</label>
-                <select value={filterDate} onChange={e => setFilterDate(e.target.value)}>
+                <label htmlFor="manage-date">Date</label>
+                <select id="manage-date" value={filterDate} onChange={e => changeCriteria({ filterDate: e.target.value })}>
                   <option value="All">All Time</option>
                   <option value="Today">Today</option>
                   <option value="Week">This Week</option>
                 </select>
               </div>
+              <div className="filter-group">
+                <label>
+                  <input type="checkbox" checked={repeatDamage}
+                    onChange={e => changeCriteria({ repeatDamage: e.target.checked })} /> Possible repeat damage
+                </label>
+              </div>
             </div>
 
             {hasActiveFilters && (
               <div className="filters-footer">
-                <button className="filters-clear" onClick={() => { setFilterType("All"); setFilterSeverity("All"); setFilterStatus("All"); setFilterDate("All"); }}>
+                <button className="filters-clear" onClick={() => changeCriteria({ filterBarangay: "All", filterType: "All", filterSeverity: "All", filterStatus: "All", filterDate: "All", repeatDamage: false })}>
                   <IcoX size={12} /> Clear all filters
                 </button>
               </div>
@@ -954,6 +946,8 @@ function AdminManageReports() {
       </div>
 
       {error && <div className="admin-error-banner">{error}</div>}
+      {actionError && <div role="alert" className="admin-error-banner">{actionError}</div>}
+      {exportError && <div role="alert" className="admin-error-banner">{exportError}</div>}
 
       {selected.size > 0 && (
         <BulkBar
@@ -1002,7 +996,7 @@ function AdminManageReports() {
 
       <div className="manage-table-container">
         <div className="table-responsive">
-          <table className="manage-table">
+          <table className="manage-table" role="table" aria-label="Reports">
             <colgroup>
               <col className="col-check" />
               <col className="col-report" />
@@ -1015,10 +1009,10 @@ function AdminManageReports() {
               <col className="col-assigned" />
               <col className="col-actions" />
             </colgroup>
-            <thead>
-              <tr>
+            <thead role="rowgroup">
+              <tr role="row">
                 {[
-                  [null,        <input type="checkbox" checked={allSelected} onChange={toggleAll} className="amr-cb" />, false],
+                  [null,        <input type="checkbox" aria-label="Select page" checked={allSelected} onChange={toggleAll} className="amr-cb" />, false],
                   [null,        "Report",      false],
                   ["created_at","Reported",    true ],
                   [null,        "Damage Type", false],
@@ -1031,24 +1025,25 @@ function AdminManageReports() {
                 ].map(([col, label, sortable], i) => (
                   <th
                     key={i}
-                    onClick={sortable ? () => handleSort(col) : undefined}
+                    scope="col"
+                    role="columnheader"
+                    aria-sort={sortable && sortCol === col ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
                     className={sortable ? "sortable" : ""}
                   >
-                    <div className="th-content">
-                      {label}
-                      {sortable && <IcoSort size={12} active={sortCol === col} dir={sortDir} />}
-                    </div>
+                    {sortable ? <button type="button" className="th-content amr-sort-button" onClick={() => handleSort(col)}>
+                      {label}<IcoSort size={12} active={sortCol === col} dir={sortDir} />
+                    </button> : <div className="th-content">{label}</div>}
                   </th>
                 ))}
               </tr>
             </thead>
 
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={10} className="no-data">Loading reports…</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={10} className="no-data">No reports found</td></tr>
-              ) : filtered.map(r => {
+            <tbody role="rowgroup">
+              {loading || pendingSearch ? (
+                <tr role="row"><td role="cell" colSpan={10} className="no-data" aria-live="polite">Loading reports…</td></tr>
+              ) : reports.length === 0 ? (
+                <tr role="row"><td role="cell" colSpan={10} className="no-data">No reports found</td></tr>
+              ) : reports.map(r => {
                 const st       = r.status?.toLowerCase();
                 const pri      = getPriority(r);
                 const sev      = severity(r).toLowerCase();
@@ -1060,18 +1055,31 @@ function AdminManageReports() {
                 return (
                   <tr
                     key={r.id}
+                    role="row"
                     className={`clickable-row ${isSelec ? "selected-row" : ""} ${isCrit ? "critical-row" : ""}`}
                     tabIndex={0}
                     onClick={(event) => { event.currentTarget.focus(); setViewReport(r); }}
                     onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === "Enter") setViewReport(r); }}
                   >
-                    <td className="col-check" onClick={e => { e.stopPropagation(); toggleOne(r.id); }}>
-                      <input type="checkbox" checked={isSelec} onChange={() => toggleOne(r.id)} className="amr-cb" />
+                    <td role="cell" className="col-check" onClick={e => {
+                      e.stopPropagation();
+                      if (e.target === e.currentTarget) toggleOne(r.id);
+                    }}>
+                      <input type="checkbox" checked={isSelec} onChange={() => toggleOne(r.id)}
+                        aria-label={`Select report ${r.id}`} className="amr-cb" />
                     </td>
 
-                    <td className="col-report">
+                    <td role="cell" className="col-report">
                       <div className="report-number-row">
                         <span className="report-number">#{String(r.id).padStart(3, "0")}</span>
+                        {r.possible_repeat_damage && (
+                          <span className="amr-repeat-flag" role="img" aria-label="Possible repeat damage" title="Possible repeat damage">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M5 21V4m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0" />
+                            </svg>
+                          </span>
+                        )}
                         {unread > 0 && (
                           <span className="notes-dot" title={`${unread} new note${unread !== 1 ? "s" : ""}`}>
                             {unread > 9 ? "9+" : unread}
@@ -1088,15 +1096,15 @@ function AdminManageReports() {
                       </div>
                     </td>
 
-                    <td className="col-reported time-ago-cell">{timeAgo(r.created_at)}</td>
+                    <td role="cell" className="col-reported time-ago-cell">{timeAgo(r.created_at)}</td>
 
-                    <td>
+                    <td role="cell">
                       <span className="damage-type-text">
                         {damageType(r)}
                       </span>
                     </td>
 
-                    <td className="col-photo" onClick={e => e.stopPropagation()}>
+                    <td role="cell" className="col-photo" onClick={e => e.stopPropagation()}>
                       {hasSubmissionEvidence(r) ? <ReportEvidence report={r} compact /> : media?.url ? (
                         <img
                           src={media.url}
@@ -1112,9 +1120,9 @@ function AdminManageReports() {
                       </div>
                     </td>
 
-                    <td className="col-severity"><Badge text={severity(r)} className={`sev-badge sev-${sev}`} /></td>
-                    <td className="col-priority"><Badge text={pri}          className={`pri-badge pri-${pri}`} /></td>
-                    <td className="col-status">
+                    <td role="cell" className="col-severity"><Badge text={severity(r)} className={`sev-badge sev-${sev}`} /></td>
+                    <td role="cell" className="col-priority"><Badge text={pri}          className={`pri-badge pri-${pri}`} /></td>
+                    <td role="cell" className="col-status">
                       <Badge text={STATUS_LABELS[st] ?? st} className={`status-badge st-${st}`} />
                       {r.sla_status === "overdue" && (
                         <span style={{ display:"inline-block", marginLeft:4, padding:"1px 6px", borderRadius:10, fontSize:"0.68rem", fontWeight:600, background:"#f59e0b", color:"#fff", verticalAlign:"middle" }}>Overdue</span>
@@ -1136,7 +1144,7 @@ function AdminManageReports() {
                       )}
                     </td>
 
-                    <td className="col-assigned" onClick={e => e.stopPropagation()}>
+                    <td role="cell" className="col-assigned" onClick={e => e.stopPropagation()}>
                       {(() => {
                         const proj = projectByReportId[r.id];
                         if (!proj) return <span className="unassigned">— Unassigned</span>;
@@ -1156,7 +1164,7 @@ function AdminManageReports() {
                       })()}
                     </td>
 
-                    <td className="col-actions" onClick={e => e.stopPropagation()}>
+                    <td role="cell" className="col-actions" onClick={e => e.stopPropagation()}>
                       <ActionButtons
                         r={r}
                         onVerify={()   => handleVerify(r.id)}
@@ -1193,7 +1201,7 @@ function AdminManageReports() {
                 <button
                   className="amr-page-btn"
                   disabled={page <= 1 || loading}
-                  onClick={() => fetchPage(page - 1)}
+                  onClick={() => setQuery(prev => ({ ...prev, page: page - 1 }))}
                 >
                   ← Previous
                 </button>
@@ -1203,7 +1211,7 @@ function AdminManageReports() {
                 <button
                   className="amr-page-btn"
                   disabled={page >= totalPages || loading}
-                  onClick={() => fetchPage(page + 1)}
+                  onClick={() => setQuery(prev => ({ ...prev, page: page + 1 }))}
                 >
                   Next →
                 </button>
@@ -1222,11 +1230,13 @@ function AdminManageReports() {
           report={viewReport}
           project={projectByReportId[viewReport.id] ?? null}
           openAssign={viewOpenAssign}
+          openReview={filterStatus === "awaiting_repair_review"}
           unreadNotes={unreadNotesCount(viewReport, seenCounts)}
           onClose={() => { setViewReport(null); setViewOpenAssign(false); }}
           onMarkComplete={r => { setCompleteReport(r); setViewReport(null); setViewOpenAssign(false); }}
+          onReviewDecision={() => { setViewReport(null); fetchProjects(); refresh(); }}
           onCancel={r       => { setCancelReport(r);   setViewReport(null); setViewOpenAssign(false); }}
-          onVerify={id      => { handleVerify(id); setViewReport(p => p ? { ...p, status: REPORT_STATUS.VERIFIED } : null); }}
+          onVerify={handleVerify}
           onAssigned={handleAssigned}
           onNotesSeen={markNotesSeen}
         />,
@@ -1252,6 +1262,7 @@ function AdminManageReports() {
             setSelected(new Set());
             setBulkMode(null);
             fetchProjects();
+            refresh();
           }}
         />
       )}
@@ -1457,7 +1468,46 @@ function CommentSection({ reportId }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // TABBED ViewModal — matches AdminManageRequests popup design
 // ═══════════════════════════════════════════════════════════════════════════
-function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, onClose, onMarkComplete, onCancel, onVerify, onAssigned, onNotesSeen }) {
+function PriorRepairsCard({ reportId, dateStr, onOpenPhotos }) {
+  const [request, setRequest] = useState(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    getPriorRepairs(reportId).then(result => {
+      if (active) setRequest(result);
+    });
+    return () => { active = false; };
+  }, [reportId, retry]);
+
+  return <section className="vmr-card vmr-card--full" aria-label="Possible repeat damage">
+    <div className="vmr-card-hdr"><IcoWrench size={14} /><span>Possible repeat damage</span></div>
+    <div className="vmr-card-body amr-prior-repairs">
+      {!request ? <p role="status">Loading prior repairs…</p>
+        : !request.success ? <>
+          <p role="alert">{request.error || "Could not load prior repairs."}</p>
+          <button className="action-btn ab-verify" onClick={() => { setRequest(null); setRetry(n => n + 1); }}>Retry</button>
+        </> : !request.data.length ? <p>No matching prior repairs found.</p>
+          : request.data.map(repair => {
+            const photos = repair.repair_photos.map((photo, index) => ({
+              url: resolveMediaUrl(photo.file_url),
+              label: `Report #${repair.report_id} repair photo ${index + 1}`,
+            }));
+            return <article key={repair.report_id}>
+              <strong>Report #{repair.report_id}</strong>
+              <p>Repaired {dateStr(repair.repaired_at)} · {repair.distance_meters} m away</p>
+              {photos.length ? <div className="amr-prior-repair-photos">
+                {photos.map((photo, index) => <button key={repair.repair_photos[index].id} type="button"
+                  onClick={() => onOpenPhotos(photos, index)} aria-label={photo.label}>
+                  <img src={photo.url} alt="" loading="lazy" />
+                </button>)}
+              </div> : <p>No repair photos available.</p>}
+            </article>;
+          })}
+    </div>
+  </section>;
+}
+
+function ViewModal({ report: r, project, openAssign = false, openReview = false, unreadNotes = 0, onClose, onMarkComplete, onReviewDecision, onCancel, onVerify, onAssigned, onNotesSeen }) {
   const st     = r.status?.toLowerCase();
   const sev    = severity(r).toLowerCase();
   const pri    = getPriority(r);
@@ -1466,7 +1516,7 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
 
   const isTerminal = [REPORT_STATUS.RESOLVED, REPORT_STATUS.REJECTED, REPORT_STATUS.CANCELLED].includes(st);
 
-  const [activeTab,   setActiveTab]   = useState("details");
+  const [activeTab,   setActiveTab]   = useState(openReview ? "repair-review" : "details");
   const [completion,  setCompletion]  = useState(null);
   const [compLoading, setCompLoading] = useState(false);
   const [showAssign,  setShowAssign]  = useState(openAssign);
@@ -1514,6 +1564,7 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
     { id: "notes",      label: "Notes",      icon: IcoUsers,   badge: unreadNotes > 0 ? unreadNotes : null, alertBadge: unreadNotes > 0 },
     { id: "actions",    label: "Actions",    icon: IcoShield,  badge: isTerminal ? null : 3 },
     { id: "updates",    label: "Updates",    icon: IcoClock },
+    ...(project?.id ? [{ id: "repair-review", label: "Repair Review", icon: IcoCheck }] : []),
     ...(st === REPORT_STATUS.RESOLVED
       ? [{ id: "completion", label: "Completion", icon: IcoCheck }]
       : []),
@@ -1561,6 +1612,8 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
           {/* DETAILS */}
           {activeTab === "details" && (
             <div className="vmr-grid">
+              {r.possible_repeat_damage && <PriorRepairsCard key={r.id} reportId={r.id}
+                dateStr={dateStr} onOpenPhotos={openLightbox} />}
               <div className="vmr-card">
                 <div className="vmr-card-hdr"><IcoUsers size={14}/><span>REPORTER</span></div>
                 <div className="vmr-card-body">
@@ -1587,6 +1640,7 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
                 <div className="vmr-card-body">
                   <div className="vmr-row"><span className="vmr-lbl">Barangay</span><span className="vmr-val">{barangay(r)}</span></div>
                   <div className="vmr-row"><span className="vmr-lbl">Street</span><span className="vmr-val">{street(r) || "—"}</span></div>
+                  <div><ReportDirectionsLink report={r} className="action-btn ab-verify" /></div>
                 </div>
               </div>
 
@@ -1755,7 +1809,7 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
                 </div>
               )}
 
-              {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) && (
+              {(st === REPORT_STATUS.VERIFIED || st === REPORT_STATUS.IN_PROGRESS) && !project?.contractor_id && !r.assigned_to && (
                 <div className="vmr-action-card">
                   <div className="vmr-action-hdr">
                     <IcoCheck size={20} className="vmr-action-ico vmr-ico-complete"/>
@@ -1827,6 +1881,9 @@ function ViewModal({ report: r, project, openAssign = false, unreadNotes = 0, on
           )}
 
           {/* COMPLETION (resolved only) */}
+          {activeTab === "repair-review" && (project?.id
+            ? <RepairReviewPanel projectId={project.id} report={r} onDecision={onReviewDecision} />
+            : <p>Loading project…</p>)}
           {activeTab === "completion" && st === REPORT_STATUS.RESOLVED && (
             <div className="vmr-completion-tab">
               {compLoading ? (
@@ -2012,15 +2069,7 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
 
   const handleSubmit = async () => {
     setSaving(true); setErr(null);
-    if (proofFile) {
-      const up = await uploadReportMedia(r.id, proofFile);
-      if (!up.success) { setErr("Upload failed: " + (up.error ?? "Unknown")); setSaving(false); return; }
-    }
-    if (comment.trim()) {
-      const cm = await addComment(r.id, comment.trim());
-      if (!cm.success) { setErr("Comment failed: " + (cm.error ?? "Unknown")); setSaving(false); return; }
-    }
-    const res = await updateReport(r.id, { status: REPORT_STATUS.RESOLVED });
+    const res = await resolveReport(r.id, { photo: proofFile, note: comment.trim() });
     if (!res.success) { setErr("Could not resolve: " + (res.error ?? "Unknown")); setSaving(false); return; }
     setSaving(false);
     onSuccess(r.id);
@@ -2061,6 +2110,7 @@ function CompleteModal({ report: r, onClose, onSuccess }) {
               className="completion-comment"
               rows={3}
               value={comment}
+              maxLength={2000}
               onChange={e => setComment(e.target.value)}
               placeholder="Add a note about the completed repair…"
             />

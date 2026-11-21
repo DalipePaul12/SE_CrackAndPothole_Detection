@@ -106,3 +106,12 @@ export const getProjectCompletion = async (projectId) => {
     error: res?.error ?? null,
   };
 };
+
+export const getRepairReview = projectId => api.get(`/projects/${projectId}/repair-review`);
+export const getRepairReviewHistory = (projectId, beforeId) =>
+  api.get(`/projects/${projectId}/repair-review/history?before_id=${beforeId}`);
+export const getRepairReviewPhoto = (projectId, attemptId, photoId) =>
+  api.download(`/projects/${projectId}/repair-review/${attemptId}/photos/${photoId}`);
+export const decideRepairReview = (projectId, attemptId, decision, reason, contractorId) =>
+  api.post(`/projects/${projectId}/repair-review/${attemptId}/decision`,
+    { decision, reason, contractor_id: contractorId });
