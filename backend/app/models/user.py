@@ -71,7 +71,7 @@ class User(Base):
     # Relationships
     reports = relationship("Report", back_populates="owner")
     comments = relationship("Comment", back_populates="user")
-    notifications = relationship("Notification", back_populates="user")
+    notifications = relationship("Notification", back_populates="user", passive_deletes="all")
     audit_logs = relationship("AuditLog", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
     upvotes = relationship("ReportUpvote", back_populates="user")

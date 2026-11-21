@@ -2228,3 +2228,51 @@ body.dark .ab-assign { background: rgba(167,139,250,0.12); color: #a78bfa; }
 @media (max-width: 480px) {
   .manage-table .col-photo > .report-evidence--compact { --evidence-cover-width: 32px; --evidence-cover-height: 32px; --evidence-play-size: 16px; }
 }
+.amr-repeat-flag {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--warning);
+}
+
+.amr-prior-repairs {
+  display: grid;
+  gap: 12px;
+}
+
+.amr-prior-repairs article + article {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.amr-prior-repair-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amr-prior-repair-photos button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: zoom-in;
+}
+
+.amr-prior-repair-photos img {
+  display: block;
+  width: 80px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.amr-sort-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}

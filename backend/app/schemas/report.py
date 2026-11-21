@@ -163,6 +163,7 @@ class ReportResponse(AppBaseModel):
     is_flagged_fake:          bool           = False
     fake_confidence:          Optional[float] = None
     is_potential_duplicate:   bool           = False
+    possible_repeat_damage: Optional[bool] = Field(None, exclude_if=lambda value: value is None)
 
     # ── Structured AI validation audit ────────────────────────────────────────
     ai_validation_status:     Optional[str]   = None
@@ -218,3 +219,15 @@ class ReportListResponse(AppBaseModel):
     page:      int
     page_size: int
     results:   List[ReportResponse]
+
+
+class PriorRepairPhoto(BaseModel):
+    id: int
+    file_url: str
+
+
+class PriorRepairResponse(BaseModel):
+    report_id: int
+    repaired_at: datetime
+    distance_meters: float
+    repair_photos: List[PriorRepairPhoto]

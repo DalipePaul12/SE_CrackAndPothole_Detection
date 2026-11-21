@@ -1,19 +1,23 @@
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, undefer
 
 from app.db.session import get_db
 from app.middleware.auth_middleware import get_current_user, require_admin
 from app.models.enums import NotificationType, ProjectStatus, PriorityLevel, ReportStatus, UserRole
 from app.models.project import Project
+from app.models.project_update import ProjectUpdate as ProjectUpdateLog
+from app.models.repair_review import RepairReview, RepairReviewPhoto
 from app.models.report import Report
 from app.models.user import User
+from app.services import repair_service
 from app.services.notification_service import notify_background
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -34,6 +38,183 @@ class ProjectUpdate(BaseModel):
 
 class ContractorAssign(BaseModel):
     contractor_id: int
+
+
+class RepairDecision(BaseModel):
+    decision: Literal["approve", "request_retake", "withdraw_and_reassign"]
+    reason: str | None = Field(None, max_length=2000)
+    contractor_id: int | None = Field(None, gt=0)
+
+
+async def _get_active_contractor(db: AsyncSession, contractor_id: int) -> User:
+    contractor = await db.get(User, contractor_id)
+    if contractor is None:
+        raise HTTPException(404, "User not found")
+    if contractor.role != UserRole.contractor:
+        raise HTTPException(400, "Assigned user must have role=contractor")
+    if not contractor.is_active:
+        raise HTTPException(400, "Cannot assign an inactive contractor.")
+    return contractor
+
+
+async def repair_review_access(db, project_id, user):
+    project = await db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    if user.role not in (UserRole.admin, UserRole.superadmin) and (
+        user.role != UserRole.contractor or project.contractor_id != user.id
+    ):
+        raise HTTPException(403, "Not authorized to view repair proof.")
+    return project
+
+
+@router.get("/{project_id}/repair-review")
+async def get_repair_review(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = await repair_review_access(db, project_id, current_user)
+    query = repair_service.latest_review(project_id).options(selectinload(RepairReview.photos))
+    review = await db.scalar(query)
+    if review is None or (current_user.role == UserRole.contractor and review.contractor_id != current_user.id):
+        return None
+    return {
+        "id": review.id, "status": review.status, "reason": review.reason,
+        "notes": review.notes, "materials": review.materials, "actual_cost": review.actual_cost,
+        "created_at": review.created_at, "decided_at": review.decided_at,
+        "photo_ids": [photo.id for photo in review.photos],
+        "contractor_id": project.contractor_id,
+        "can_approve_or_retake": project.contractor_id is not None and project.contractor_id == review.contractor_id,
+    }
+
+
+@router.get("/{project_id}/repair-review/history")
+async def get_repair_review_history(
+    project_id: int,
+    before_id: int | None = Query(None, gt=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    await repair_review_access(db, project_id, current_user)
+    page_size = 10
+    latest_id = repair_service.latest_review(project_id).with_only_columns(RepairReview.id).scalar_subquery()
+    query = (select(RepairReview).where(RepairReview.project_id == project_id, RepairReview.id < latest_id)
+             .options(selectinload(RepairReview.photos)).order_by(RepairReview.id.desc()).limit(page_size + 1))
+    if before_id is not None:
+        query = query.where(RepairReview.id < before_id)
+    rows = (await db.scalars(query)).all()
+    return {
+        "attempts": [
+            {"id": row.id, "status": row.status, "reason": row.reason,
+             "created_at": row.created_at, "decided_at": row.decided_at,
+             "photo_ids": [photo.id for photo in row.photos]}
+            for row in rows[:page_size]
+        ],
+        "next_before_id": rows[page_size - 1].id if len(rows) > page_size else None,
+    }
+
+
+@router.get("/{project_id}/repair-review/{attempt_id}/photos/{photo_id}")
+async def get_repair_review_photo(
+    project_id: int,
+    attempt_id: int,
+    photo_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await repair_review_access(db, project_id, current_user)
+    query = (select(RepairReviewPhoto).join(RepairReview)
+             .where(RepairReview.project_id == project_id, RepairReview.id == attempt_id,
+                    RepairReviewPhoto.id == photo_id).options(undefer(RepairReviewPhoto.content)))
+    if current_user.role == UserRole.contractor:
+        query = query.where(RepairReview.contractor_id == current_user.id)
+    photo = await db.scalar(query)
+    if photo is None:
+        raise HTTPException(404, "Repair photo not found")
+    return Response(photo.content, media_type=photo.content_type, headers={"Cache-Control": "private, no-store"})
+
+
+@router.post("/{project_id}/repair-review/{attempt_id}/decision")
+async def decide_repair_review(
+    project_id: int,
+    attempt_id: int,
+    data: RepairDecision,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    reason = (data.reason or "").strip()
+    withdrawing = data.decision == "withdraw_and_reassign"
+    if data.decision == "request_retake" and not reason:
+        raise HTTPException(422, "Enter a reason for requesting a retake.")
+    if withdrawing and (not reason or data.contractor_id is None):
+        raise HTTPException(422, "Enter a withdrawal reason and choose a replacement contractor.")
+    project, report = await repair_service.lock_project(db, project_id)
+    review = await db.scalar(repair_service.latest_review(project_id))
+    if (
+        review is None or review.id != attempt_id or review.status != repair_service.PENDING_REVIEW
+        or project.status != ProjectStatus.IN_PROGRESS or report.status != ReportStatus.IN_PROGRESS
+    ):
+        raise HTTPException(409, "This submission is no longer awaiting review. Refresh to see the latest status.")
+    if not withdrawing and (project.contractor_id is None or project.contractor_id != review.contractor_id):
+        raise HTTPException(409, "The original assignment is gone. Withdraw and reassign this review.")
+
+    paths = []
+    old_status = project.status
+    assignment_audit = {}
+    if withdrawing:
+        if data.contractor_id in (project.contractor_id, review.contractor_id):
+            raise HTTPException(422, "Choose a different contractor.")
+        replacement = await _get_active_contractor(db, data.contractor_id)
+        assignment_audit = {"old_contractor_id": project.contractor_id, "new_contractor_id": replacement.id}
+        project.contractor_id = replacement.id
+        project.status = ProjectStatus.SCHEDULED
+        project.completion_percentage = 0
+        report.assigned_to = None
+        review.status = repair_service.WITHDRAWN
+        review.reason = reason
+        audit_note = f"Withdrew repair proof attempt #{review.id} and reassigned the project. {reason}"
+        repair_service.add_notification(
+            db, background_tasks, replacement.id, report.id, "You have been assigned to a project",
+            f"Accept project #{project.id} to continue the repair.", NotificationType.info,
+        )
+    elif data.decision == "approve":
+        photos = await db.execute(
+            select(RepairReviewPhoto.content, RepairReviewPhoto.content_type)
+            .where(RepairReviewPhoto.review_id == review.id).order_by(RepairReviewPhoto.id)
+        )
+        paths = await repair_service.publish_proof(db, report.id, photos)
+        review.status = repair_service.APPROVED
+        project.status = ProjectStatus.COMPLETED
+        project.completion_percentage = 100
+        project.actual_completion_date = datetime.now(timezone.utc)
+        project.notes = review.notes
+        project.materials_used = review.materials
+        project.actual_cost = review.actual_cost
+        report.status = ReportStatus.RESOLVED
+        repair_service.add_notification(
+            db, background_tasks, report.owner_id, report.id, "Your report has been resolved",
+            f"The repair for report #{report.id} has been approved.", NotificationType.success,
+        )
+        audit_note = "Approved contractor repair proof."
+    else:
+        review.status = repair_service.RETAKE_REQUESTED
+        review.reason = reason
+        repair_service.add_notification(
+            db, background_tasks, project.contractor_id, report.id, "Repair photo retake requested", reason, NotificationType.warning,
+        )
+        audit_note = f"Requested a repair proof retake. {reason}"
+
+    review.reviewer_id = current_user.id
+    review.decided_at = datetime.now(timezone.utc)
+    db.add(ProjectUpdateLog(project_id=project.id, changed_by_id=current_user.id,
+                            old_status=old_status, new_status=project.status,
+                            completion_percentage=project.completion_percentage, note=audit_note,
+                            **assignment_audit))
+    result = {"id": review.id, "status": review.status}
+    await repair_service.commit_with_proof(db, paths)
+    return result
 
 
 # --- HELPERS ---
@@ -61,10 +242,9 @@ async def create_project(
     if current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    result = await db.execute(select(Report).where(Report.id == data.report_id))
-    report = result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+    report = await repair_service.lock_report(db, data.report_id)
+    if report.status in repair_service.CLOSED_REPORT_STATUSES:
+        raise HTTPException(409, "This report is closed.")
 
     existing = await db.execute(select(Project).where(Project.report_id == data.report_id))
     if existing.scalar_one_or_none():
@@ -142,7 +322,16 @@ async def update_project_status(
     if current_user.role not in (UserRole.admin, UserRole.superadmin, UserRole.contractor):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    project = await _get_project_or_404(db, project_id)
+    project, report = await repair_service.lock_project(db, project_id)
+
+    if current_user.role == UserRole.contractor and project.contractor_id != current_user.id:
+        raise HTTPException(403, "Not assigned to this project")
+    if data.status == ProjectStatus.COMPLETED or data.completion_percentage == 100.0:
+        if current_user.role == UserRole.contractor:
+            raise HTTPException(403, "Submit repair proof for admin review.")
+        await repair_service.require_unassigned(db, report)
+    if data.status is not None and data.status != project.status:
+        await repair_service.require_no_pending_review(db, project.id)
     old_status = project.status
     status_changed = data.status is not None and data.status != old_status
 
@@ -162,9 +351,7 @@ async def update_project_status(
         project.actual_completion_date = datetime.now(timezone.utc)
         status_changed = status_changed or (old_status != ProjectStatus.COMPLETED)
 
-    result = await db.execute(select(Report).where(Report.id == project.report_id))
-    report = result.scalar_one_or_none()
-    if is_completed and report:
+    if is_completed:
         report.status = ReportStatus.RESOLVED
 
     await db.commit()
@@ -273,10 +460,16 @@ async def update_project(
     if current_user.role not in (UserRole.admin, UserRole.superadmin, UserRole.contractor):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    project = await _get_project_or_404(db, project_id)
+    project, report = await repair_service.lock_project(db, project_id)
 
     if current_user.role == UserRole.contractor and project.contractor_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not assigned to this project")
+        raise HTTPException(403, "Not assigned to this project")
+    if data.status == ProjectStatus.COMPLETED or data.completion_percentage == 100.0:
+        if current_user.role == UserRole.contractor:
+            raise HTTPException(403, "Submit repair proof for admin review.")
+        await repair_service.require_unassigned(db, report)
+    if data.status is not None and data.status != project.status:
+        await repair_service.require_no_pending_review(db, project.id)
 
     old_status = project.status
     status_changed = data.status is not None and data.status != old_status
@@ -297,9 +490,7 @@ async def update_project(
         project.actual_completion_date = datetime.now(timezone.utc)
         status_changed = status_changed or (old_status != ProjectStatus.COMPLETED)
 
-    result = await db.execute(select(Report).where(Report.id == project.report_id))
-    report = result.scalar_one_or_none()
-    if is_completed and report:
+    if is_completed:
         report.status = ReportStatus.RESOLVED
 
     await db.commit()
@@ -341,25 +532,14 @@ async def assign_contractor(
     if current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    project = await _get_project_or_404(db, project_id)
+    project, report = await repair_service.lock_project(db, project_id)
+
+    if report.status in repair_service.CLOSED_REPORT_STATUSES or project.status in (ProjectStatus.COMPLETED, ProjectStatus.CANCELLED):
+        raise HTTPException(409, "This repair is closed.")
+    await repair_service.require_no_pending_review(db, project.id)
 
     # Validate target user exists and is a contractor
-    contractor_result = await db.execute(
-        select(User).where(User.id == data.contractor_id)
-    )
-    contractor = contractor_result.scalar_one_or_none()
-    if not contractor:
-        raise HTTPException(status_code=404, detail="User not found")
-    if contractor.role != UserRole.contractor:
-        raise HTTPException(
-            status_code=400, detail="Assigned user must have role=contractor"
-        )
-    # Previously not explicitly rejected — an inactive/suspended contractor
-    # could be assigned and would silently never act on it.
-    if not contractor.is_active:
-        raise HTTPException(
-            status_code=400, detail="Cannot assign an inactive contractor."
-        )
+    contractor = await _get_active_contractor(db, data.contractor_id)
 
     old_contractor_id = project.contractor_id
     project.contractor_id = data.contractor_id
@@ -492,6 +672,7 @@ async def delete_project(
     if current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    project = await _get_project_or_404(db, project_id)
+    project, _ = await repair_service.lock_project(db, project_id)
+    await repair_service.require_no_pending_review(db, project.id)
     await db.delete(project)
     await db.commit()

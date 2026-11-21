@@ -1,0 +1,60 @@
+.repair-review {
+  padding: 16px;
+}
+
+.repair-review-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.repair-review-comparison img,
+.repair-review-comparison video {
+  max-width: 100%;
+}
+
+.repair-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.repair-review-actions textarea {
+  width: 100%;
+  min-height: 80px;
+  color: inherit;
+  background: transparent;
+}
+
+.repair-history {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.repair-history summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 10px 8px;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.repair-history summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.repair-history-list { display: grid; gap: 8px; }
+.repair-history-list > button { justify-self: start; min-height: 44px; }
+.repair-history-attempt { border: 1px solid var(--border); border-radius: var(--radius-md); min-width: 0; }
+.repair-history-attempt summary :is(time, span) { display: inline-block; margin-inline-start: 8px; color: var(--subtext); }
+.repair-history-attempt-body { padding: 0 12px 12px; overflow-wrap: anywhere; }
+.repair-history-photos { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 96px), 1fr)); }
+.repair-history-photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+
+@media (max-width: 640px) {
+  .repair-review-comparison {
+    grid-template-columns: 1fr;
+  }
+}

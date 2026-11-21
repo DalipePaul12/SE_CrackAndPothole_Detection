@@ -6,7 +6,7 @@ import ConfirmChangesModal from "../pages/PopUps/ConfirmChangesModal.jsx";
 
 import {
   LayoutDashboard, ClipboardList, CheckSquare,
-  Bell, UserCircle,
+  Bell, UserCircle, Map,
   Sun, Moon, ChevronLeft, ChevronRight, LogOut,
 } from "lucide-react";
 
@@ -71,6 +71,7 @@ function ContractorSidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   const navItems = [
     { to: "/contractorpanel/dashboard",      icon: LayoutDashboard, label: "Dashboard"         },
     { to: "/contractorpanel/projects",       icon: ClipboardList,   label: "Assigned Projects" },
+    { to: "/contractorpanel/map",            icon: Map,             label: "Map View" },
     { to: "/contractorpanel/completed",      icon: CheckSquare,     label: "Completed"         },
     { to: "/contractorpanel/notifications",  icon: Bell,            label: "Notifications"     },
     { to: "/contractorpanel/profile",        icon: UserCircle,      label: "My Profile"        },

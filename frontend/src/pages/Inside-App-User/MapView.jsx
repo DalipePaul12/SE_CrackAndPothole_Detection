@@ -1,5 +1,8 @@
 import ReportEvidence, { hasSubmissionEvidence, hasSubmissionPhotos, submissionMedia } from "../../components/ReportEvidence";
+import ReportDirectionsLink from "../../components/ReportDirectionsLink";
+import ReportDirectionsLayer from "../../components/ReportDirectionsLayer";
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
 import "./MapView.css";
 import {
   MapContainer, TileLayer, Marker, Popup,
@@ -12,6 +15,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import "leaflet/dist/leaflet.css";
 import { useTheme } from "../Contexts/ThemeContext";
 import { resolveMediaUrl } from "../../utils/mediaUrl";
+import { getReportPin } from "../../utils/reportPin";
 import { useMapReports } from "../../hooks/useMapReports";
 import {
   MapPin, AlertTriangle, Clock, CheckCircle2,
@@ -422,6 +426,11 @@ function Lightbox({ src, isVideo, onClose, onNext, onPrev, hasNavigation, counte
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function MapView() {
+  const data = useMapReports();
+  return <RoadDamageMap {...data} />;
+}
+
+export function RoadDamageMap({ reports, loading, error, refetch, contractor = false }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -442,11 +451,9 @@ export default function MapView() {
   const [panelOpen,    setPanelOpen]    = useState(false);
   const [filtersOpen,  setFiltersOpen]  = useState(false);
 
-  const { reports, loading, error, refetch } = useMapReports();
-
   // Derived state
   const safe   = Array.isArray(reports) ? reports : [];
-  const mapped = safe.filter((r) => r.latitude && r.longitude);
+  const mapped = safe.filter(getReportPin);
   const q      = search.toLowerCase();
 
   // ─── Filter logic ────────────────────────────────────────────────────────────
@@ -515,7 +522,7 @@ export default function MapView() {
             </div>
             <div className="mv-title-group">
               <h1 className="mv-page-title">Road Damage Map</h1>
-              <span className="mv-subtitle">Live reports — Malabon City</span>
+              <span className="mv-subtitle">{contractor ? "Your assigned projects" : "Live reports — Malabon City"}</span>
             </div>
           </div>
 
@@ -538,7 +545,7 @@ export default function MapView() {
             <div className="mv-pill mv-pill--green">
               <CheckCircle2 size={11} aria-hidden="true" />
               <strong>{counts.resolved}</strong>
-              <span className="mv-pill-label">Resolved</span>
+              <span className="mv-pill-label">{contractor ? "Completed" : "Resolved"}</span>
             </div>
             <div className="mv-pill mv-pill--neutral">
               <BarChart2 size={11} aria-hidden="true" />
@@ -653,11 +660,11 @@ export default function MapView() {
                 <span>Status</span>
                 <select className="mv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                   <option value="all">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="verified">Verified</option>
+                  <option value="pending">{contractor ? "Pending Acceptance" : "Pending"}</option>
+                  {!contractor && <option value="verified">Verified</option>}
                   <option value="in_progress">In Progress</option>
-                  <option value="resolved">Resolved</option>
-                  <option value="declined">Declined</option>
+                  <option value="resolved">{contractor ? "Completed" : "Resolved"}</option>
+                  {!contractor && <option value="declined">Declined</option>}
                 </select>
               </label>
               <label className="mv-filter-label">
@@ -712,6 +719,7 @@ export default function MapView() {
                 className="mv-leaflet-instance"
               >
                 <TileLayer key={tileUrl} url={tileUrl} attribution={tile.attr} />
+                {contractor && <ReportDirectionsLayer contractor />}
                 <ZoomControl position="bottomright" />
                 <MapBootstrap panelOpen={panelOpen} />
                 <TileErrorHandler />
@@ -719,6 +727,7 @@ export default function MapView() {
 
                 <Polygon
                   positions={MALABON_BOUNDARY}
+                  className="mv-city-boundary"
                   pathOptions={{
                     color: "#155318", weight: 2.5, opacity: 0.75,
                     fillColor: "#22c55e", fillOpacity: 0.04, dashArray: "8 5",
@@ -761,6 +770,13 @@ export default function MapView() {
                 </div>
 
                 <div className="mv-panel-body">
+                  {contractor && (
+                    <div className="mv-project-actions">
+                      <ReportDirectionsLink report={selected} projectId={selected.projectId}
+                        className="mv-retry-btn" onClick={closePanel} />
+                      <Link to={`/contractorpanel/projects/${selected.projectId}`}>View project</Link>
+                    </div>
+                  )}
                   {(() => {
                     const attachments = submissionMedia(selected);
                     const mediaCount = attachments.length;
@@ -864,7 +880,8 @@ export default function MapView() {
                         border: `1px solid ${getStatusColor(selected.status)}40`,
                       }}
                     >
-                      {getStatusLabel(selected.status)}
+                      {contractor ? ({ pending: "Pending Acceptance", resolved: "Completed" }[selected.status]
+                        ?? getStatusLabel(selected.status)) : getStatusLabel(selected.status)}
                     </span>
                   </div>
 
@@ -909,7 +926,7 @@ export default function MapView() {
                     <div className="mv-info-item">
                       <div className="mv-info-icon"><Clock size={14} /></div>
                       <div className="mv-info-text">
-                        <span className="mv-info-label">Date Reported</span>
+                        <span className="mv-info-label">{contractor ? "Date Assigned" : "Date Reported"}</span>
                         <span className="mv-info-value">
                           {new Date(
                             selected.created_at ?? selected.date_reported ?? 0
@@ -932,7 +949,7 @@ export default function MapView() {
           <div className="mv-strip-label">Reports</div>
           <div className="mv-strip-scroll">
             {filtered.length === 0 ? (
-              <span className="mv-strip-empty">No reports match your filters</span>
+              <span className="mv-strip-empty">{contractor ? "No assigned project pins match your filters" : "No reports match your filters"}</span>
             ) : (
               filtered.map((r) => {
                 return (

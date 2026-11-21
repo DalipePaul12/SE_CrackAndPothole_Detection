@@ -6,7 +6,7 @@ import { api } from '../api/client.js';
 function cleanParams(params = {}) {
   return Object.fromEntries(
     Object.entries(params).filter(
-      ([, v]) => v !== undefined && v !== null && v !== "" && v !== "All"
+      ([key, v]) => v !== undefined && v !== null && v !== "" && (key === "search" || v !== "All")
     )
   );
 }
@@ -85,6 +85,14 @@ export async function getReports(params = {}) {
     barangay:    params.barangay,
     damage_type: params.damage_type,
     severity:    params.severity,
+    search:      params.search,
+    awaiting_repair_review: params.awaiting_repair_review,
+    include_repeat_damage: params.include_repeat_damage,
+    possible_repeat_damage: params.possible_repeat_damage,
+    created_from: params.created_from,
+    created_before: params.created_before,
+    sort_by:     params.sort_by,
+    sort_dir:    params.sort_dir,
     page:        params.page      ?? 1,
     page_size:   params.page_size ?? 15,
   });
@@ -94,6 +102,24 @@ export async function getReports(params = {}) {
 
 // Alias for backwards compatibility
 export const fetchReports = getReports;
+
+export async function getReportsForExport(params) {
+  const rows = [];
+  const pageSize = 100;
+  let total;
+  for (let page = 1; ; page++) {
+    const res = await getReports({ ...params, page, page_size: pageSize });
+    if (!res.success) throw new Error(res.error || "Could not load reports.");
+    total ??= res.data.total;
+    if (res.data.total !== total) throw new Error("Reports changed during export.");
+    rows.push(...res.data.results);
+    if (page * pageSize >= total) break;
+  }
+  if (rows.length !== total || new Set(rows.map(row => row.id)).size !== total) {
+    throw new Error("Reports changed during export.");
+  }
+  return rows;
+}
 
 
 export async function getMyReports(params = {}) {
@@ -113,6 +139,10 @@ export const fetchMyReports = getMyReports;
 export async function getReport(reportId) {
   const res = await api.get(`/reports/${reportId}`);
   return unwrap(res);
+}
+
+export async function getPriorRepairs(reportId) {
+  return unwrap(await api.get(`/reports/${reportId}/prior-repairs`));
 }
 
 // Alias for backwards compatibility
@@ -204,6 +234,13 @@ export async function reconcileMedia(reportId, file, uploadId) {
 
 // Alias for backwards compatibility
 export const uploadReportMedia = uploadMedia;
+
+export async function resolveReport(reportId, { photo, note } = {}) {
+  const form = new FormData();
+  if (photo) form.append("photo", photo);
+  if (note) form.append("note", note);
+  return unwrap(await api.upload(`/reports/${reportId}/resolve`, form));
+}
 
 // ── Admin actions ─────────────────────────────────────────────────────────────
 

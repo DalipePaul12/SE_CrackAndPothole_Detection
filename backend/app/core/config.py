@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Road Damage Reporting System"
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
+    GEOAPIFY_ROUTING_KEY: str = ""
 
     DATABASE_URL: str = ""
     SUPABASE_DATABASE_URL: str = ""

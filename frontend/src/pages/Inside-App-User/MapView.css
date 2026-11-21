@@ -626,6 +626,20 @@ html, body { margin: 0; padding: 0; background: var(--mv-bg); }
 }
 .mv-retry-btn:hover { background: var(--mv-primary-light); }
 
+.mv-project-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.mv-project-actions .mv-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
 /* ═══════════════════════════════════════════════
    LEAFLET POPUP — compact quick-peek
 ═══════════════════════════════════════════════ */

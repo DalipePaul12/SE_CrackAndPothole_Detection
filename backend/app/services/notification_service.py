@@ -48,6 +48,26 @@ async def notify(
         report_id,
     )
 
+    await deliver_notification(db, notif, email=email)
+    return notif
+
+
+async def deliver_saved_notification(saved: Notification) -> None:
+    notification_id = saved.id
+    try:
+        async with AsyncSessionLocal() as db:
+            notification = await db.get(Notification, notification_id)
+            if notification:
+                await deliver_notification(db, notification)
+    except Exception:
+        logger.exception("Could not deliver notification %s", notification_id)
+
+
+async def deliver_notification(db: AsyncSession, notif: Notification, *, email: str | None = None) -> None:
+    user_id = notif.user_id
+    title, message = notif.title, notif.message
+    report_id = notif.report_id
+
     # ── Respect admin push_alerts / email_alerts settings ────────────────────
     # Fail open: if settings are unavailable, always deliver (never silence).
     try:
@@ -105,10 +125,6 @@ async def notify(
                 )
         except Exception:
             logger.exception("Failed to send notification email to user_id=%d", user_id)
-
-    return notif
-
-
 async def notify_background(
     *,
     user_id: int,

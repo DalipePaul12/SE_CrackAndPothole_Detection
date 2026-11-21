@@ -1,9 +1,12 @@
 import ReportEvidence, { hasSubmissionEvidence, hasSubmissionPhotos, submissionMedia } from "../../components/ReportEvidence";
+import ReportDirectionsLink from "../../components/ReportDirectionsLink";
+import ReportDirectionsLayer from "../../components/ReportDirectionsLayer";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import "./AdminMapView.css";
 import { resolveMediaUrl } from "../../utils/mediaUrl";
+import { getReportPin } from "../../utils/reportPin";
 import {
   MapContainer, TileLayer, Marker, Popup,
   useMap, useMapEvents, Rectangle, Polygon, Circle,
@@ -35,7 +38,7 @@ function useIsDark() {
   return isDark;
 }
 
-import { getReports, getReport, updateReport, uploadReportMedia as uploadReportImage } from "../../api/reports";
+import { getReports, getReport, resolveReport, updateReport, uploadReportMedia as uploadReportImage } from "../../api/reports";
 import { getSettings } from "../../api/settings";
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -436,7 +439,9 @@ function MapBoundsWatcher({ onBoundsChange }) {
   return null;
 }
 
-function ConfirmStatusDialog({ pending, onConfirm, onCancel, loading }) {
+function ConfirmStatusDialog({ pending, onConfirm, onCancel, loading, error }) {
+  const [photo, setPhoto] = useState(null);
+  const [note, setNote] = useState("");
   if (!pending) return null;
   const ACTION_META = {
     in_progress: { label: "Mark as In Progress", color: "#60a5fa", btnClass: "amv-dialog-btn--progress", icon: <Wrench size={22} /> },
@@ -454,9 +459,19 @@ function ConfirmStatusDialog({ pending, onConfirm, onCancel, loading }) {
           <strong>{STATUS_CONFIG[pending.newStatus]?.label ?? pending.newStatus}</strong>?
           <br />This will notify the reporter.
         </p>
+        {pending.newStatus === "resolved" && <div className="amv-proof-fields">
+          <label>Repair photo (optional)
+            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={loading}
+              onChange={e => setPhoto(e.target.files[0] ?? null)} />
+          </label>
+          <label>Admin note (optional)
+            <textarea value={note} maxLength={2000} disabled={loading} onChange={e => setNote(e.target.value)} />
+          </label>
+        </div>}
+        {error && <p role="alert">{error}</p>}
         <div className="amv-dialog-actions">
           <button className="amv-dialog-cancel" onClick={onCancel} disabled={loading}>Cancel</button>
-          <button className={`amv-dialog-confirm ${meta.btnClass}`} onClick={onConfirm} disabled={loading}>
+          <button className={`amv-dialog-confirm ${meta.btnClass}`} onClick={() => onConfirm({ photo, note: note.trim() })} disabled={loading}>
             {loading ? "Updating…" : "Confirm"}
           </button>
         </div>
@@ -647,6 +662,7 @@ function AdminMapView() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [panelOpen,      setPanelOpen      ] = useState(false);
   const [actionLoading,  setActionLoading ] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [flyTo,          setFlyTo         ] = useState(null);
   const [lightboxItems,  setLightboxItems ] = useState([]); // [{ url, label }]
   const [lightboxIndex,  setLightboxIndex ] = useState(0);
@@ -676,7 +692,7 @@ function AdminMapView() {
     if (res.success) {
       const data  = res.data?.results ?? [];
       const total = res.data?.total   ?? data.length;
-      const withCoords = data.filter((r) => r.latitude && r.longitude);
+      const withCoords = data.filter(getReportPin);
       setAllReports(withCoords);
       setTotalCount(total);
       loadingStateRef.current = { loadedPages: 1, totalCount: total };
@@ -694,7 +710,7 @@ function AdminMapView() {
     const nextPage = loadedPages + 1;
     const res = await getReports({ page_size: 100, page: nextPage });
     if (res.success) {
-      const data = (res.data?.results ?? []).filter((r) => r.latitude && r.longitude);
+      const data = (res.data?.results ?? []).filter(getReportPin);
       setAllReports((prev) => {
         const ids = new Set(prev.map((r) => r.id));
         return [...prev, ...data.filter((r) => !ids.has(r.id))];
@@ -709,9 +725,8 @@ function AdminMapView() {
   // If navigated here with a focusReport in location.state, fly to it on mount
   useEffect(() => {
     const focus = location.state?.focusReport;
-    if (focus?.lat != null && focus?.lng != null) {
-      setFlyTo([parseFloat(focus.lat), parseFloat(focus.lng)]);
-    }
+    const pin = getReportPin({ latitude: focus?.lat, longitude: focus?.lng });
+    if (pin) setFlyTo(pin);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const id = setInterval(() => loadReports(true), REFRESH_INTERVAL);
@@ -765,13 +780,16 @@ function AdminMapView() {
       })
     : filteredReports;
 
-  async function handleAction(reportId, newStatus) {
+  async function handleAction(reportId, newStatus, proof) {
     setActionLoading(true);
-    const res = await updateReport(reportId, { status: newStatus });
+    setActionError("");
+    const res = newStatus === "resolved"
+      ? await resolveReport(reportId, proof)
+      : await updateReport(reportId, { status: newStatus });
     if (res.success) {
       // Optimistic update — instant feedback on chips, popup, and map pins
       setAllReports((prev) => prev.map((r) => r.id === reportId ? { ...r, status: newStatus } : r));
-      setSelectedReport((prev) => prev ? { ...prev, status: newStatus } : prev);
+      setSelectedReport((prev) => prev?.id === reportId ? { ...prev, status: newStatus } : prev);
       // Server-confirmed sync — re-fetch the single report so pins/panels show authoritative data
       getReport(reportId).then((fresh) => {
         if (fresh.success && fresh.data) {
@@ -785,9 +803,9 @@ function AdminMapView() {
           setSelectedReport((prev) => (prev?.id === reportId ? fresh.data : prev));
         }
       });
-    }
+      setConfirmPending(null);
+    } else setActionError(res.error || "Could not update the report.");
     setActionLoading(false);
-    setConfirmPending(null);
   }
 
   function handleImageChange(reportId, newUrl) {
@@ -804,7 +822,7 @@ function AdminMapView() {
     setShowUpload(false);
     setImgError(false);
     setMediaIndex(0);
-    setFlyTo([parseFloat(report.latitude), parseFloat(report.longitude)]);
+    setFlyTo(getReportPin(report));
   }, []);
 
   const closePanel = useCallback(() => {
@@ -1065,6 +1083,7 @@ function AdminMapView() {
                 </div>
               ) : (
                 <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+                  <ReportDirectionsLayer />
                   <TileLayer key={tileUrl} url={tileUrl} attribution={tileAttr} />
                   <MapController flyTo={flyTo} />
                   <MapBoundsWatcher onBoundsChange={setMapBounds} />
@@ -1108,6 +1127,7 @@ function AdminMapView() {
               <div className="amv-panel-drag" aria-hidden="true" />
 
               {selectedReport && (() => {
+                const pin = getReportPin(selectedReport);
                 const d      = fmt(selectedReport);
                 const sevCfg = SEVERITY_CONFIG[getSevKey(selectedReport)] ?? SEVERITY_CONFIG.default;
                 const stCfg  = STATUS_CONFIG[d.status] ?? STATUS_CONFIG.pending;
@@ -1300,7 +1320,7 @@ function AdminMapView() {
                         ["Damage Type", d.type],
                         ["Reporter",    d.user ?? "—"],
                         ["Barangay",    selectedReport.barangay ?? "—"],
-                        ["Coordinates", `${parseFloat(selectedReport.latitude).toFixed(5)}, ${parseFloat(selectedReport.longitude).toFixed(5)}`],
+                        ["Coordinates", pin?.map((coordinate) => coordinate.toFixed(5)).join(", ") ?? "—"],
                         ["Submitted",   d.date],
                         ...(d.conf ? [["ML Confidence", d.conf]] : []),
                       ].map(([label, value]) => (
@@ -1314,11 +1334,13 @@ function AdminMapView() {
                     <div className="amv-panel-actions">
                       <button
                         className="amv-fly-btn"
-                        onClick={() => setFlyTo([parseFloat(selectedReport.latitude), parseFloat(selectedReport.longitude)])}
+                        disabled={!pin}
+                        onClick={() => setFlyTo(pin)}
                       >
                         <Navigation size={14} strokeWidth={2.2} />
                         Fly to Location
                       </button>
+                      <ReportDirectionsLink report={selectedReport} className="amv-fly-btn" onClick={closePanel} />
                     </div>
 
                     <div className="amv-admin-actions">
@@ -1414,11 +1436,14 @@ function AdminMapView() {
           </div>
         </div>
       )}
+      {!confirmPending && actionError && <p role="alert" className="amv-action-error">{actionError}</p>}
       <ConfirmStatusDialog
+        key={confirmPending ? `${confirmPending.id}-${confirmPending.newStatus}` : "closed"}
         pending={confirmPending}
-        onConfirm={() => handleAction(confirmPending.id, confirmPending.newStatus)}
-        onCancel={() => setConfirmPending(null)}
+        onConfirm={proof => handleAction(confirmPending.id, confirmPending.newStatus, proof)}
+        onCancel={() => { setConfirmPending(null); setActionError(""); }}
         loading={actionLoading}
+        error={actionError}
       />
     </>
   );

@@ -1,16 +1,21 @@
 from __future__ import annotations
 
-from typing import Sequence
+import re
+from datetime import datetime, timedelta, timezone
+from typing import Literal, Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import String, case, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings, LOW_CONFIDENCE_TRIAGE_THRESHOLDS
 from app.models.enums import DamageType, ReportStatus, SeverityLevel
 from app.models.report import Report
+from app.models.project import Project
+from app.models.repair_review import RepairReview
 from app.models.report_upvote import ReportUpvote
 from app.schemas.report import ReportCreate, ReportUpdate
+from app.services import prior_repairs
 
 
 # ── CREATE ────────────────────────────────────────────────────────────────────
@@ -129,6 +134,9 @@ async def create_report(
 
 # ── LIST ────────────────────────────────────────────────────────────────────
 
+ReportSort = Literal["created_at", "severity", "priority", "status"]
+SortDirection = Literal["asc", "desc"]
+
 async def list_reports(
     db: AsyncSession,
     *,
@@ -137,6 +145,13 @@ async def list_reports(
     barangay: str | None = None,
     damage_type: DamageType | None = None,
     severity: SeverityLevel | None = None,
+    awaiting_repair_review: bool = False,
+    possible_repeat_damage: bool = False,
+    search: str | None = None,
+    created_from: datetime | None = None,
+    created_before: datetime | None = None,
+    sort_by: ReportSort = "created_at",
+    sort_dir: SortDirection = "desc",
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[Sequence[Report], int]:
@@ -148,26 +163,76 @@ async def list_reports(
         page, NOT one query per row.
     """
     # Base filter query (no paging)
-    base_q = select(Report).order_by(Report.created_at.desc())
+    base_q = select(Report)
+    # Older submissions use Tanong for Tañong.
+    barangay_name = func.replace(func.lower(func.trim(Report.barangay)), "ñ", "n")
 
     if owner_id is not None:
         base_q = base_q.where(Report.owner_id == owner_id)
     if status is not None:
         base_q = base_q.where(Report.status == status)
     if barangay is not None:
-        base_q = base_q.where(Report.barangay == barangay)
+        base_q = base_q.where(barangay_name == barangay.strip().lower().replace("ñ", "n"))
     if damage_type is not None:
         base_q = base_q.where(Report.ai_damage_type == damage_type)
     if severity is not None:
         base_q = base_q.where(Report.ai_severity == severity)
+    if awaiting_repair_review:
+        pending = (select(Project.report_id).join(RepairReview, RepairReview.project_id == Project.id)
+                   .where(RepairReview.status == "pending"))
+        base_q = base_q.where(Report.status == ReportStatus.IN_PROGRESS, Report.id.in_(pending))
+    if possible_repeat_damage:
+        base_q = base_q.where(prior_repairs.has_match())
+    if created_from is not None:
+        base_q = base_q.where(Report.created_at >= created_from)
+    if created_before is not None:
+        base_q = base_q.where(Report.created_at < created_before)
+
+    term = (search or "").strip().lower()
+    if term:
+        formatted_id = re.fullmatch(r"(?:#|rpt-)([0-9]+)", term)
+        id_text = cast(Report.id, String)
+        if formatted_id:
+            base_q = base_q.where(id_text == (formatted_id[1].lstrip("0") or "0"))
+        else:
+            matches = [
+                barangay_name.contains(term.replace("ñ", "n"), autoescape=True),
+                func.lower(Report.street_name).contains(term, autoescape=True),
+            ]
+            if re.fullmatch(r"[0-9]+", term):
+                display_id = case(
+                    (Report.id < 10, "00" + id_text),
+                    (Report.id < 100, "0" + id_text),
+                    else_=id_text,
+                )
+                matches.append(display_id.contains(term))
+            base_q = base_q.where(or_(*matches))
 
     # Total count — runs against base_q WITHOUT limit/offset
     count_q = select(func.count()).select_from(base_q.subquery())
     total: int = (await db.execute(count_q)).scalar_one()
 
+    if sort_by == "priority":
+        now = datetime.now(timezone.utc)
+        # The first ascending rank is the high-priority group in Manage Reports.
+        sort_column = case(
+            (or_(Report.ai_severity == SeverityLevel.critical,
+                 Report.created_at < now - timedelta(hours=72)), 0),
+            (Report.created_at < now - timedelta(hours=24), 1),
+            else_=2,
+        )
+    elif sort_by == "status":
+        sort_column = cast(Report.status, String)
+    elif sort_by == "severity":
+        sort_column = cast(Report.ai_severity, String)
+    else:
+        sort_column = Report.created_at
+    ordering = sort_column.asc() if sort_dir == "asc" else sort_column.desc()
+
     # Paged data query with eager-loaded relationships
     data_q = (
         base_q
+        .order_by(ordering.nulls_last(), Report.id.desc())
         .options(
             selectinload(Report.media_attachments),
             selectinload(Report.ai_detections),

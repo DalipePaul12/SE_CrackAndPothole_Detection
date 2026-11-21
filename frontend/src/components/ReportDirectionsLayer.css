@@ -1,0 +1,110 @@
+.report-route-overlay {
+  position: absolute;
+  z-index: 1000;
+  inset: 0;
+  pointer-events: none;
+}
+
+.report-route-card {
+  position: absolute;
+  left: 12px;
+  box-sizing: border-box;
+  width: min(410px, calc(100% - 24px));
+  max-height: calc(100% - 64px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / .2);
+  pointer-events: auto;
+  font: 500 .85rem/1.45 system-ui, sans-serif;
+}
+
+.report-route-top { top: 12px; }
+.report-route-bottom { bottom: 24px; width: min(410px, calc(100% - 68px)); }
+.report-route-overlay--active .report-route-top { max-height: 40%; }
+.report-route-overlay--active .report-route-bottom { max-height: 44%; }
+
+.report-route-heading,
+.report-route-actions,
+.report-route-turn,
+.report-route-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-route-heading { justify-content: space-between; }
+.report-route-card p { margin: 6px 0; }
+.report-route-card .report-route-summary { margin-top: 0; }
+.report-route-turn strong,
+.report-route-summary strong { font-size: 1.2rem; }
+.report-route-turn span { font-weight: 650; }
+.report-route-summary span,
+.report-route-card small { color: var(--subtext); }
+.report-route-card small { display: block; margin-top: 6px; }
+.report-route-card button {
+  padding: 5px 8px;
+  min-height: 40px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.report-route-line { filter: drop-shadow(0 0 2px #171e2a); }
+.report-route-pin,
+.report-route-location { filter: drop-shadow(0 1px 3px rgb(0 0 0 / .55)); }
+
+.report-navigation-3d.maplibregl-map {
+  position: absolute;
+  inset: 0;
+  z-index: 900;
+  visibility: hidden;
+}
+.report-navigation-3d.maplibregl-map.is-ready { visibility: visible; }
+.leaflet-container:has(> .report-navigation-3d.is-ready) > .leaflet-control-container { display: none; }
+.leaflet-container:has(.report-route-overlay) .mv-city-boundary { display: none; }
+.report-3d-marker { box-sizing: border-box; }
+.report-3d-destination,
+.report-3d-origin {
+  width: 18px;
+  height: 18px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: #d6414f;
+  box-shadow: 0 2px 5px #111c2b;
+}
+.report-3d-origin { background: white; border-color: #2877e6; }
+.report-3d-position {
+  width: 26px;
+  height: 26px;
+  background: white;
+  clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%);
+}
+.report-3d-position::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: #2877e6;
+  clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%);
+}
+
+.amv-root:has(.report-route-overlay--active) :is(.amv-topbar, .amv-controls, .amv-legend, .amv-strip),
+.mv-root:has(.report-route-overlay--active) :is(.mv-topbar, .mv-controls, .mv-strip),
+:is(.amv-root, .mv-root):has(.report-route-overlay--active) :is(.leaflet-marker-pane, .leaflet-shadow-pane) {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .report-route-card { left: 8px; padding: 8px; }
+  .report-route-top { top: 8px; width: calc(100% - 16px); }
+  .report-route-bottom { width: calc(100% - 56px); }
+  .report-route-card button { min-height: 44px; }
+}
