@@ -1,10 +1,11 @@
+import { MALABON_BARANGAYS } from "../../utils/geolocationUtils";
 import ReportDialog from "../../components/ReportDialog";
 import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "./AdminAllReports.css";
 import ConfirmChangesModal from "../PopUps/ConfirmChangesModal";
-import { getReports, updateReport, deleteReport, addComment } from "../../api/reports";
+import { getReports, getReportsForExport, updateReport, deleteReport, addComment } from "../../api/reports";
 import { getProjects, getProjectCompletion, getAvailableContractors, assignContractor, createProject } from "../../api/projects";
 import { sendNotification } from "../../api/notifications";
 import { REPORT_STATUS } from "../../constants/reportStatus";
@@ -21,6 +22,7 @@ import {
 
 const BASE_URL    = import.meta.env.VITE_API_URL || "";
 const PAGE_SIZE   = 20;
+const manilaDay = (daysAgo = 0) => new Date(Date.now() + 8 * 3600000 - daysAgo * 86400000).toISOString().slice(0, 10);
 const TYPE_OPTIONS   = ["All", "Crack", "Pothole"];
 const STATUS_OPTIONS = ["All", REPORT_STATUS.PENDING, REPORT_STATUS.VERIFIED, REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.RESOLVED, REPORT_STATUS.DECLINED];
 const STATUS_LABELS  = {
@@ -38,13 +40,6 @@ const STATUS_TRANSITIONS = {
   [REPORT_STATUS.DECLINED]:    [],
 };
 const STATUS_FLOW_ORDER = [REPORT_STATUS.PENDING, REPORT_STATUS.VERIFIED, REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.RESOLVED];
-
-const NOTIF_TEMPLATES = {
-  [REPORT_STATUS.VERIFIED]:    (r) => ({ title: "Your report has been verified",       message: `Report ${padId(r.id)} at ${location(r)} has been verified by our team.`,                  type: "success" }),
-  [REPORT_STATUS.IN_PROGRESS]: (r) => ({ title: "Repairs are underway",               message: `Work has started on the road damage at ${location(r)} that you reported.`,                type: "info"    }),
-  [REPORT_STATUS.RESOLVED]:    (r) => ({ title: "Your report has been resolved",       message: `The road damage at ${location(r)} has been fully repaired. Thank you for reporting!`,     type: "success" }),
-  [REPORT_STATUS.DECLINED]:    (r, reason) => ({ title: "Your report has been declined",  message: reason ? `Your report was declined: ${reason}` : "Your report was reviewed and declined.", type: "warning" }),
-};
 
 const toClass  = (s = "") => s.toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 const fmtDate  = (iso) => iso ? new Date(iso).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "—";
@@ -67,11 +62,6 @@ const confColor = (v) => {
   if (v < 80)  return "#f57c00";
   return "#2e7d32";
 };
-const sevWeight = (r) => {
-  const map = { critical: 0, "non_critical": 1 };
-  return map[severity(r).toLowerCase()] ?? 99;
-};
-
 async function exportExcel(rows, label = "page") {
   // Loaded only when the user clicks export (keeps the main bundle small)
   const ExcelJS = (await import("exceljs")).default;
@@ -263,13 +253,15 @@ async function exportExcel(rows, label = "page") {
 
 export default function AdminAllReports() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const lowConfidence = searchParams.get("filter") === "low_confidence";
+  const pastSla = searchParams.get("filter") === "overdue";
 
   const [search,       setSearch]       = useState("");
   const [dSearch,      setDSearch]      = useState("");
   const [filters,      setFilters]      = useState({
     type: "All", severity: "All", status: "All", barangay: "All",
-    dateFrom: "", dateTo: "", confMin: 0, confMax: 100,
+    dateFrom: "", dateTo: "",
   });
   const [sort,         setSort]         = useState({ field: "created_at", dir: "desc" });
   const [criticalOnly, setCriticalOnly] = useState(false);
@@ -282,24 +274,17 @@ export default function AdminAllReports() {
       setCriticalOnly(true);
     } else if (filter === "stale") {
       // Pending reports submitted more than 3 days ago
-      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
+      const threeDaysAgo = manilaDay(3);
       setFilters((f) => ({ ...f, status: "pending", dateTo: threeDaysAgo }));
-    } else if (filter === "low_confidence") {
-      setFilters((f) => ({ ...f, confMax: 60 }));
-    } else if (filter === "overdue") {
-      setFilters((f) => ({ ...f, status: "in_progress" }));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [page,         setPage]         = useState(1);
 
-  const [rawReports,  setRawReports]  = useState([]);
   const [reports,     setReports]     = useState([]);
   const [total,       setTotal]       = useState(0);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
-  const [barangays,   setBarangays]   = useState(["All"]);
+  const barangays = ["All", ...MALABON_BARANGAYS];
 
   const [selectedIds,        setSelectedIds]        = useState(new Set());
   const [bulkLoading,        setBulkLoading]        = useState(false);
@@ -312,6 +297,7 @@ export default function AdminAllReports() {
   const [toast,          setToast]          = useState(null);
   const [statsData,      setStatsData]      = useState({ critical: 0, pending: 0, resolved: 0 });
   const [exportAllLoading, setExportAllLoading] = useState(false);
+  const listRequest = useRef(0);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -323,14 +309,25 @@ export default function AdminAllReports() {
     return () => clearTimeout(t);
   }, [search]);
 
+  const criteria = useMemo(() => ({
+    search: dSearch.trim() || undefined,
+    status: filters.status === "All" ? undefined : filters.status,
+    barangay: filters.barangay === "All" ? undefined : filters.barangay,
+    damage_type: filters.type === "All" ? undefined : filters.type.toLowerCase(),
+    severity: criticalOnly ? "critical" : filters.severity === "All" ? undefined : filters.severity,
+    low_confidence: lowConfidence || undefined,
+    past_sla: pastSla || undefined,
+    created_from: filters.dateFrom ? filters.dateFrom + "T00:00:00+08:00" : undefined,
+    created_before: filters.dateTo ? new Date(Date.parse(filters.dateTo + "T00:00:00+08:00") + 86400000).toISOString() : undefined,
+    sort_by: sort.field, sort_dir: sort.dir,
+  }), [filters, criticalOnly, dSearch, sort, pastSla, lowConfidence]);
+
   const fetchReports = useCallback(async () => {
+    const request = ++listRequest.current;
     setLoading(true);
     setError(null);
-    const params = { page, page_size: PAGE_SIZE };
-    if (filters.status   !== "All") params.status   = filters.status;
-    if (filters.barangay !== "All") params.barangay = filters.barangay;
-
-    const res = await getReports(params);
+    const res = await getReports({ ...criteria, page, page_size: PAGE_SIZE });
+    if (request !== listRequest.current) return;
     if (!res.success) {
       setError(res.error);
       setLoading(false);
@@ -339,72 +336,11 @@ export default function AdminAllReports() {
 
     const data = res.data?.results ?? [];
     setTotal(res.data?.total ?? 0);
-    setRawReports(data);
-
-    // Only rebuild the barangay option list when no barangay filter is active.
-    // This preserves all dropdown options after the user selects one, so they
-    // can still switch to a different barangay without going back to "All" first.
-    if (filters.barangay === "All") {
-      const bSet = new Set(["All"]);
-      data.forEach((r) => { if (r.barangay) bSet.add(r.barangay); });
-      setBarangays([...bSet]);
-    }
-
-    setLoading(false);
-  }, [page, filters.status, filters.barangay]);
-
-  useEffect(() => {
-    let data = [...rawReports];
-
-    if (filters.type !== "All")
-      data = data.filter((r) => damageType(r).toLowerCase() === filters.type.toLowerCase());
-    if (filters.severity !== "All")
-      data = data.filter((r) => severity(r).toLowerCase() === filters.severity.toLowerCase());
-    if (criticalOnly)
-      data = data.filter((r) => severity(r).toLowerCase() === "critical");
-    // barangay is now filtered server-side — removed from client-side pass
-    if (filters.dateFrom) {
-      const from = new Date(filters.dateFrom);
-      data = data.filter((r) => r.created_at && new Date(r.created_at) >= from);
-    }
-    if (filters.dateTo) {
-      const to = new Date(filters.dateTo); to.setHours(23, 59, 59);
-      data = data.filter((r) => r.created_at && new Date(r.created_at) <= to);
-    }
-    data = data.filter((r) => {
-      const c = confVal(r);
-      return c === null || (c >= filters.confMin && c <= filters.confMax);
-    });
-    if (dSearch) {
-      const q = dSearch.toLowerCase();
-      data = data.filter((r) =>
-        padId(r.id).toLowerCase().includes(q) ||
-        (r.street_name ?? "").toLowerCase().includes(q) ||
-        (r.barangay ?? "").toLowerCase().includes(q) ||
-        location(r).toLowerCase().includes(q) ||
-        (r.owner?.full_name ?? "").toLowerCase().includes(q)
-      );
-    }
-
-    const { field, dir } = sort;
-    data = [...data].sort((a, b) => {
-      let av, bv;
-      if (field === "created_at")      { av = new Date(a.created_at || 0); bv = new Date(b.created_at || 0); }
-      else if (field === "severity")   { av = sevWeight(a);     bv = sevWeight(b);     }
-      else if (field === "confidence") { av = confVal(a) ?? -1; bv = confVal(b) ?? -1; }
-      else if (field === "status") {
-        const o = { [REPORT_STATUS.PENDING]: 0, [REPORT_STATUS.VERIFIED]: 1, [REPORT_STATUS.IN_PROGRESS]: 2, [REPORT_STATUS.RESOLVED]: 3, [REPORT_STATUS.DECLINED]: 4 };
-        av = o[a.status] ?? 99; bv = o[b.status] ?? 99;
-      } else { av = a[field] ?? ""; bv = b[field] ?? ""; }
-      if (av < bv) return dir === "asc" ? -1 : 1;
-      if (av > bv) return dir === "asc" ?  1 : -1;
-      return 0;
-    });
-
     setReports(data);
-  }, [rawReports, filters, dSearch, sort, criticalOnly]);
+    setLoading(false);
+  }, [page, criteria]);
 
-  useEffect(() => { fetchReports(); }, [fetchReports]);
+  useEffect(() => { setSelectedIds(new Set()); fetchReports(); }, [fetchReports]);
 
   // ── Global summary stats (from analytics endpoints, not the current page) ──
   const fetchStats = useCallback(async () => {
@@ -424,79 +360,23 @@ export default function AdminAllReports() {
   const exportAll = useCallback(async () => {
     setExportAllLoading(true);
     try {
-      const params = {};
-      if (filters.status   !== "All") params.status   = filters.status;
-      if (filters.barangay !== "All") params.barangay = filters.barangay;
-
-      // First page at max server page_size (100) to get the total count
-      const first = await getReports({ ...params, page: 1, page_size: 100 });
-      if (!first.success) {
-        showToast("Export failed: " + (first.error ?? "Unknown error"), "error");
-        return;
-      }
-
-      const serverTotal = first.data?.total ?? 0;
-      const allRows = [...(first.data?.results ?? [])];
-
-      // Fetch remaining pages in parallel (backend max page_size is 100)
-      if (serverTotal > 100) {
-        const pageCount = Math.ceil(serverTotal / 100);
-        const pages = await Promise.all(
-          Array.from({ length: pageCount - 1 }, (_, i) =>
-            getReports({ ...params, page: i + 2, page_size: 100 })
-          )
-        );
-        pages.forEach((r) => {
-          if (r.success) allRows.push(...(r.data?.results ?? []));
-        });
-      }
-
-      // Apply active client-side filters so the export matches what the admin sees
-      let filtered = allRows;
-      if (filters.type !== "All")
-        filtered = filtered.filter((r) => damageType(r).toLowerCase() === filters.type.toLowerCase());
-      if (filters.severity !== "All")
-        filtered = filtered.filter((r) => severity(r).toLowerCase() === filters.severity.toLowerCase());
-      if (criticalOnly)
-        filtered = filtered.filter((r) => severity(r).toLowerCase() === "critical");
-      if (filters.dateFrom) {
-        const from = new Date(filters.dateFrom);
-        filtered = filtered.filter((r) => r.created_at && new Date(r.created_at) >= from);
-      }
-      if (filters.dateTo) {
-        const to = new Date(filters.dateTo);
-        to.setHours(23, 59, 59);
-        filtered = filtered.filter((r) => r.created_at && new Date(r.created_at) <= to);
-      }
-      filtered = filtered.filter((r) => {
-        const c = confVal(r);
-        return c === null || (c >= filters.confMin && c <= filters.confMax);
-      });
-      if (dSearch) {
-        const q = dSearch.toLowerCase();
-        filtered = filtered.filter((r) =>
-          padId(r.id).toLowerCase().includes(q) ||
-          (r.street_name ?? "").toLowerCase().includes(q) ||
-          (r.barangay ?? "").toLowerCase().includes(q) ||
-          location(r).toLowerCase().includes(q) ||
-          (r.owner?.full_name ?? "").toLowerCase().includes(q)
-        );
-      }
-
+      const filtered = await getReportsForExport(criteria);
       await exportExcel(filtered, "all");
       showToast(`Exported ${filtered.length} report${filtered.length !== 1 ? "s" : ""}`);
-    } catch {
-      showToast("Export failed.", "error");
+    } catch (err) {
+      showToast(err.message || "Export failed.", "error");
     } finally {
       setExportAllLoading(false);
     }
-  }, [filters, criticalOnly, dSearch]);
+  }, [criteria]);
 
-  const toggleSort = (field) =>
+  const toggleSort = (field) => {
+    setPage(1);
     setSort((p) => p.field === field
       ? { field, dir: p.dir === "asc" ? "desc" : "asc" }
       : { field, dir: "desc" }
     );
+  };
 
   const SortIcon = ({ field }) =>
     sort.field !== field
@@ -504,9 +384,17 @@ export default function AdminAllReports() {
       : (sort.dir === "asc" ? <ArrowUp size={14} className="sort-active" /> : <ArrowDown size={14} className="sort-active" />);
 
   const setFilter    = (k, v) => { setFilters((p) => ({ ...p, [k]: v })); setPage(1); };
+  const setPastSla = enabled => {
+    const params = new URLSearchParams(searchParams);
+    if (enabled) params.set("filter", "overdue");
+    else params.delete("filter");
+    setSearchParams(params);
+    setPage(1);
+  };
   const resetFilters = () => {
-    setFilters({ type: "All", severity: "All", status: "All", barangay: "All", dateFrom: "", dateTo: "", confMin: 0, confMax: 100 });
+    setFilters({ type: "All", severity: "All", status: "All", barangay: "All", dateFrom: "", dateTo: "" });
     setSearch(""); setPage(1); setCriticalOnly(false);
+    if (pastSla || lowConfidence) setPastSla(false);
   };
 
   const handleStatusChange = async (reportId, newStatus, declineReason = "") => {
@@ -517,7 +405,7 @@ export default function AdminAllReports() {
 
     const res = await updateReport(reportId, payload);
     if (res.success) {
-      setRawReports((prev) =>
+      setReports((prev) =>
         prev.map((r) =>
           r.id === reportId
             ? { ...r, status: newStatus, decline_reason: declineReason || r.decline_reason }
@@ -527,17 +415,7 @@ export default function AdminAllReports() {
       if (selectedReport?.id === reportId)
         setSelectedReport((p) => ({ ...p, status: newStatus }));
 
-      const report = reports.find((r) => r.id === reportId);
-      if (report?.owner?.id) {
-        const tmplFn = NOTIF_TEMPLATES[newStatus];
-        if (tmplFn) {
-          const notif = newStatus === REPORT_STATUS.DECLINED
-            ? tmplFn(report, declineReason)
-            : tmplFn(report);
-          await sendNotification({ user_id: report.owner.id, report_id: reportId, ...notif });
-        }
-      }
-
+      await fetchReports();
       showToast(`${padId(reportId)} → ${STATUS_LABELS[newStatus]}`);
     } else {
       showToast(res.error || "Update failed.", "error");
@@ -668,16 +546,21 @@ export default function AdminAllReports() {
               className={`btn-critical-toggle ${criticalOnly ? "active" : ""}`}
               onClick={() => { setCriticalOnly((p) => !p); setPage(1); }}
             ><Circle size={16} className="icon-critical" /> Critical Only</button>
-            <button className="btn-filter-toggle" onClick={() => setShowFilters((p) => !p)}>
+            <button type="button" className={`btn-critical-toggle ${pastSla ? "active" : ""}`}
+              aria-pressed={pastSla} onClick={() => setPastSla(!pastSla)}>
+              <Activity size={16} aria-hidden="true" /> Past SLA
+            </button>
+            <button aria-expanded={showFilters} aria-controls="aar-filters" className="btn-filter-toggle" onClick={() => setShowFilters((p) => !p)}>
               <Settings size={16} /> Filters {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
-              <button className="btn-export" onClick={() => exportExcel(reports, "page")} title={`Exports only the ${reports.length} rows currently shown on this page`}>
+              <button className="btn-export" disabled={loading || !reports.length}
+                onClick={() => exportExcel(reports, "page")} title={`Exports only the ${reports.length} rows currently shown on this page`}>
               <Download size={16} /> Export Page ({reports.length})
             </button>
             <button
               className="btn-export btn-export--all"
               onClick={exportAll}
-              disabled={exportAllLoading}
+              disabled={loading || exportAllLoading}
               title="Exports every report matching your active filters, across all pages"
             >
               {exportAllLoading
@@ -687,7 +570,7 @@ export default function AdminAllReports() {
           </div>
         </div>
 
-        <div className={`aar-filters-panel ${showFilters ? "open" : "closed"}`}>
+        <div id="aar-filters" className="aar-filters-panel" hidden={!showFilters}>
           <div className="aar-filters-grid">
             <div className="filter-group filter-group--type">
               <label>Damage Type</label>
@@ -700,8 +583,8 @@ export default function AdminAllReports() {
             </div>
 
             <div className="filter-group filter-group--status">
-              <label>Status</label>
-              <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
+              <label htmlFor="aar-status">Status</label>
+              <select id="aar-status" value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
                 {STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>{s === "All" ? "All Statuses" : STATUS_LABELS[s]}</option>
                 ))}
@@ -709,8 +592,8 @@ export default function AdminAllReports() {
             </div>
 
             <div className="filter-group filter-group--severity">
-              <label>Severity</label>
-              <select value={filters.severity} onChange={(e) => setFilter("severity", e.target.value)}>
+              <label htmlFor="aar-severity">Severity</label>
+              <select id="aar-severity" value={filters.severity} onChange={(e) => setFilter("severity", e.target.value)}>
                 <option value="All">All Severity</option>
                 <option value="critical">Critical</option>
                 <option value="non_critical">Non-Critical</option>
@@ -718,28 +601,29 @@ export default function AdminAllReports() {
             </div>
 
             <div className="filter-group filter-group--barangay">
-              <label>Barangay</label>
-              <select value={filters.barangay} onChange={(e) => setFilter("barangay", e.target.value)}>
+              <label htmlFor="aar-barangay">Barangay</label>
+              <select id="aar-barangay" value={filters.barangay} onChange={(e) => setFilter("barangay", e.target.value)}>
                 {barangays.map((b) => (
                   <option key={b} value={b}>{b === "All" ? "All Barangays" : b}</option>
                 ))}
               </select>
             </div>
 
-            <div className="filter-group filter-group--daterange">
-              <label>Date Range</label>
+            <div className="filter-group filter-group--daterange" role="group" aria-labelledby="aar-date-range">
+              <span id="aar-date-range">Date range</span>
               <div className="date-preset-row">
                 {[
                   { label: "7 Days",  days: 7   },
                   { label: "30 Days", days: 30  },
                   { label: "90 Days", days: 90  },
                 ].map(({ label, days }) => {
-                  const from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-                  const to   = new Date().toISOString().slice(0, 10);
+                  const from = manilaDay(days - 1);
+                  const to   = manilaDay();
                   const isActive = filters.dateFrom === from && filters.dateTo === to;
                   return (
                     <button
                       key={label}
+                      aria-pressed={isActive}
                       type="button"
                       className={`date-preset-btn ${isActive ? "active" : ""}`}
                       onClick={() => {
@@ -753,6 +637,7 @@ export default function AdminAllReports() {
                 })}
                 <button
                   type="button"
+                  aria-pressed={!filters.dateFrom && !filters.dateTo}
                   className={`date-preset-btn ${!filters.dateFrom && !filters.dateTo ? "active" : ""}`}
                   onClick={() => { setFilters((p) => ({ ...p, dateFrom: "", dateTo: "" })); setPage(1); }}
                 >
@@ -760,24 +645,12 @@ export default function AdminAllReports() {
                 </button>
               </div>
               <div className="date-custom-row">
-                <input type="date" value={filters.dateFrom} onChange={(e) => setFilter("dateFrom", e.target.value)} aria-label="Date from" />
-                <span className="date-range-sep">to</span>
-                <input type="date" value={filters.dateTo} onChange={(e) => setFilter("dateTo", e.target.value)} aria-label="Date to" />
-              </div>
-            </div>
-
-            <div className="filter-group filter-conf-group filter-group--conf">
-              <label>AI Confidence: <strong>{filters.confMin}%–{filters.confMax}%</strong></label>
-              <div className="conf-dual-range">
-                <input type="range" min="0" max="100" value={filters.confMin}
-                  onChange={(e) => setFilter("confMin", +e.target.value)} />
-                <input type="range" min="0" max="100" value={filters.confMax}
-                  onChange={(e) => setFilter("confMax", +e.target.value)} />
-              </div>
-              <div className="conf-range-labels">
-                <span style={{ color: "#e53935" }}>Low &lt;50%</span>
-                <span style={{ color: "#f57c00" }}>Mid 50–80%</span>
-                <span style={{ color: "#2e7d32" }}>High &gt;80%</span>
+                <label>From
+                  <input type="date" max={filters.dateTo || undefined} value={filters.dateFrom} onChange={(e) => setFilter("dateFrom", e.target.value)} />
+                </label>
+                <label>To
+                  <input type="date" min={filters.dateFrom || undefined} value={filters.dateTo} onChange={(e) => setFilter("dateTo", e.target.value)} />
+                </label>
               </div>
             </div>
 
@@ -1312,7 +1185,7 @@ function ReportModal({ report: initial, onClose, onStatusChange, onRefresh, navi
     }
     setSubmitting(true);
     const res = await onStatusChange(r.id, newStatus, declineReason);
-    if (res?.success || true) {
+    if (res?.success) {
       setR((p) => ({ ...p, status: newStatus, decline_reason: declineReason || p.decline_reason }));
     }
     setSubmitting(false);

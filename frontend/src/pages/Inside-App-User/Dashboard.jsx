@@ -1,3 +1,4 @@
+import { ResidentRepairs } from "../../components/RepairTracking";
 import React, { useState, useCallback, useMemo } from "react";
 import "./Dashboard.css";
 import { SeverityInline } from "../../components/SeverityBadge.jsx";
@@ -339,6 +340,7 @@ function CitizenDashboard() {
         <KPICard title="Resolved" value={resolved} icon={<IoMdCheckmarkCircleOutline className="icon" />} colorClass="completed" trend={resolved > 0 ? 20 : 0} sparkData={[0, 1, 1, resolved]} loading={loading} onClick={() => navigate("/dashboard/submissions?status=RESOLVED")} />
       </div>
 
+      <ResidentRepairs />
       <div className="dashboard-grid">
         <div className="dashboard-panel">
           <h3>My Report Status <IoBarChart className="icon" aria-hidden="true" /></h3>

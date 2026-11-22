@@ -1,3 +1,5 @@
+import { AdminRepairTracking } from "../../components/RepairTracking";
+import { api as trackingApi } from "../../api/client";
 import ReportDialog from "../../components/ReportDialog";
 import ReportDirectionsLink from "../../components/ReportDirectionsLink";
 import ReportEvidence, { hasSubmissionEvidence, submissionMedia } from "../../components/ReportEvidence";
@@ -6,6 +8,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { createPortal } from "react-dom";
 import {
   getReports,
+  getAdminReportSummary,
   getReportsForExport,
   getReport,
   getPriorRepairs,
@@ -296,27 +299,22 @@ function Badge({ text, className }) {
   return <span className={`badge ${className || ""}`}>{text}</span>;
 }
 
-function StatsCards({ reports, totalCount }) {
-  const today = new Date().toDateString();
+function StatsCards({ summary }) {
   const cards = [
     { label: "Total Reports",
-      value: totalCount,
+      value: summary?.total ?? "—",
       icon:  <IcoClipboard size={18} />, className: "sc-total"      },
     { label: "Critical",
-      value: reports.filter(r => (r.ai_severity ?? r.severity ?? "").toLowerCase() === "critical").length,
+      value: summary?.critical ?? "—",
       icon:  <IcoAlert size={18} />,     className: "sc-critical"   },
     { label: "Pending",
-      value: reports.filter(r => r.status?.toLowerCase() === REPORT_STATUS.PENDING).length,
+      value: summary?.pending ?? "—",
       icon:  <IcoClock size={18} />,     className: "sc-pending"    },
     { label: "In Progress",
-      value: reports.filter(r => r.status?.toLowerCase() === REPORT_STATUS.IN_PROGRESS).length,
+      value: summary?.in_progress ?? "—",
       icon:  <IcoWrench size={18} />,    className: "sc-inprogress" },
     { label: "Resolved Today",
-      value: reports.filter(r =>
-        r.status?.toLowerCase() === REPORT_STATUS.RESOLVED &&
-        r.updated_at &&
-        new Date(r.updated_at).toDateString() === today
-      ).length,
+      value: summary?.resolved_today ?? "—",
       icon:  <IcoCheck size={18} />,     className: "sc-completed"  },
   ];
 
@@ -570,11 +568,17 @@ function AdminManageReports() {
   const [error,      setError]      = useState(null);
   const [actionError, setActionError] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [summary, setSummary] = useState(null);
+  const [summaryError, setSummaryError] = useState("");
+  const [summaryVersion, setSummaryVersion] = useState(0);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => {
+    const linked = new URLSearchParams(window.location.search).get("report");
+    return linked && /^[0-9]+$/.test(linked) ? "#" + linked : "";
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [query, setQuery] = useState(() => ({
-    page: 1, term: "", filterType: "All", filterSeverity: "All", filterStatus: "All",
+    page: 1, term: search, filterType: "All", filterSeverity: "All", filterStatus: "All",
     filterBarangay: "All", filterDate: "All", repeatDamage: false,
     sortCol: "created_at", sortDir: "desc", asOf: new Date(),
   }));
@@ -582,7 +586,19 @@ function AdminManageReports() {
   const changeCriteria = useCallback(changes => {
     setQuery(prev => ({ ...prev, ...changes, page: 1, asOf: new Date() }));
   }, []);
-  const refresh = useCallback(() => setQuery(prev => ({ ...prev, asOf: new Date() })), []);
+  const refresh = useCallback(() => {
+    setQuery(prev => ({ ...prev, asOf: new Date() }));
+    setSummaryVersion(version => version + 1);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    getAdminReportSummary().then(result => {
+      if (!active) return;
+      setSummary(result.success ? result.data : null);
+      setSummaryError(result.success ? "" : (result.error || "Could not load citywide report totals."));
+    });
+    return () => { active = false; };
+  }, [summaryVersion]);
   useEffect(() => {
     if (term === search.trim()) return;
     const timer = setTimeout(() => changeCriteria({ term: search.trim() }), 250);
@@ -814,7 +830,8 @@ function AdminManageReports() {
 
   return (
     <div className="manage-container">
-      <StatsCards reports={reports} totalCount={totalCount} />
+      <StatsCards summary={summary} />
+      {summaryError && <div role="alert" className="admin-error-banner">{summaryError}</div>}
       <div className="manage-filters">
         <div className="filters-top-row">
           <h2 className="manage-title">Manage Reports</h2>
@@ -1468,7 +1485,9 @@ function CommentSection({ reportId }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // TABBED ViewModal — matches AdminManageRequests popup design
 // ═══════════════════════════════════════════════════════════════════════════
-function PriorRepairsCard({ reportId, dateStr, onOpenPhotos }) {
+function PriorRepairsCard({ report, reportId, dateStr, onOpenPhotos }) {
+  const [decisionError, setDecisionError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [request, setRequest] = useState(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -1479,9 +1498,13 @@ function PriorRepairsCard({ reportId, dateStr, onOpenPhotos }) {
     return () => { active = false; };
   }, [reportId, retry]);
 
+  const currentPhotos = submissionMedia(report).filter(m => m.media_type === "image" && m.file_url)
+    .map((m, i) => ({ url: resolveMediaUrl(m.file_url), label: "Current damage photo " + (i + 1) }));
+
   return <section className="vmr-card vmr-card--full" aria-label="Possible repeat damage">
     <div className="vmr-card-hdr"><IcoWrench size={14} /><span>Possible repeat damage</span></div>
     <div className="vmr-card-body amr-prior-repairs">
+      {decisionError && <p role="alert">{decisionError}</p>}
       {!request ? <p role="status">Loading prior repairs…</p>
         : !request.success ? <>
           <p role="alert">{request.error || "Could not load prior repairs."}</p>
@@ -1495,12 +1518,28 @@ function PriorRepairsCard({ reportId, dateStr, onOpenPhotos }) {
             return <article key={repair.report_id}>
               <strong>Report #{repair.report_id}</strong>
               <p>Repaired {dateStr(repair.repaired_at)} · {repair.distance_meters} m away</p>
+              <p>{[repair.street_name, repair.barangay].filter(Boolean).join(", ")}</p>
+              <div className="repair-comparison">
+                <div><strong>Current damage</strong>
+                  {!currentPhotos.length && <p>No damage photos available.</p>}
+                  <div className="amr-prior-repair-photos">
+                    {currentPhotos.map((photo, index) => <button key={photo.url} type="button" aria-label={photo.label}
+                      onClick={() => onOpenPhotos(currentPhotos, index)}><img src={photo.url} alt="" loading="lazy" /></button>)}
+                </div></div><div><strong>Prior repair</strong>
               {photos.length ? <div className="amr-prior-repair-photos">
                 {photos.map((photo, index) => <button key={repair.repair_photos[index].id} type="button"
                   onClick={() => onOpenPhotos(photos, index)} aria-label={photo.label}>
                   <img src={photo.url} alt="" loading="lazy" />
                 </button>)}
-              </div> : <p>No repair photos available.</p>}
+              </div> : <p>No repair photos available.</p>}</div></div>
+              {repair.decision ? <strong>{repair.decision === "returned" ? "Damage returned" : "Different damage"}</strong>
+                : <div className="repair-actions">{["returned","different"].map(choice =>
+                  <button key={choice} disabled={saving} onClick={async () => {
+                    setSaving(true); setDecisionError("");
+                    const res = await trackingApi.put("/repair-tracking/" + reportId + "/prior/" + repair.report_id, {decision: choice});
+                    setSaving(false);
+                    if (res.success) setRetry(n => n + 1); else setDecisionError(res.error);
+                  }}>{choice === "returned" ? "Damage returned" : "Different damage"}</button>)}</div>}
             </article>;
           })}
     </div>
@@ -1612,7 +1651,8 @@ function ViewModal({ report: r, project, openAssign = false, openReview = false,
           {/* DETAILS */}
           {activeTab === "details" && (
             <div className="vmr-grid">
-              {r.possible_repeat_damage && <PriorRepairsCard key={r.id} reportId={r.id}
+              <AdminRepairTracking key={r.id} report={r} />
+              {r.possible_repeat_damage && <PriorRepairsCard report={r} key={r.id} reportId={r.id}
                 dateStr={dateStr} onOpenPhotos={openLightbox} />}
               <div className="vmr-card">
                 <div className="vmr-card-hdr"><IcoUsers size={14}/><span>REPORTER</span></div>

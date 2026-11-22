@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings, LOW_CONFIDENCE_TRIAGE_THRESHOLDS
+from app.models.user import User
 from app.models.enums import DamageType, ReportStatus, SeverityLevel
 from app.models.report import Report
 from app.models.project import Project
@@ -16,6 +17,7 @@ from app.models.repair_review import RepairReview
 from app.models.report_upvote import ReportUpvote
 from app.schemas.report import ReportCreate, ReportUpdate
 from app.services import prior_repairs
+from app.services.report_sla import ReportSLA
 
 
 # ── CREATE ────────────────────────────────────────────────────────────────────
@@ -134,7 +136,7 @@ async def create_report(
 
 # ── LIST ────────────────────────────────────────────────────────────────────
 
-ReportSort = Literal["created_at", "severity", "priority", "status"]
+ReportSort = Literal["created_at", "severity", "priority", "status", "id", "confidence"]
 SortDirection = Literal["asc", "desc"]
 
 async def list_reports(
@@ -147,7 +149,10 @@ async def list_reports(
     severity: SeverityLevel | None = None,
     awaiting_repair_review: bool = False,
     possible_repeat_damage: bool = False,
+    sla: ReportSLA | None = None,
     search: str | None = None,
+    low_confidence: bool = False,
+    search_reporter: bool = False,
     created_from: datetime | None = None,
     created_before: datetime | None = None,
     sort_by: ReportSort = "created_at",
@@ -174,7 +179,7 @@ async def list_reports(
     if barangay is not None:
         base_q = base_q.where(barangay_name == barangay.strip().lower().replace("ñ", "n"))
     if damage_type is not None:
-        base_q = base_q.where(Report.ai_damage_type == damage_type)
+        base_q = base_q.where(or_(Report.ai_damage_type == damage_type, Report.secondary_damage == damage_type))
     if severity is not None:
         base_q = base_q.where(Report.ai_severity == severity)
     if awaiting_repair_review:
@@ -183,6 +188,10 @@ async def list_reports(
         base_q = base_q.where(Report.status == ReportStatus.IN_PROGRESS, Report.id.in_(pending))
     if possible_repeat_damage:
         base_q = base_q.where(prior_repairs.has_match())
+    if sla is not None:
+        base_q = base_q.where(sla.past_sla())
+    if low_confidence:
+        base_q = base_q.where(Report.status == ReportStatus.PENDING, Report.ai_confidence < 0.5)
     if created_from is not None:
         base_q = base_q.where(Report.created_at >= created_from)
     if created_before is not None:
@@ -199,6 +208,8 @@ async def list_reports(
                 barangay_name.contains(term.replace("ñ", "n"), autoescape=True),
                 func.lower(Report.street_name).contains(term, autoescape=True),
             ]
+            if search_reporter:
+                matches.append(Report.owner.has(func.lower(User.full_name).contains(term, autoescape=True)))
             if re.fullmatch(r"[0-9]+", term):
                 display_id = case(
                     (Report.id < 10, "00" + id_text),
@@ -221,6 +232,10 @@ async def list_reports(
             (Report.created_at < now - timedelta(hours=24), 1),
             else_=2,
         )
+    elif sort_by == "id":
+        sort_column = Report.id
+    elif sort_by == "confidence":
+        sort_column = func.coalesce(Report.ai_confidence, -1)
     elif sort_by == "status":
         sort_column = cast(Report.status, String)
     elif sort_by == "severity":

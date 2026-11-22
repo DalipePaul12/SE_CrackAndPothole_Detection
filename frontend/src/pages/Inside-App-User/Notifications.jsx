@@ -339,6 +339,10 @@ export default function Notifications() {
     markAsRead(notif.id);
 
     if (!notif.report_id) return;
+    if (["Repair approved", "Repairs underway", "Repair schedule changed"].includes(notif.title)) {
+      navigate("/dashboard#repair-tracking");
+      return;
+    }
 
     const typeKey = resolveTypeKeyFromNotif(notif);
 

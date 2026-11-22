@@ -37,7 +37,6 @@ async def find_nearby_matches(db, owner_id, latitude, longitude, damage_types):
     # Legacy databases may lack enum members or use upper-case labels.
     status = func.lower(cast(Report.status, String))
     reports = (await db.execute(select(Report, status).where(
-        Report.owner_id == owner_id,
         status.in_([active.value for active in ACTIVE_STATUSES]),
         Report.latitude.between(latitude - latitude_margin, latitude + latitude_margin),
     ).options(defer(Report.status), selectinload(Report.frame_detections)))).all()
@@ -73,6 +72,8 @@ async def find_nearby_matches(db, owner_id, latitude, longitude, damage_types):
                 "status": stored_status,
                 "distance_meters": round(distance, 2),
                 "street_name": report.street_name,
+                "barangay": report.barangay,
+                "own_report": report.owner_id == owner_id,
             })
     return matches
 

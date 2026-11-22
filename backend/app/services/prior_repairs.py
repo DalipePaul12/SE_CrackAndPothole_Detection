@@ -37,7 +37,7 @@ def _matches():
     ))
     # shortcut: latitude bounds and existing status index serve the city queue. Profile before adding a spatial index.
     return (
-        select(prior.id.label("report_id"), repaired_at.label("repaired_at"), distance.label("distance"))
+        select(prior.id.label("report_id"), prior.street_name, prior.barangay, repaired_at.label("repaired_at"), distance.label("distance"))
         .select_from(prior)
         .outerjoin(Project, and_(Project.report_id == prior.id, Project.status == ProjectStatus.COMPLETED))
         .where(
@@ -81,7 +81,7 @@ async def list_prior_repairs(db, report_id):
     for prior_id, photo_id, url in photos:
         photos_by_report[prior_id].append({"id": photo_id, "file_url": url})
     return [
-        {"report_id": row.report_id, "repaired_at": row.repaired_at,
+        {"report_id": row.report_id, "barangay": row.barangay, "street_name": row.street_name, "repaired_at": row.repaired_at,
          "distance_meters": round(2 * EARTH_RADIUS_METERS * asin(sqrt(max(0, row.distance))), 2),
          "repair_photos": photos_by_report[row.report_id]}
         for row in rows

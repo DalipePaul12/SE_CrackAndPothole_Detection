@@ -1,5 +1,6 @@
 """Exercise the reports HTTP route against an isolated, in-memory database."""
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import AsyncMock
 
@@ -12,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.v1 import reports
 from app.db.base import Base
 from app.models.report import Report
+from app.models.user import User
 
 
 class ReportSearchTest(TestCase):
@@ -22,9 +24,11 @@ class ReportSearchTest(TestCase):
         Base.metadata.create_all(engine)
         cls.now = datetime.now(timezone.utc)
         with Session(engine) as db:
+            db.add(User(id=7, full_name="Resident Example", email="fixture@example.com", hashed_password="unused"))
+            db.flush()
             for i in range(1, 61):
                 db.add(Report(
-                    id=i, latitude=14.66, longitude=120.96,
+                    id=i, owner_id=7 if i == 1 else None, secondary_damage="crack" if i == 1 else None, latitude=14.66, longitude=120.96,
                     barangay={1: "Tanong", 2: "Tugatog"}.get(i, "Catmon"),
                     street_name="Mabini Street" if i <= 2 else None,
                     ai_damage_type="pothole", ai_severity="critical" if i == 2 else "non_critical",
@@ -39,7 +43,7 @@ class ReportSearchTest(TestCase):
         app = FastAPI()
         app.include_router(reports.router)
         app.dependency_overrides[reports.get_db] = test_db
-        app.dependency_overrides[reports.get_current_user] = lambda: object()
+        app.dependency_overrides[reports.get_current_user] = lambda: SimpleNamespace(role="admin")
         app.dependency_overrides[reports.check_maintenance_mode] = lambda: None
         cls.client = TestClient(app)
         cls.addClassCleanup(cls.client.close)
@@ -59,6 +63,7 @@ class ReportSearchTest(TestCase):
             self.assertEqual(self.ids(search=term), ([1], 1))
         self.assertIn(42, self.ids(search="42")[0])
         self.assertEqual(self.ids(search="%"), ([], 0))
+        self.assertEqual(self.ids(search="Resident Example", damage_type="crack"), ([1], 1))
 
     def test_priority_dates_and_combined_filters(self):
         self.assertEqual(self.ids(sort_by="priority", sort_dir="asc", page_size=2), ([2, 1], 60))
@@ -69,7 +74,7 @@ class ReportSearchTest(TestCase):
         self.assertEqual(self.ids(**params, created_before=start.isoformat()), ([], 0))
 
     def test_page_and_export_order(self):
-        for col in ("created_at", "status", "severity", "priority"):
+        for col in ("created_at", "status", "severity", "priority", "id", "confidence"):
             params = dict(barangay="Catmon", sort_by=col, sort_dir="desc")
             pages = [self.ids(**params, page=p)[0] for p in (1, 2, 3)]
             all_ids, total = self.ids(**params, page_size=100)

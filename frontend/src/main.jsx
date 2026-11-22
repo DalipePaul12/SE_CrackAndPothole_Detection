@@ -16,3 +16,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </BrowserRouter>
   //</React.StrictMode>
 );
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/report-worker.js").catch(error => console.warn("Offline form unavailable", error));
+}
