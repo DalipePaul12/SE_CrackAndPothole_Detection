@@ -94,6 +94,10 @@ export function useAuth() {
 
   const silentRefresh = useCallback(
     async ({ finallySetLoading = false } = {}) => {
+      if (!navigator.onLine && deriveUserFromToken(tokenStorage.getAccess())?.role === "citizen") {
+        if (finallySetLoading) setIsLoading(false);
+        return;
+      }
       const refreshToken = tokenStorage.getRefresh();
 
       if (!refreshToken) {
@@ -176,6 +180,15 @@ export function useAuth() {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [token, silentRefresh]);
+
+  useEffect(() => {
+    const reconnect = () => {
+      const access = tokenStorage.getAccess();
+      if (access && isExpiredOrExpiringSoon(access)) silentRefresh();
+    };
+    window.addEventListener("online", reconnect);
+    return () => window.removeEventListener("online", reconnect);
+  }, [silentRefresh]);
 
   return {
     user,

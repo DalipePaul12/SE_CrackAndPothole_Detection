@@ -221,12 +221,23 @@ class ReportListResponse(AppBaseModel):
     results:   List[ReportResponse]
 
 
+class ReportAdminSummary(BaseModel):
+    total: int
+    critical: int
+    pending: int
+    in_progress: int
+    resolved_today: int
+
+
 class PriorRepairPhoto(BaseModel):
     id: int
     file_url: str
 
 
 class PriorRepairResponse(BaseModel):
+    decision: Optional[str] = None
+    barangay: Optional[str] = None
+    street_name: Optional[str] = None
     report_id: int
     repaired_at: datetime
     distance_meters: float

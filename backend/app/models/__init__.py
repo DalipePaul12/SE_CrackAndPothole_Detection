@@ -19,6 +19,8 @@ from app.models.report_upvote import ReportUpvote
 from app.models.admin_settings import AdminSettings
 from app.models.repair_review import RepairReview, RepairReviewPhoto
 
+from app.models.repair_tracking import RepairInspection, RepeatDecision, ReportFollow
+
 __all__ = [
     "User", "Report", "Project", "ProjectUpdate", "Comment",
     "Notification", "OTP", "AuditLog", "CCTV", "MediaAttachment",

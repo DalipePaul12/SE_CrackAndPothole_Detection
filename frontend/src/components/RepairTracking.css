@@ -1,0 +1,13 @@
+.repair-columns,.repair-fields,.repair-comparison {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:1rem}
+.repair-tracking,.repair-tracking * {box-sizing:border-box;min-width:0}
+.repair-tracking.vmr-card,.repair-columns>section {padding:1rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:1rem}
+.repair-tracking h3 {margin:0 0 .75rem}
+.repair-tracking article {padding:.75rem 0;border-top:1px solid var(--border);overflow-wrap:anywhere}
+.repair-tracking form,.repair-actions,.draft-actions {display:flex;align-items:end;flex-wrap:wrap;gap:.5rem;margin:.75rem 0}
+.repair-tracking label {display:grid;gap:.3rem;flex:1 1 10rem}
+.repair-tracking :is(input,select,textarea,button),.repair-actions button,.draft-actions button {max-width:100%;min-height:44px;padding:.5rem .75rem;border:1px solid var(--border);border-radius:.5rem;background:var(--card);color:var(--text);font:inherit}
+.repair-tracking button,.repair-actions button,.draft-actions button {cursor:pointer}
+.repair-photos {display:flex;flex-wrap:wrap;gap:.5rem}
+.repair-photos img {width:6rem;height:5rem;object-fit:contain}
+
+.snap-modal > .draft-actions {padding: .5rem 3rem .5rem 1rem; align-items: center}

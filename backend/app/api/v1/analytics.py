@@ -27,6 +27,7 @@ from app.middleware.rate_limiter import limiter
 from app.models.project import Project
 from app.models.report import Report
 from app.models.user import User
+from app.services.report_sla import count_past_sla
 from app.models.enums import DamageType, ProjectStatus, ReportStatus, SeverityLevel, UserRole
 
 logger = logging.getLogger(__name__)
@@ -321,8 +322,9 @@ async def get_sla_stats(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
+    overdue_count = await count_past_sla(db)
     if (c := await _cache_get("sla_stats")) is not None:
-        return _ok(c)
+        return _ok({**c, "overdue_count": overdue_count})
 
     now = datetime.now(timezone.utc)
     sla_days = 7
@@ -332,15 +334,6 @@ async def get_sla_stats(
             func.extract("epoch", Report.updated_at - Report.created_at) / 86400.0
         )).where(Report.status == ReportStatus.RESOLVED)
     )).scalar_one_or_none()
-
-    overdue_cutoff = now - timedelta(days=sla_days)
-    overdue_count = await _scalar(
-        db,
-        select(func.count(Report.id)).where(
-            Report.status.not_in([ReportStatus.RESOLVED, ReportStatus.DECLINED]),
-            Report.created_at < overdue_cutoff,
-        ),
-    )
 
     pending_3d_cutoff = now - timedelta(days=3)
     pending_over_3days = await _scalar(
@@ -521,8 +514,9 @@ async def get_priority_flags(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_require_staff),
 ):
+    overdue_count = await count_past_sla(db)
     if (c := await _cache_get("priority_flags")) is not None:
-        return _ok(c)
+        return _ok({**c, "overdue_count": overdue_count})
 
     now = datetime.now(timezone.utc)
 
@@ -531,13 +525,6 @@ async def get_priority_flags(
         select(func.count(Report.id)).where(
             Report.status == ReportStatus.PENDING,
             Report.created_at < now - timedelta(days=3),
-        ),
-    )
-    overdue_count = await _scalar(
-        db,
-        select(func.count(Report.id)).where(
-            Report.status.not_in([ReportStatus.RESOLVED, ReportStatus.DECLINED]),
-            Report.created_at < now - timedelta(days=7),
         ),
     )
     low_conf_count = await _scalar(

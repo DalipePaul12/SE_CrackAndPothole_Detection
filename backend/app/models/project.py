@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Boolean, CheckConstraint, Column, DateTime,
+    Boolean, CheckConstraint, Column, Date, DateTime,
     Enum as SQLEnum, Float, ForeignKey, Integer, JSON, String,
 )
 from sqlalchemy.orm import relationship
@@ -60,6 +60,7 @@ class Project(Base):
     actual_cost = Column(Float, nullable=True)
     budget_approved = Column(Boolean, default=False)
 
+    scheduled_date = Column(Date, nullable=True)
     start_date = Column(DateTime(timezone=True), nullable=True)
     estimated_completion_date = Column(DateTime(timezone=True), nullable=True)
     actual_completion_date = Column(DateTime(timezone=True), nullable=True)

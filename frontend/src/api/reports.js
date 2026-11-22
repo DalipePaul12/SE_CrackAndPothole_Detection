@@ -87,6 +87,8 @@ export async function getReports(params = {}) {
     severity:    params.severity,
     search:      params.search,
     awaiting_repair_review: params.awaiting_repair_review,
+    low_confidence: params.low_confidence,
+    past_sla:     params.past_sla,
     include_repeat_damage: params.include_repeat_damage,
     possible_repeat_damage: params.possible_repeat_damage,
     created_from: params.created_from,
@@ -102,6 +104,10 @@ export async function getReports(params = {}) {
 
 // Alias for backwards compatibility
 export const fetchReports = getReports;
+
+export async function getAdminReportSummary() {
+  return unwrap(await api.get("/reports/admin-summary"));
+}
 
 export async function getReportsForExport(params) {
   const rows = [];

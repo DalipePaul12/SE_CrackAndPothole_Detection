@@ -1,3 +1,5 @@
+import { reportDraft } from "../../utils/reportDraft";
+import { api as trackingApi } from "../../api/client";
 /**
  * CreateReport.jsx — Refactored with YOLOv11 Segmentation Mask Support
  *
@@ -36,7 +38,7 @@ import { analyzeRealtimeFrame, analyzeVideo } from "../../api/ml";
 import { EvidencePhotoPreview, EvidencePhotoViewer } from "./EvidencePhoto";
 import { analyzeReportPhoto } from "./photoAnalysis";
 import { checkNearbyDuplicates, reconcileReport, reconcileMedia } from "../../api/reports";
-import { useOfflineQueue, enqueueOfflineReport } from "../../hooks/useOfflineQueue";
+import { useOfflineQueue, enqueueOfflineReport, removeFromOfflineQueue } from "../../hooks/useOfflineQueue";
 import ReportDialog from "../../components/ReportDialog";
 import { useLocation, useNavigate } from "react-router-dom";
 import { invalidateReportsCache } from "../../hooks/useReports";
@@ -704,6 +706,17 @@ const [barangayVerified, setBarangayVerified] = useState(true);
   const [pendingUploads, setPendingUploads] = useState(null);
   const [showDiscardModal,  setShowDiscardModal]  = useState(false);
   const [showSubmitModal,   setShowSubmitModal]   = useState(false);
+  const [savedDraft, setSavedDraft] = useState(null);
+  const [draftMessage, setDraftMessage] = useState("");
+  const submissionId = useRef(null);
+  useEffect(() => {
+    let active = true;
+    setSavedDraft(null);
+    if (userId) reportDraft(userId, "get").then(value => {
+      if (active) setSavedDraft(value);
+    }).catch(() => { if (active) setDraftMessage("Device storage is unavailable."); });
+    return () => { active = false; };
+  }, [userId]);
   const [duplicateReview, setDuplicateReview] = useState(null);
   const [differentDefect, setDifferentDefect] = useState(false);
   const duplicateMatchesId = useId();
@@ -798,7 +811,7 @@ const [barangayVerified, setBarangayVerified] = useState(true);
       const id = ++nextPhotoId.current;
       const preview = URL.createObjectURL(file);
       photoUrls.current.set(id, preview);
-      return { id, file, preview, source, pending: true, retries: 0, analysis: {} };
+      return { id, file, uploadId: crypto.randomUUID(), preview, source, pending: true, retries: 0, analysis: {} };
     });
     if (!added.length) return;
     if (replaceId !== null) {
@@ -1239,18 +1252,22 @@ setCameraActive(true);
   }, []);
 
   // ── Location (UNCHANGED) ──────────────────────────────────────────────────
+  const locationRequest = useRef(0);
   const fetchLocation = useCallback(async (forceFresh = false) => {
     if (!navigator.geolocation) return;
+    const request = ++locationRequest.current;
     setLocationLoading(true);
     setLocationWarning("");
     navigator.geolocation.getCurrentPosition(
       async ({ coords: c }) => {
+        if (request !== locationRequest.current) return;
         const lat = c.latitude, lng = c.longitude;
         setCoords({ lat, lng });
         setLocationSource(null);
         try {
           const res  = await fetch(NOMINATIM_URL(lat, lng));
           const data = await res.json();
+          if (request !== locationRequest.current) return;
           const addr = data.address || {};
         setCity(addr.city || addr.town || addr.municipality || DEFAULT_CITY);
         const detected = detectBarangay(lat, lng, addr);
@@ -1262,6 +1279,7 @@ setCameraActive(true);
           `${lat.toFixed(5)}, ${lng.toFixed(5)}`
         );
       } catch {
+        if (request !== locationRequest.current) return;
         setCity(DEFAULT_CITY);
         const detected = detectBarangay(lat, lng);
         setBarangay(detected.name);
@@ -1271,6 +1289,7 @@ setCameraActive(true);
         setLocationLoading(false);
       },
       () => {
+        if (request !== locationRequest.current) return;
         setCity(DEFAULT_CITY);
         setBarangay("");
         setBarangayVerified(true);
@@ -1489,7 +1508,7 @@ setCameraActive(true);
       review_reason: (isPhoto ? analyses.find(({ requiresReview }) => requiresReview)?.reviewReason : reviewReason) ?? null,
       disclaimer_accepted: disclaimerAccepted,
       capture_metadata: {
-        submission_id: crypto.randomUUID(),
+        submission_id: submissionId.current ??= crypto.randomUUID(),
         angle_degrees: phoneAngle !== null ? Math.round(phoneAngle) : null,
         angle_valid: angleValid,
         estimated_distance_text: (isPhoto ? primary?.predictionResult : predictionResult)?.distance?.text ?? null,
@@ -1497,8 +1516,8 @@ setCameraActive(true);
       },
     };
 
-    const files = (isPhoto ? qualifyingPhotos.map(({ file }) => file) : [file])
-      .map((file) => ({ file, uploadId: crypto.randomUUID() }));
+    const files = isPhoto ? qualifyingPhotos.map(({ file, uploadId }) => ({ file, uploadId }))
+      : [{ file, uploadId: crypto.randomUUID() }];
     return { payload: reportPayload, files, key: duplicateKey };
   };
 
@@ -1537,6 +1556,7 @@ setCameraActive(true);
         return;
       }
       await submitEvidence(draft);
+      if (savedDraft?.submissionId === draft.payload.capture_metadata?.submission_id) await discardDraft();
       setDuplicateReview(null);
       setPendingUploads(null);
       setSubmitSuccess(true);
@@ -1610,6 +1630,7 @@ setCameraActive(true);
 
   const switchTab = (id) => {
     if (id === activeTab) return;
+    submissionId.current = null;
     photoUrls.current.forEach((url) => URL.revokeObjectURL(url));
     photoUrls.current.clear();
     setPhotos([]);
@@ -1618,6 +1639,53 @@ setCameraActive(true);
     clearMedia();
     setActiveTab(id);
   };
+
+  async function savePhotoDraft() {
+    if (savedDraft && submissionId.current !== savedDraft.submissionId &&
+        !window.confirm("Replace the saved photo draft on this device?")) return;
+    submissionId.current ??= crypto.randomUUID();
+    const draft = { owner: userId, submissionId: submissionId.current, coords, locationSource, city, barangay,
+      barangayVerified, streetName, additionalInfo, photos: photos.map(({file, uploadId, source, analysis}) => ({file, uploadId, source, analysis})) };
+    try {
+      await reportDraft(userId, "put", draft);
+      setSavedDraft(draft);
+      setDraftMessage("Draft saved on this device.");
+    } catch { setDraftMessage("Could not save. Check available device storage and retry."); }
+  }
+
+  function resumeDraft() {
+    if (savedDraft?.owner !== userId) return;
+    const restored = savedDraft.photos.map(entry => {
+      const id = ++nextPhotoId.current;
+      const preview = URL.createObjectURL(entry.file);
+      photoUrls.current.set(id, preview);
+      return {...entry, id, preview, pending: false, retries: 0};
+    });
+    photos.forEach(p => { URL.revokeObjectURL(p.preview); photoUrls.current.delete(p.id); });
+    submissionId.current = savedDraft.submissionId;
+    setPhotos(restored); setSelectedPhotoId(restored[0]?.id ?? null);
+    locationRequest.current++; setLocationLoading(false); setLocationWarning("");
+    setCoords(savedDraft.coords); setLocationSource(savedDraft.locationSource); setCity(savedDraft.city);
+    setBarangay(savedDraft.barangay); setBarangayVerified(savedDraft.barangayVerified);
+    setStreetName(savedDraft.streetName); setAdditionalInfo(savedDraft.additionalInfo);
+    setDraftMessage("Draft restored.");
+    if (navigator.onLine) restored.filter(p => !p.analysis?.analysisComplete || p.analysis?.analyzeError).forEach(queuePhotoAnalysis);
+  }
+
+  useEffect(() => {
+    function recheck() {
+      photos.filter(p => !p.pending && (!p.analysis?.analysisComplete || p.analysis?.analyzeError)).forEach(queuePhotoAnalysis);
+    }
+    window.addEventListener("online", recheck);
+    return () => window.removeEventListener("online", recheck);
+  }, [photos, queuePhotoAnalysis]);
+
+  async function discardDraft() {
+    try {
+      await reportDraft(userId, "delete");
+      setSavedDraft(null); submissionId.current = null; setDraftMessage("Saved draft removed.");
+    } catch { setDraftMessage("Could not remove the saved draft. Please retry."); }
+  }
 
   if (showGuide) {
     return <PhotoCaptureGuide onContinue={() => setShowGuide(false)} onClose={onClose} />;
@@ -1636,6 +1704,15 @@ setCameraActive(true);
           <FaTimes />
         </button>
 
+        {activeTab === "photo" && <div className="draft-actions" aria-label="Draft actions">
+          <button type="button" disabled={!userId || isSubmitting} onClick={savePhotoDraft}>Save draft</button>
+          {savedDraft && savedDraft.owner === userId && <>
+            <button type="button" disabled={isSubmitting} onClick={resumeDraft}>Resume draft</button>
+            <button type="button" disabled={isSubmitting} onClick={() => {
+              if (window.confirm("Discard the saved draft on this device?")) discardDraft();
+            }}>Discard draft</button></>}
+          <span role="status">{draftMessage}</span>
+        </div>}
         {!isOnline && (
           <div className="offline-banner" role="status">
             <FaExclamationTriangle aria-hidden="true" />
@@ -2230,6 +2307,7 @@ setCameraActive(true);
                     <p>We found nearby reports that may show the same damage. Review them before submitting. If this is a different defect, you can continue.</p>
                   )}
                 </header>
+                {formError && <p role="alert">{formError}</p>}
                 {duplicateMatches.length > 0 && (
                   <div className="nearby-duplicate-list-header">
                     <span>{duplicateMatches.length === 1 ? "1 match" : `${duplicateMatches.length} matches`}</span>
@@ -2268,15 +2346,26 @@ setCameraActive(true);
                                 {match.damage_types.join(" / ")} · {match.status.replaceAll("_", " ")}
                                 {match.distance_meters != null && ` · ${match.distance_meters} m`}
                               </span>
-                              {match.street_name && <span>{match.street_name}</span>}
+                              <span>{[match.street_name, match.barangay].filter(Boolean).join(", ")}</span>
                             </div>
-                            <button type="button" className="btn-modal-secondary"
+                            {match.own_report === false ? <button type="button" className="btn-modal-secondary" disabled={isSubmitting}
+                              onClick={async () => {
+                                setIsSubmitting(true);
+                                const res = await trackingApi.put("/repair-tracking/" + match.id + "/follow", {});
+                                setIsSubmitting(false);
+                                if (!res.success) { setFormError(res.error); return; }
+                                if (duplicateReview.draft.queueId) removeFromOfflineQueue(duplicateReview.draft.queueId);
+                                setDuplicateReview(null);
+                                window.dispatchEvent(new Event("report-follow-changed"));
+                                navigate("/dashboard");
+                                onClose();
+                              }}>Follow report</button> : <button type="button" className="btn-modal-secondary"
                               aria-label={`View report #${match.id}`}
                               onClick={() => navigate(`/dashboard/reports?nearby_report=${match.id}`, {
                                 state: { duplicateReview: reviewSubmissionId },
                               })}>
                               View report
-                            </button>
+                            </button>}
                           </li>
                         ))}
                       </ul>

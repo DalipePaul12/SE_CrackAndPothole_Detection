@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 from postgres_test_db import postgres_test_engine
 
-from app.api.v1 import contractor, projects, reports, users
+from app.api.v1 import contractor, projects, repair_tracking, reports, users
 from app.db.base import Base
 from app.models.comment import Comment
 from app.models.enums import ProjectStatus, ReportStatus, UserRole
@@ -89,7 +89,7 @@ class RepairWorkflowTest(TestCase):
             return current_user()
 
         app = FastAPI()
-        for router in (reports.router, projects.router, contractor.router, users.router):
+        for router in (reports.router, projects.router, contractor.router, users.router, repair_tracking.router):
             app.include_router(router)
         app.dependency_overrides.update({
             reports.get_db: test_db,
@@ -118,6 +118,74 @@ class RepairWorkflowTest(TestCase):
     def decision(self, attempt_id, decision, **details):
         return self.client.post(f"/projects/1/repair-review/{attempt_id}/decision",
                                 json={"decision": decision, **details})
+
+    def test_follow_schedule_approval_and_inspection_retry(self):
+        with Session(self.engine) as db:
+            db.add(User(id=5, email="follower@example.com", hashed_password="unused", role=UserRole.citizen))
+            db.commit()
+        self.role, self.user_id = UserRole.citizen, 5
+        base = "/repair-tracking/2"
+        with Session(self.engine) as db:
+            source = db.get(Report, 2)
+            source.ai_damage_type = "crack"
+            source.status = ReportStatus.PENDING
+            db.commit()
+        matches = self.client.get("/reports/nearby-duplicates", params={
+            "latitude": 14.66, "longitude": 120.96, "damage_types": "crack"}).json()["matches"]
+        self.assertEqual([(row["id"], row["own_report"]) for row in matches], [(2, False)])
+        for _ in range(2):
+            self.assertEqual(self.client.put(base + "/follow").status_code, 200)
+        self.assertEqual(self.client.put(base + "/schedule", json={"scheduled_date": None}).status_code, 403)
+        self.user_id, self.role = 1, UserRole.admin
+        for _ in range(2):
+            self.assertEqual(self.client.put(base + "/schedule", json={"scheduled_date": "2099-03-04"}).status_code, 200)
+        self.assertEqual(self.client.get("/repair-tracking/schedule").json()[0]["scheduled_date"], "2099-03-04")
+        with Session(self.engine) as db:
+            db.get(Report, 2).status = ReportStatus.IN_PROGRESS
+            db.commit()
+        attempt = self.submit().json()
+        self.role, self.user_id = UserRole.admin, 1
+        self.assertEqual(self.decision(attempt["id"], "approve").status_code, 200)
+        self.assertEqual(self.client.post(base + "/inspections", json={"visit_date": "2099-03-06"}).status_code, 200)
+        visit = self.client.get(base + "/details").json()["inspections"][0]
+        def result():
+            return self.client.post(base + f"/inspections/{visit['id']}/result", data={
+                "result": "needs_work", "notes": "Surface split"}, files={"photos": self.photo})
+        first = result()
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json(), result().json())
+        followup = first.json()["followup_id"]
+        self.assertEqual(self.client.get(f"/repair-tracking/{followup}/details").json()["source_report"], 2)
+        self.role, self.user_id = UserRole.citizen, 5
+        summary = self.client.get("/repair-tracking/following").json()
+        self.assertEqual(len(summary), 1)
+        self.assertEqual(len(summary[0]["photos"]), 1)
+        self.assertNotIn("owner", summary[0])
+        with Session(self.engine) as db:
+            self.assertEqual(db.get(Report, 2).status, ReportStatus.RESOLVED)
+            self.assertEqual(db.get(Report, followup).status, ReportStatus.VERIFIED)
+            titles = list(db.scalars(select(Notification.title).where(Notification.user_id == 5)))
+            self.assertCountEqual(titles, ["Repairs underway", "Repair approved", "Repair schedule changed"])
+        self.assertEqual(self.client.delete(base + "/follow").status_code, 200)
+        self.assertEqual(self.client.get("/repair-tracking/following").json(), [])
+        self.role, self.user_id = UserRole.admin, 1
+        prior_url = f"/reports/{followup}/prior-repairs"
+        self.assertEqual(self.client.get(prior_url).json()[0]["report_id"], 2)
+        decision_url = f"/repair-tracking/{followup}/prior/2"
+        self.assertEqual(self.client.put(decision_url, json={"decision": "returned"}).status_code, 200)
+        self.assertEqual(self.client.get(prior_url).json()[0]["decision"], "returned")
+        with patch("app.api.v1.projects.notify_background"):
+            project = self.client.post("/projects/", json={"report_id": followup, "contractor_id": 3})
+        self.assertEqual(project.status_code, 201, project.text)
+        project_id = project.json()["id"]
+        self.role, self.user_id = UserRole.contractor, 3
+        self.assertEqual(self.client.post(f"/contractor/projects/{project_id}/accept").status_code, 200)
+        proof = self.client.post(f"/contractor/projects/{project_id}/complete", data={"notes": "Patched again"},
+                                 files={"photos": self.photo})
+        self.assertEqual(proof.status_code, 200, proof.text)
+        self.role, self.user_id = UserRole.admin, 1
+        self.assertEqual(self.client.post(f"/projects/{project_id}/repair-review/{proof.json()['id']}/decision",
+                                          json={"decision": "approve"}).status_code, 200)
 
     def test_manual_close_retries_and_persists_proof_after_reload(self):
         path = "/reports/1/resolve"

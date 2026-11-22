@@ -20,8 +20,9 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from typing import Sequence
 
 import aiofiles
@@ -75,12 +76,13 @@ from app.models.user import User
 from app.schemas.report import (
     DeclineRequest,
     PriorRepairResponse,
+    ReportAdminSummary,
     ReportCreate,
     ReportListResponse,
     ReportResponse,
     ReportUpdate,
 )
-from app.services import duplicate_detection, prior_repairs, repair_service, report_service, summary_service
+from app.services import duplicate_detection, prior_repairs, repair_service, report_service, report_sla, summary_service
 from app.services.notification_service import notify_background
 from app.services.location_service import is_inside_malabon
 from app.utils.geo import calculate_distance
@@ -151,72 +153,19 @@ async def _bulk_upvote_counts(
 
 # ── SLA helpers ───────────────────────────────────────────────────────────────
 
-_SLA_TERMINAL_STATUSES = {
-    ReportStatus.RESOLVED,
-    ReportStatus.DECLINED,
-    ReportStatus.COMPLETED,
-    ReportStatus.REJECTED,
-    ReportStatus.CANCELLED,
-}
-
-
-def _compute_sla(
-    created_at,
-    report_status: ReportStatus,
-    response_time_hours: int,
-    escalate_after_hours: int,
-) -> tuple[str | None, float | None]:
-    """
-    Return (sla_status, sla_hours_elapsed) for a single report.
-
-    Terminal reports (resolved / declined / completed / rejected / cancelled)
-    return (None, None) — SLA no longer applies.
-    Active reports are classified as 'on_track', 'overdue', or 'escalated'.
-    """
-    if report_status in _SLA_TERMINAL_STATUSES or created_at is None:
-        return None, None
-
-    from datetime import datetime, timezone
-    now = datetime.now(tz=timezone.utc)
-    ca = created_at
-    if ca.tzinfo is None:
-        ca = ca.replace(tzinfo=timezone.utc)
-    elapsed = (now - ca).total_seconds() / 3600.0
-
-    if elapsed >= escalate_after_hours:
-        sla_status = "escalated"
-    elif elapsed >= response_time_hours:
-        sla_status = "overdue"
-    else:
-        sla_status = "on_track"
-
-    return sla_status, round(elapsed, 1)
-
-
-async def _fetch_sla_settings(db: AsyncSession) -> tuple[int, int]:
-    """Return (response_time_hours, escalate_after_hours) from AdminSettings row 1."""
-    row = (
-        await db.execute(select(AdminSettings).where(AdminSettings.id == 1))
-    ).scalar_one_or_none()
-    if row:
-        return row.response_time_hours, row.escalate_after_hours
-    return 24, 72  # safe defaults if row absent
-
-
 async def _build_report_list(
     db: AsyncSession,
     reports: Sequence[Report],
+    sla: report_sla.ReportSLA | None = None,
 ) -> list[ReportResponse]:
     report_ids = [r.id for r in reports]
     upvote_map = await _bulk_upvote_counts(db, report_ids)
-    response_time_h, escalate_after_h = await _fetch_sla_settings(db)
+    sla = sla if sla is not None else await report_sla.get_sla(db)
     items: list[ReportResponse] = []
     for r in reports:
         item = ReportResponse.model_validate(r)
         item.upvote_count = upvote_map.get(r.id, 0)
-        item.sla_status, item.sla_hours_elapsed = _compute_sla(
-            r.created_at, r.status, response_time_h, escalate_after_h
-        )
+        item.sla_status, item.sla_hours_elapsed = sla.classify(r.created_at, r.status)
         items.append(item)
     return items
 
@@ -480,6 +429,8 @@ async def list_reports(
     severity: SeverityLevel | None = Query(None),
     search: str | None = Query(None, max_length=200),
     awaiting_repair_review: bool = Query(False),
+    low_confidence: bool = Query(False),
+    past_sla: bool = Query(False),
     include_repeat_damage: bool = Query(False),
     possible_repeat_damage: bool = Query(False),
     created_from: AwareDatetime | None = Query(None),
@@ -497,6 +448,9 @@ async def list_reports(
         raise HTTPException(403, "Not authorized to view the repair review queue.")
     if (include_repeat_damage or possible_repeat_damage) and current_user.role not in (UserRole.admin, UserRole.superadmin):
         raise HTTPException(403, "Only admins may view repeat-damage matches.")
+    if (past_sla or low_confidence) and current_user.role not in (UserRole.admin, UserRole.superadmin):
+        raise HTTPException(403, "Only admins may filter by SLA.")
+    sla = await report_sla.get_sla(db) if past_sla else None
     reports, total = await report_service.list_reports(
         db,
         status=status,
@@ -505,6 +459,9 @@ async def list_reports(
         severity=severity,
         search=search,
         awaiting_repair_review=awaiting_repair_review,
+        low_confidence=low_confidence,
+        search_reporter=current_user.role in (UserRole.admin, UserRole.superadmin),
+        sla=sla,
         possible_repeat_damage=possible_repeat_damage,
         created_from=created_from,
         created_before=created_before,
@@ -513,7 +470,7 @@ async def list_reports(
         page=page,
         page_size=page_size,
     )
-    results = await _build_report_list(db, reports)
+    results = await _build_report_list(db, reports, sla)
     if possible_repeat_damage:
         for item in results:
             item.possible_repeat_damage = True
@@ -522,6 +479,25 @@ async def list_reports(
         for item in results:
             item.possible_repeat_damage = item.id in matching_ids
     return ReportListResponse(total=total, page=page, page_size=page_size, results=results)
+
+
+@router.get("/admin-summary", response_model=ReportAdminSummary)
+async def get_admin_report_summary(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    today = datetime.now(ZoneInfo("Asia/Manila")).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = today.astimezone(timezone.utc)
+    end = (today + timedelta(days=1)).astimezone(timezone.utc)
+    result = await db.execute(select(
+        func.count(Report.id).label("total"),
+        func.count().filter(Report.ai_severity == SeverityLevel.critical).label("critical"),
+        func.count().filter(Report.status == ReportStatus.PENDING).label("pending"),
+        func.count().filter(Report.status == ReportStatus.IN_PROGRESS).label("in_progress"),
+        func.count().filter(Report.status == ReportStatus.RESOLVED,
+                            Report.resolved_at >= start, Report.resolved_at < end).label("resolved_today"),
+    ))
+    return ReportAdminSummary(**result.mappings().one())
 
 
 @router.get("/mine", response_model=ReportListResponse)
@@ -606,7 +582,13 @@ async def get_prior_repairs(
     result = await db.execute(select(Report.id).where(Report.id == report_id))
     if result.scalar_one_or_none() is None:
         raise HTTPException(404, "Report not found")
-    return await prior_repairs.list_prior_repairs(db, report_id)
+    from app.models.repair_tracking import RepeatDecision
+    candidates = await prior_repairs.list_prior_repairs(db, report_id)
+    decisions = {d.prior_id: d for d in (await db.execute(select(RepeatDecision).where(RepeatDecision.report_id == report_id))).scalars()}
+    for row in candidates:
+        decision = decisions.get(row["report_id"])
+        row["decision"] = decision.decision if decision else None
+    return candidates
 
 
 @router.get("/{report_id}", response_model=ReportResponse)
@@ -618,10 +600,8 @@ async def get_report(
     report = await _fetch_report_or_404(db, report_id)
     response = ReportResponse.model_validate(report)
     response.upvote_count = await report_service.get_upvote_count(db, report.id)
-    response_time_h, escalate_after_h = await _fetch_sla_settings(db)
-    response.sla_status, response.sla_hours_elapsed = _compute_sla(
-        report.created_at, report.status, response_time_h, escalate_after_h
-    )
+    sla = await report_sla.get_sla(db)
+    response.sla_status, response.sla_hours_elapsed = sla.classify(report.created_at, report.status)
     return response
 
 
@@ -786,6 +766,7 @@ async def update_report(
         data.status = normalized_status
 
     # ── Handle status update ─────────────────────────────────────────────
+    status_changed = normalized_status is not None and normalized_status != report.status
     _side_effect_warnings: list[str] = []
     if normalized_status:
         report.status = normalized_status
@@ -821,7 +802,7 @@ async def update_report(
         )
 
     # ── Send notification to report owner ──────────────────────────────────
-    if owner_id and normalized_status:
+    if owner_id and status_changed:
         status_val = normalized_status.value.upper()
         notif_map = {
             "VERIFIED":    (NotificationType.success, "Report Verified",     f"Your report #{report_id} has been verified by an administrator."),

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -12,9 +13,11 @@ from sqlalchemy import (
     String,
     Text,
     Index,
+    event,
+    inspect,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Session, relationship
 from sqlalchemy.sql import func
 from app.db.base import Base
 from app.models.enums import DamageType, ReportStatus, ReportType, SeverityLevel
@@ -154,6 +157,8 @@ class Report(Base):
         index=True,
     )
 
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -235,3 +240,20 @@ class Report(Base):
         cascade="all, delete-orphan",
     )
 from app.models.frame_detection import FrameDetection
+
+
+@event.listens_for(Session, "before_flush")
+def track_report_resolution(session, _flush_context, _instances):
+    for report in session.dirty:
+        if isinstance(report, Report) and inspect(report).attrs.status.history.has_changes():
+            if report.status in (ReportStatus.IN_PROGRESS, ReportStatus.RESOLVED):
+                from app.models.notification import Notification
+                from app.models.repair_tracking import ReportFollow
+                from sqlalchemy import select
+                followers = session.scalars(select(ReportFollow.user_id).where(
+                    ReportFollow.report_id == report.id, ReportFollow.user_id != report.owner_id))
+                title = "Repair approved" if report.status == ReportStatus.RESOLVED else "Repairs underway"
+                for user_id in followers:
+                    session.add(Notification(user_id=user_id, report_id=report.id, title=title,
+                                             message=f"{title} for report #{report.id}."))
+            report.resolved_at = datetime.now(timezone.utc) if report.status == ReportStatus.RESOLVED else None
